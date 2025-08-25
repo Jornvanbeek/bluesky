@@ -5,6 +5,9 @@ import bluesky as bs
 from bluesky.network import subscriber, context as ctx
 from bluesky.stack.cmdparser import command
 
+from bluesky.core import Signal # PREDICTOR
+
+stack_changed = Signal('stack-changed') #PREDICTOR
 
 class Stack:
     ''' Stack static-only namespace. '''
@@ -71,6 +74,7 @@ def stack(*cmdlines, sender_id=None):
         if cmdline:
             for line in cmdline.split(";"):
                 Stack.cmdstack.append((line, sender_id))
+                stack_changed.emit(line)  # PREDICTOR
 
 
 def forward(*cmdlines, target_id=None):
