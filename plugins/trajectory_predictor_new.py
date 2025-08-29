@@ -18,7 +18,7 @@ from datetime import datetime
 import pickle
 import difflib
 
-from OpenGL.raw.GL.APPLE.vertex_program_evaluators import glIsVertexAttribEnabledAPPLE
+# from OpenGL.raw.GL.APPLE.vertex_program_evaluators import glIsVertexAttribEnabledAPPLE
 
 from bluesky import core, stack, scr, traf, sim, net, network
 from bluesky.core import signal, timed_function
@@ -157,14 +157,13 @@ class Predictor(core.Entity):
         self.predictions_count_required = None
 
         self.predictions_complete = False
-        # self.all_aircraft = False
-        # self.acids_received = set()
 
         self.fast_tp = True
 
         traf.traf_parent_id = None
 
         self.incorrect_predictions = ['AIA6768', 'KLM76QSH', 'EZY91XM']
+        self.incorrect_predictions = []
         # Change the route class implementation for the child node using PredictorNodeRoute class.
         stack.stack('IMPLEMENTATION Route Route')
 
@@ -304,6 +303,7 @@ class Predictor(core.Entity):
                     self.wptcrosscount += 1
 
 
+
         except FileNotFoundError:
             scr.echo('Error from predictor: the following scenario file is not found: ' + filename)
 
@@ -436,7 +436,7 @@ class Predictor(core.Entity):
 
 
             if self.fast_tp:
-                stack.forward('DT 1', target_id=self.child_id)
+                # stack.forward('DT 1', target_id=self.child_id)
                 stack.forward('ff', target_id=self.child_id)
             if acid in self.incorrect_predictions:
                 stack.stack('hold')
@@ -498,6 +498,8 @@ class Predictor(core.Entity):
                         cmds_to_forward.append(cmd.upper())
                 print(cmds_to_forward)
                 stack.forward(*cmds_to_forward, target_id=self.child_id)
+                stack.forward('DT 1', target_id=self.child_id)
+                # stack.forward('ff', target_id=self.child_id)
 
             else:
                 for acid in self.commands_per_flight.keys():
@@ -533,15 +535,15 @@ class Predictor(core.Entity):
             # stack.stack(f'PREDICTOR CACHEREAD {scenario}')
             self.complete()
 
-    # @stack.command
-    # def REMOVEWPTS(self,acid):
-    #
-    #     if self.parent_id:
-    #         idxac = traf.id2idx(acid)
-    #
-    #         if idxac >=0:
-    #             for name in traf.ap.route[idxac].wpname:
-    #                 traf.ap.route[idxac].delwpt(idxac, name)
+    @stack.command
+    def REMOVEWPTS(self,acid):
+
+        if self.parent_id:
+            idxac = traf.id2idx(acid)
+
+            if idxac >=0:
+                for name in traf.ap.route[idxac].wpname:
+                    traf.ap.route[idxac].delwpt(idxac, name)
 
 
 

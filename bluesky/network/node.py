@@ -107,6 +107,10 @@ class Node(Entity):
                     sub = Subscription.subscriptions.get(ctx.topic, None) #or Subscription(ctx.topic, directedonly=True)
                     if sub is None:
                         print('No subscription known for', ctx.topic, 'on', self.node_id)
+                        print('ctx msg: ', ctx.msg)
+                        print('pydata: ' ,pydata)
+                        print('ctx.msg: ', ctx.msg)
+                        print('ctx.senderid: ',ctx.sender_id)
                         continue
 
                     # Unpack dict or list, skip empty string

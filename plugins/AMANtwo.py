@@ -99,6 +99,8 @@ class ArrivalManager(core.Entity):
         self.max_slowdown = 50 #knots
         self.abs_minspd = 180 #knots outside of tma
         self.nearby_threshold = 120 #seconds before iaf, no more instructions possible
+        self.dogleg_multiplyer = 0.9
+        self.descent_angle = 3.0 #degrees
         self.workload_speedinstruction = 1.0
         self.workload_dogleg = 2.0
         self.workload_direct = 1.0

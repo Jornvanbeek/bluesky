@@ -8,7 +8,7 @@ from bluesky import core, stack, traf, sim, HOLD
 from bluesky.core import plugin
 from bluesky.plugins.sectorcount import update
 from bluesky.test.tcp.test_simple import test_pos
-from bluesky.tools.aero import kts, ft
+from bluesky.tools.aero import kts, ft, nm
 import pandas as pd
 from bluesky.tools.geo import kwikpos, qdrpos, kwikdist
 from bluesky.tools.geo import kwikqdrdist
@@ -235,6 +235,7 @@ class ATC(core.Entity):
 
 
     #done?
+    @stack.command
     def dogleg(self, acid, ttlg):
 
         trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
@@ -245,6 +246,7 @@ class ATC(core.Entity):
             print('dogleg makes route shorter, please validate method')
             return
         print('reqdist: ', reqdist)
+        reqdist = (reqdist - trackmiles) * self.aman.dogleg_multiplyer + trackmiles
         self.replacewaypoint(acid, direct_dist, reqdist, trackmiles, direct_qdr)
         self.aman.Flights.loc[acid, 'dogleg'] = True
         print(self.instructions)
@@ -328,16 +330,37 @@ class ATC(core.Entity):
         # iaf = self.findiaf(acid)
         iaf = self.aman.Flights.loc[acid, 'IAF']
 
-        h = math.sqrt( (reqdist*0.5)**2 - (direct_dist*0.5)**2 )
+#old method
+        # h = math.sqrt( (reqdist*0.5)**2 - (direct_dist*0.5)**2 )
+        # alpha = math.atan2(h, direct_dist*0.5)
+        # alpha = math.degrees(alpha)
+        # lat, lon = qdrpos(traf.lat[idx], traf.lon[idx], direct_qdr +alpha, 0.5*reqdist)
 
-        # alpha = 180*math.atan(h/direct_dist*0.5)/math.pi
-        alpha = math.atan2(h, direct_dist*0.5)
-        alpha = math.degrees(alpha)
-        lat, lon = qdrpos(traf.lat[idx], traf.lon[idx], direct_qdr +alpha, 0.5*reqdist)
+        # opposing = math.sqrt((reqdist**2 - direct_dist**2)/2)
+        # alpha = math.atan2(opposing, direct_dist)
+        # hypothenuse = math.sqrt(opposing**2 + direct_dist**2)
+
+        hypothenuse = (reqdist**2 + direct_dist)/(2*reqdist)
+        opposing = reqdist - hypothenuse
+        if opposing < 0:
+            print('wrong replacewaypoint')
+            return
+        alpha = math.degrees(math.atan2(opposing, direct_dist))
+
+        print(reqdist, direct_dist)
+        print(hypothenuse, opposing, alpha)
+        lat,lon = qdrpos(traf.lat[idx], traf.lon[idx], direct_dist+alpha, hypothenuse)
+
+
         # print(lat, lon)
         # print(h, alpha)
         # print(traf.lat[idx], traf.lon[idx])
         # print(0.5*reqdist)
+
+
+
+
+
         try:
             iaf_index = acrte.wpname.index(iaf)
         except ValueError:
@@ -345,13 +368,15 @@ class ATC(core.Entity):
             iaf_index = acrte.wpname.index(iaf)
         alt = traf.alt[idx]
         iaf_alt = acrte.wpalt[iaf_index]
-        wpt_alt = (alt+iaf_alt)/2
-        # print(iaf_alt)
-        # print(alt)
+
+
+#old method
+        # wpt_alt = (alt+iaf_alt)/2
+        wpt_alt = math.tan(math.radians(self.aman.descent_angle)) * opposing*nm
+
+        wpt_alt = wpt_alt + iaf_alt
+        wpt_alt = min(wpt_alt, alt) # make sure that new wp alt is not above current altitude
         wpt_alt = round(wpt_alt/ft,0)
-
-
-
 
 
         idx = traf.id2idx(acid)
@@ -362,8 +387,10 @@ class ATC(core.Entity):
 
         disttonewwp = kwikdist(latac, lonac, lat, lon)
 
-        if reqdist - (disttoiaf + disttonewwp) > 1:
+        if abs(reqdist - (disttoiaf + disttonewwp)) > 1:
             print('replacewaypoint incorrect: ', reqdist, disttoiaf, disttonewwp, lat, lon)
+
+        print('replacewaypoint: ', reqdist, disttoiaf + disttonewwp, disttoiaf, disttonewwp, lat, lon, latac, lonac,acrte.wplat[iafindex], acrte.wplon[iafindex] )
 
         self.instructions.append(f'ADDWPT {acid} {lat} {lon} ,{wpt_alt} , , , {iaf}')
         acrte = Route._routes[acid]
