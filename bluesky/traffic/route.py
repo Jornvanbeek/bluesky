@@ -67,6 +67,7 @@ class Route(Base):
         self.iactwp = -1
 
         # Set to default addwpt wpmode
+
         # Note that neither flyby nor flyturn means: flyover)
         self.swflyby   = True    # Default waypoints are flyby waypoint
         self.swflyturn = False  # Default waypoints are waypoints w/o specified turn

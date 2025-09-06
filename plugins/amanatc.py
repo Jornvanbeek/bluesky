@@ -48,6 +48,8 @@ class ATC(core.Entity):
         self.aman.Flights['direct'] = None
         self.aman.Flights['holding'] = None
         self.aman.Flights['earliest'] = False
+        self.instructions = []
+
 
 
     def reset(self):
@@ -237,7 +239,9 @@ class ATC(core.Entity):
     #done?
     @stack.command
     def dogleg(self, acid, ttlg):
-
+        if type(ttlg) == str:
+            ttlg = float(ttlg)
+            send = True
         trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
         print('dogleg trackmiles: ', trackmiles, direct_qdr, direct_dist)
         # reqdist = trackmiles*(minclean/required_spd)
@@ -250,6 +254,8 @@ class ATC(core.Entity):
         self.replacewaypoint(acid, direct_dist, reqdist, trackmiles, direct_qdr)
         self.aman.Flights.loc[acid, 'dogleg'] = True
         print(self.instructions)
+        if send:
+            stack.stack(*self.instructions)
 
 
 
@@ -340,7 +346,7 @@ class ATC(core.Entity):
         # alpha = math.atan2(opposing, direct_dist)
         # hypothenuse = math.sqrt(opposing**2 + direct_dist**2)
 
-        hypothenuse = (reqdist**2 + direct_dist)/(2*reqdist)
+        hypothenuse = (reqdist**2 + direct_dist**2)/(2*reqdist)
         opposing = reqdist - hypothenuse
         if opposing < 0:
             print('wrong replacewaypoint')
@@ -349,7 +355,7 @@ class ATC(core.Entity):
 
         print(reqdist, direct_dist)
         print(hypothenuse, opposing, alpha)
-        lat,lon = qdrpos(traf.lat[idx], traf.lon[idx], direct_dist+alpha, hypothenuse)
+        lat,lon = qdrpos(traf.lat[idx], traf.lon[idx], direct_qdr+alpha, hypothenuse)
 
 
         # print(lat, lon)
@@ -592,7 +598,7 @@ class ATC(core.Entity):
 
         stack.stack(f"DELAY {to_eto + 0.5 * ttlg + 90} BANK {acid} 25")
 
-        self.storeinstruction(acid, "hold")
+        # self.storeinstruction(acid, "hold")
 
 
         self.aman.Flights.at[acid, 'AMANstate'] = "holding"

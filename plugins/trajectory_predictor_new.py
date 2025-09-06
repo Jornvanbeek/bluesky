@@ -18,6 +18,8 @@ from datetime import datetime
 import pickle
 import difflib
 
+import numpy as np
+
 # from OpenGL.raw.GL.APPLE.vertex_program_evaluators import glIsVertexAttribEnabledAPPLE
 
 from bluesky import core, stack, scr, traf, sim, net, network
@@ -51,19 +53,22 @@ def init_plugin():
 
 
 
-# def _predictor_stack(*cmdlines, sender_id=None):
-#     """ Stack one or more commands.
-#         Stacking multiple commands can be done as multiple comma-separated
-#         arguments, and/or semicolon-separated within a single string. """
-#     stack_changed = Signal('stack-changed')  # PREDICTOR
-#     for cmdline in cmdlines:
-#         cmdline = cmdline.strip()
-#         if cmdline:
-#             for line in cmdline.split(";"):
-#                 stack.stackbase.Stack.cmdstack.append((line, sender_id))
-#                 stack_changed.emit(line)  # PREDICTOR
-#
-# stack.stack = _predictor_stack
+
+
+def pack_attrs(obj, exclude: set[str] | None = None, include: set[str] | None = None) -> dict:
+
+    exclude = exclude or set()
+    dct = getattr(obj, "__dict__", {})
+    if include is not None:
+        return {k: v for k, v in dct.items() if k in include and k not in exclude}
+    return {k: v for k, v in dct.items() if k not in exclude}
+
+def unpack_attribs(obj, data: dict):
+
+    for k, v in data.items():
+        setattr(obj, k, v)
+
+
 
 
 class Route(Route):
@@ -104,6 +109,7 @@ class Route(Route):
 
 
 
+
 class Route(Route):
     """Extends the Route class for use with prediction for the child prediction node."""
 
@@ -112,7 +118,6 @@ class Route(Route):
         if wpname in ['ARTIP', 'SUGOL', 'RIVER'] or 'EHAM/RW' in wpname:
             stack.stack(f'{self.acid} AT {wpname} DO PREDICTOR WPTCROSS {self.acid} {wpname}')
         return super().addwpt_data(overwrt, wpidx, wpname, wplat, wplon, wptype, wpalt, wpspd)
-
 
 
 class Predictor(core.Entity):
@@ -162,14 +167,11 @@ class Predictor(core.Entity):
 
         traf.traf_parent_id = None
 
-        self.incorrect_predictions = ['AIA6768', 'KLM76QSH', 'EZY91XM']
-        self.incorrect_predictions = []
+        # self.incorrect_predictions = ['AIA6768', 'KLM76QSH', 'EZY91XM']
+        self.incorrect_predictions = ['KLM590SH']
         # Change the route class implementation for the child node using PredictorNodeRoute class.
         stack.stack('IMPLEMENTATION Route Route')
 
-    # @stack.command
-    # def calctp(self, acid):
-    #     stack.stack('ECHO Starting prediction for '+acid)
 
     @stack.command
     def printattrib(self, attrib):
@@ -254,17 +256,6 @@ class Predictor(core.Entity):
 
 
 
-            #function to assign tp data if the aircraft gets a scheduled addwaypoint if the aircraft is scheduled
-            # if wptcross_check(cmdline):
-            #     print('wptcross')
-            # if self.acid_in_cmdline(cmdline) in self.predicted_ac_not_spawned.keys() and wptcross_check(cmdline):
-            #
-            #     acid = self.acid_in_cmdline(cmdline)
-            #     wpt = wpname_in_cmdline(cmdline, acid)
-            #
-            #     self.assign_tp_data(acid,wpt)
-
-
 
     def load_scenario_commands(self, cmdline):
         """ Loads commands from a scenario file. """
@@ -305,7 +296,7 @@ class Predictor(core.Entity):
 
 
         except FileNotFoundError:
-            scr.echo('Error from predictor: the following scenario file is not found: ' + filename)
+            stack.echo('Error from predictor: the following scenario file is not found: ' + filename)
 
     def create(self, n=1):
         """ Gets triggered everytime n number of new aircraft are created. """
@@ -376,7 +367,7 @@ class Predictor(core.Entity):
         if self.child_id:
             stack.forward('RESET', target_id=self.child_id)
             if self.predictions_complete and acid:
-                self.update(acid)
+                self.update_fullflight(acid)
 
             else:
                 self.predict()
@@ -395,9 +386,136 @@ class Predictor(core.Entity):
         traf.traf_parent_id = self.parent_id
         print('My parent is', self.parent_id)
 
+    @predictor.subcommand
+    def update(self, acid):
+        acid = acid.upper()
+        if self.child_id:
+            idxac = traf.id2idx(acid)
+            traf.ap.route[idxac].createtime = sim.simt
+            info = self.packer(acid)
+            # route_info = traf.ap.route[idxac].pack_route()
+            # autopilot_info = pack_ap_idx(idxac)
+
+            print('sent info: ', info)
+
+            net.send('UPDATE_PREDICTOR', info, self.child_id)
+            newcommand = self.filter_per_aircraft(acid)[-1][1]
+            print(newcommand)
+            stack.forward(newcommand, target_id=self.child_id)
+
+    @network.subscriber(topic='UPDATE_PREDICTOR')
+    def update_requested(self, acid, route_info, actwp_info, traf_info):
+        if self.parent_id:
+
+            print('received INFO: ', acid, route_info, actwp_info, traf_info)
+            info = (acid, route_info, actwp_info, traf_info)
+
+            actype = traf_info['type']
+            aclat = traf_info['lat']
+            aclon = traf_info['lon']
+            achdg = traf_info['hdg']
+            acalt = traf_info['alt']
+            acspd = traf_info['cas']
+
+            idxac = traf.id2idx(acid)
+            print('update received: ', acid, aclat, aclon, achdg, acalt, acspd)
+
+            if idxac < 0:
+                traf.cre(acid, actype, aclat, aclon, achdg, acalt, acspd)
+            else:
+                traf.delete(idxac)
+                print(f'ACID {acid} has been deleted in update received function.')
+                traf.cre(acid, actype, aclat, aclon, achdg, acalt, acspd)
+
+            self.unpacker(info)
+            # acrte = Route._routes[acid]
+            # acrte.calcfp()
+            traf.update()
+            acrte = traf.ap.route[idxac]
+            acrte.calcfp()
+            iactwp = acrte.iactwp
+            traf.ap.ComputeVNAV(idxac, acrte.wptoalt[iactwp], acrte.wpxtoalt[iactwp], acrte.wptorta[iactwp],acrte.wpxtorta[iactwp])
+
+
+    @stack.command
+    def packer(self, acid):
+
+        include_route = [
+            "acid", "nwp", "wpname", "wptype", "wplat", "wplon", "wpalt", "wpspd",
+            "wprta", "wpflyby", "wpstack", "wpflyturn", "wpturnbank", "wpturnrad",
+            "wpturnspd", "wpturnhdgr", "iactwp", "swflyby", "swflyturn", "bank",
+            "turnbank", "turnrad", "turnspd", "turnhdgr", "last_2_defined",
+            "flag_landed_runway", "wpdirfrom", "wpdirto", "wpdistto", "wpialt",
+            "wptoalt", "wpxtoalt", "wptorta", "wpxtorta", 'wptpredutc', 'actwp.lat']
+
+        include_traf = ['type', 'lat', 'lon', 'alt', 'hdg', 'trk', 'vs', 'selspd', 'swlnav',
+         'swvnav', 'swvnavspd', 'cas'] #optionally selspd selalt selvs
+
+        include_actwp = [
+            "lat", "lon", "nextturnlat", "nextturnlon", "nextturnspd", "nextturnbank",
+            "nextturnrad", "nextturnhdgr", "nextturnidx", "nextaltco", "xtoalt",
+            "nextspd", "spd", "spdcon", "vs", "turndist", "flyby", "flyturn",
+            "turnbank", "turnrad", "turnspd", "turnhdgr", "oldturnspd",
+            "turnfromlastwp", "turntonextwp", "torta", "xtorta", "next_qdr",
+            "swlastwp", "curlegdir", "curleglen"]
+        acid = acid.upper()
+        idxac = traf.id2idx(acid)
+
+        # Route packing via pack_attrs
+        route_obj = traf.ap.route[idxac]
+        route_info = pack_attrs(route_obj, include=include_route)
+
+        actwp_info = {}
+        for name in include_actwp:
+
+            arr = getattr(traf.actwp, name)
+            item = arr[idxac]
+            if isinstance(item, np.generic):
+                actwp_info[name] = item.item()
+            else:
+                actwp_info[name] = item
+
+
+
+        # Traffic packing via inclusion list van per-aircraft arrays
+        traf_info = {}
+        for name in include_traf:
+
+            arr = getattr(traf, name)
+            item = arr[idxac]
+            if isinstance(item, np.generic):
+                traf_info[name] = item.item()
+            else:
+                traf_info[name] = item
+
+        #todo: conditionals ook packen
+
+        return (acid, route_info, actwp_info, traf_info)
+
+    @stack.command
+    def printpacker(self,acid):
+
+        print(self.packer(acid))
+        if self.child_id:
+            stack.forward(f'PRINTPACKER {acid}', self.child_id)
+
+
+    def unpacker(self,info):
+        acid, route_info, actwp_info, traf_info = info
+        idxac = traf.id2idx(acid)
+        route_obj = traf.ap.route[idxac]
+        unpack_attribs(route_obj, route_info)
+
+        for key,value in traf_info.items():
+            getattr(traf, key)[idxac] = value
+
+
+        for key,value in actwp_info.items():
+            getattr(traf.actwp, key)[idxac] = value
+
 
     @predictor.subcommand
-    def update(self,acid):
+    def update_throughstack(self,acid):
         if self.child_id:
             # stack.stack('HOLD')
             filtered_commands = self.filter_per_aircraft(acid)
@@ -579,7 +697,7 @@ class Predictor(core.Entity):
                 pickle.dump(self.predictions_cache, f)
             with open(r'commands.pkl', 'wb') as f:
                 pickle.dump(self.commands_per_flight, f)
-            stack.stack('FF 2100')
+            stack.stack('FF 3270')
 
 
     @stack.command
@@ -607,25 +725,25 @@ class Predictor(core.Entity):
     def amount_aircraft(self, n):
         print(n)
 
-    @stack.command
-    def set_active_waypoint(self, acid, iactwp, selspd, selvspd, selalt, lnav, vnav, vnavspd):
-        if self.parent_id:
-            # print(idxac, iactwp)
-            # print(type(idxac), type(iactwp))
-            idxac = traf.id2idx(acid)
-            traf.ap.route[idxac].iactwp = int(iactwp)
-            # traf.ap.route[idxac].selspd = float(selspd)
-            # traf.ap.route[idxac].selvs = float(selvspd)
-            # traf.ap.route[idxac].selalt = float(selalt)
-
-
-            traf.selspd[idxac] = float(selspd)
-            traf.selvs[idxac] = float(selvspd)
-            traf.selalt[idxac] = float(selalt)
-
-            traf.swlnav[idxac] = lnav
-            traf.swvnav[idxac] = vnav
-            traf.swvnavspd[idxac] = vnavspd
+    # @stack.command
+    # def set_active_waypoint(self, acid, iactwp, selspd, selvspd, selalt, lnav, vnav, vnavspd):
+    #     if self.parent_id:
+    #         # print(idxac, iactwp)
+    #         # print(type(idxac), type(iactwp))
+    #         idxac = traf.id2idx(acid)
+    #         traf.ap.route[idxac].iactwp = int(iactwp)
+    #         # traf.ap.route[idxac].selspd = float(selspd)
+    #         # traf.ap.route[idxac].selvs = float(selvspd)
+    #         # traf.ap.route[idxac].selalt = float(selalt)
+    #
+    #
+    #         traf.selspd[idxac] = float(selspd)
+    #         traf.selvs[idxac] = float(selvspd)
+    #         traf.selalt[idxac] = float(selalt)
+    #
+    #         traf.swlnav[idxac] = lnav
+    #         traf.swvnav[idxac] = vnav
+    #         traf.swvnavspd[idxac] = vnavspd
 
 
     # @stack.command  # This is a decorator that marks this function as a command in the stack
@@ -656,6 +774,11 @@ class Predictor(core.Entity):
     @stack.command
     def fasttp(self):
         self.fast_tp = True
+
+    @stack.command(annotations='string')
+    def forwardchild(self, text = '', flags = 0):
+        if self.child_id:
+            stack.forward(str, target_id=self.child_id)
 
 
     def filter_commands(self):
@@ -725,10 +848,14 @@ class Predictor(core.Entity):
         # If the prediction time changes, forward the new waypoint crossing times
         # If operating within the child node, forward the waypoint crossing event to the parent process.
         val = None
+
         try:
             val = traf.ap.route[idxac].wptpredutc[idxwp]
         except:
             print('maybe this?')
+            print('parent: ', self.parent_id, 'child: ', self.child_id)
+            print(acid, wpt, idxac, idxwp)
+            print('route: ', traf.ap.route[idxac].wpname)
             pass
 
         if self.parent_id and (val != sim.utc.timestamp()):
@@ -750,10 +877,10 @@ class Predictor(core.Entity):
             net.send('PREDICTION', (acid, 'CROSSOVER', sim.simt, sim.simt - createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac]),
              self.parent_id)
 
-    @predictor.subcommand
-    def publish(self):
-        """Sends the current state back to parent."""
-        net.send('prediction', 'Prediction data should go here :)', self.parent_id)
+    # @predictor.subcommand
+    # def publish(self):
+    #     """Sends the current state back to parent."""
+    #     net.send('prediction', 'Prediction data should go here :)', self.parent_id)
 
     @network.subscriber(topic='PREDICTION')#, to_group=GROUPID_SIM)
     def on_prediction_received(self, acid, wpt, wptime, flighttime, wptpredutc, parent_id, type):
@@ -1106,3 +1233,160 @@ def export_csv_eto_eta(route_dict):
 
 
 
+
+
+
+
+# def pack_ap_idx(idx: int) -> dict:
+#     """
+#     Pack alle autopilot-waarden van interesse voor één aircraft-index.
+#     Dit spiegelt de arrays die in Autopilot.__init__ zijn gedefinieerd,
+#     met uitzondering van 'route'. Geen typeconversies; we nemen de huidige types over.
+#     """
+#     ap = traf.ap
+#     return {
+#         'acid': traf.id[idx],
+#
+#         # FMS directions
+#         'trk': ap.trk[idx],
+#         'spd': ap.spd[idx],
+#         'tas': ap.tas[idx],
+#         'alt': ap.alt[idx],
+#         'vs': ap.vs[idx],
+#
+#         # VNAV variables
+#         'swtoc': ap.swtoc[idx],
+#         'swtod': ap.swtod[idx],
+#         'dist2vs': ap.dist2vs[idx],
+#         'dist2accel': ap.dist2accel[idx],
+#         'swvnavvs': ap.swvnavvs[idx],
+#         'vnavvs': ap.vnavvs[idx],
+#
+#         # LNAV variables
+#         'qdr2wp': ap.qdr2wp[idx],
+#         'dist2wp': ap.dist2wp[idx],
+#         'qdrturn': ap.qdrturn[idx],
+#         'dist2turn': ap.dist2turn[idx],
+#         'inturn': ap.inturn[idx],
+#
+#         # Traffic navigation information
+#         'orig': ap.orig[idx],
+#         'dest': ap.dest[idx],
+#
+#         # Defaults & current roll/bank
+#         'bankdef': ap.bankdef[idx],
+#         'vsdef': ap.vsdef[idx],
+#         'cruisespd': ap.cruisespd[idx],
+#         'turnphi': ap.turnphi[idx],
+#     }
+#
+#
+# # Unpack autopilot payload for an aircraft
+# def unpack_ap(payload: dict) -> bool:
+#     """Unpack a packed autopilot dict and set values on traf.ap for the given ACID.
+#     Returns True on success, False if ACID is missing or not found. Does not create/delete aircraft.
+#     """
+#     acid = payload.get('acid')
+#     if not acid:
+#         return False
+#
+#     idx = traf.id2idx(acid)
+#     if idx < 0:
+#         return False
+#
+#     ap = traf.ap
+#
+#     # Known payload keys we set (mirrors pack_ap_idx)
+#     keys = [
+#         'trk', 'spd', 'tas', 'alt', 'vs',
+#         'swtoc', 'swtod', 'dist2vs', 'dist2accel', 'swvnavvs', 'vnavvs',
+#         'qdr2wp', 'dist2wp', 'qdrturn', 'dist2turn', 'inturn',
+#         'orig', 'dest',
+#         'bankdef', 'vsdef', 'cruisespd', 'turnphi',
+#     ]
+#
+#     for k in keys:
+#         if k in payload:
+#             try:
+#                 getattr(ap, k)[idx] = payload[k]
+#             except Exception:
+#                 # Be robust to unexpected shapes or read-only arrays
+#                 pass
+#
+#     # Report per-aircraft autopilot attributes that were not included in the payload
+#     try:
+#         all_attrs = []
+#         for a in dir(ap):
+#             if a.startswith('__'):
+#                 continue
+#             try:
+#                 val = getattr(ap, a)
+#             except Exception:
+#                 continue
+#             if callable(val):
+#                 continue
+#             try:
+#                 # consider only arrays/vectors that match aircraft count
+#                 if hasattr(val, '__len__') and len(val) == len(traf.id):
+#                     all_attrs.append(a)
+#             except Exception:
+#                 continue
+#         packed_set = set(keys)
+#         not_packed = sorted([a for a in all_attrs if a not in packed_set and a != 'route'])
+#         if not_packed:
+#             stack.stack(f"ECHO AP attributes not packed for {acid}: {', '.join(not_packed)}")
+#     except Exception:
+#         pass
+#
+#     return True
+#
+# def pack_traffic_idx(idx: int) -> dict:
+#     """
+#     Pack een minimale Traffic-snapshot voor aircraft-index `idx`.
+#     Alleen de gevraagde velden + acid.
+#     """
+#
+#     return {
+#         'acid':   traf.id[idx],
+#         'type':   traf.type[idx],
+#         'lat':    traf.lat[idx],
+#         'lon':    traf.lon[idx],
+#         'alt':    traf.alt[idx],
+#         'hdg':    traf.hdg[idx],
+#         'trk':    traf.trk[idx],
+#         'vs':     traf.vs[idx],
+#         'selspd': traf.selspd[idx],
+#         'selalt': traf.selalt[idx],
+#         'selvs':  traf.selvs[idx],
+#         'swlnav': bool(traf.swlnav[idx]),
+#         'swvnav': bool(traf.swvnav[idx]),
+#         'swvnavspd': bool(traf.swvnavspd[idx]),
+#         'cas': traf.cas[idx]
+#     }
+#
+#
+# def unpack_traffic(payload: dict) -> bool:
+#     """Very simple unpack: set the attributes on traf from the payload dict."""
+#     acid = payload.get('acid')
+#     if not acid:
+#         return False
+#
+#     idx = traf.id2idx(acid)
+#     if idx < 0:
+#         return False
+#
+#     keys = [
+#         'type', 'lat', 'lon', 'alt', 'hdg', 'trk', 'vs',
+#         'selspd', 'selalt', 'selvs', 'swlnav', 'swvnav', 'swvnavspd','cas'
+#     ]
+#
+#     for k in keys:
+#         if k in payload:
+#             try:
+#                 getattr(traf, k)[idx] = payload[k]
+#             except Exception:
+#                 pass
+#
+#     return True
+#
+#

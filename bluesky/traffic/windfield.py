@@ -1,10 +1,9 @@
 """ Wind implementation for BlueSky."""
 from numpy import array, sin, cos, arange, radians, ones, append, ndarray, \
                   minimum, repeat, delete, zeros, maximum, floor, interp, \
-                  pi, concatenate, unique
+                  pi, concatenate, unique, flatnonzero
 from scipy.interpolate import interp1d, RegularGridInterpolator
 from bluesky.tools.aero import ft
-
 class Windfield():
     """ Windfield class:
         Methods:
@@ -40,7 +39,7 @@ class Windfield():
     """
     def __init__(self):
         # For altitude use fixed axis to allow vectorisation later
-        self.altmax  = 45000. * ft   # [m]
+        self.altmax  = 70000. * ft   # [m]
         self.altstep = 100. * ft    # [m]
 
         # Axis
@@ -254,7 +253,9 @@ class Windfield():
                     # Convert to index and factor
                     ialt   = floor(idxalt).astype(int) # index array for lower altitude
                     falt   = idxalt-ialt  # factor for upper value
-    
+
+
+
                     # Altitude interpolation combined with horizontal
                     nvec   = len(self.lon) # Get number of definition points
     

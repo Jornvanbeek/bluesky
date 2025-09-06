@@ -1,0 +1,1 @@
+ACID,planningstate,ttlg,to eto,type,LIV,ETA,ETO IAF,ETO_original,ETO_act,IAF,runway,EAT,slot,manualslot,TMA flighttime,EAT adherence,LAS,LAf,origin,crossover,instruction,AMANstate,TPstate,tp_time,count,Flighttime,ETO adherence,casdesc,max_casdesc,min_casdesc,selspd,dogleg,direct,holding,earliest

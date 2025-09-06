@@ -25,7 +25,17 @@ class APorASAS(TrafficArrays):
         #--------- Input to Autopilot settings to follow: destination or ASAS ----------
         # Convert the ASAS commanded speed from ground speed to TAS
         if bs.traf.wind.winddim > 0:
-            vwn, vwe     = bs.traf.wind.getdata(bs.traf.lat, bs.traf.lon, bs.traf.alt)
+            try:
+                vwn, vwe     = bs.traf.wind.getdata(bs.traf.lat, bs.traf.lon, bs.traf.alt)
+            except IndexError:
+                alt_arr = np.asarray(bs.traf.alt)
+
+                max_idx = int(np.nanargmax(alt_arr))
+
+                max_id = bs.traf.id[max_idx]
+                print(max_id, max_idx, alt_arr[max_idx])
+
+                return None
             asastasnorth = bs.traf.cr.tas * np.cos(np.radians(bs.traf.cr.trk)) - vwn
             asastaseast  = bs.traf.cr.tas * np.sin(np.radians(bs.traf.cr.trk)) - vwe
             asastas      = np.sqrt(asastasnorth**2 + asastaseast**2)

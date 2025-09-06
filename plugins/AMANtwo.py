@@ -93,7 +93,7 @@ class ArrivalManager(core.Entity):
         self.approach_aim = 0 # 90 seconds before eat if an instruction is given is the aim (make negative)
         self.late_adjacent_threshold = 5*60 # if an aircraft is late then this is the threshold before communicating to an adjacent center
         self.early_adjacent_threshold = 5*60 # if an aircraft is early, then this is the ttlg threshold before communicating to an adjacent center, make negative?
-        self.instruct = True # easy setting to disable all instructions to frozen aircraft
+        self.instruct = False # easy setting to disable all instructions to frozen aircraft
         self.mach_reduction = 0.04
         self.max_speedup = 25 #knots
         self.max_slowdown = 50 #knots
