@@ -449,7 +449,7 @@ class Predictor(core.Entity):
             "wptoalt", "wpxtoalt", "wptorta", "wpxtorta", 'wptpredutc', 'actwp.lat']
 
         include_traf = ['type', 'lat', 'lon', 'alt', 'hdg', 'trk', 'vs', 'selspd', 'swlnav',
-         'swvnav', 'swvnavspd', 'cas'] #optionally selspd selalt selvs
+         'swvnav', 'swvnavspd', 'cas', 'selalt', 'selvs'] #optionally selspd selalt selvs
 
         include_actwp = [
             "lat", "lon", "nextturnlat", "nextturnlon", "nextturnspd", "nextturnbank",
