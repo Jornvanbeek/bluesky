@@ -3,14 +3,15 @@ from textwrap import shorten
 
 
 
-from bluesky import core, stack, traf, sim, HOLD
+from bluesky import core, stack, traf, sim, HOLD, net
+from bluesky import server
 # from plugins.AMANtwo import AMAN  # Import the global reference from AMANtwo
 from bluesky.core import plugin
 from bluesky.plugins.sectorcount import update
 from bluesky.test.tcp.test_simple import test_pos
 from bluesky.tools.aero import kts, ft, nm
 import pandas as pd
-from bluesky.tools.geo import kwikpos, qdrpos, kwikdist
+from bluesky.tools.geo import kwikpos, qdrpos, kwikdist, qdrdist
 from bluesky.tools.geo import kwikqdrdist
 from bluesky.traffic.route import Route
 import math
@@ -31,6 +32,7 @@ class ATC(core.Entity):
         self.crossover = None#this gives some errors with initialization
         # plugin.Plugin.plugins['MACH_CROSSOVER'].imp.CROSSOVER
         self.aman = plugin.Plugin.plugins['AMANTWO'].imp.AMAN
+        self.predictor = plugin.Plugin.plugins['NEWTP'].imp.predictor
         self.mach_threshold = 0
         self.handover_alt = 260.*100
         self.aman.Flights['instruction'] = None
@@ -48,7 +50,9 @@ class ATC(core.Entity):
         self.aman.Flights['direct'] = None
         self.aman.Flights['holding'] = None
         self.aman.Flights['earliest'] = False
+        self.instructionlist = {}
         self.instructions = []
+
 
 
 
@@ -60,6 +64,7 @@ class ATC(core.Entity):
         self.aman.Flights['TPstate'] = ' '
         self.aman.Flights['count'] = 0
         self.aman.Flights['count'] = self.aman.Flights['count'].astype(int)
+
 
 
 
@@ -80,7 +85,7 @@ class ATC(core.Entity):
                     # try:
                     if pd.isna(row['ttlg']):
                         continue
-                    if row.get('TPstate') == 'busy' or row.get('TPstate') == 'instructed':
+                    if row.get('TPstate') in ('busy','instructed'):
                         continue
                     else:
 
@@ -93,9 +98,15 @@ class ATC(core.Entity):
                             # stack.stack(f'ECHO instruction stacked {acid}')
                             self.aman.Flights.loc[acid, 'TPstate'] = 'instructed'
                             self.aman.Flights.at[acid, 'count'] +=1
-                stack.stack(*self.instructions)
+                            # stack.stack(*self.instructions)
+                            # print(self.instructions)
 
-                            # stack.stack(f'PREDICTOR UPDATE {acid}')
+                            self.predictor.update(acid)
+                            # self.instructions = [f'PREDICTOR UPDATE {acid}'] + self.instructions
+                            stack.stack(*self.instructions)
+                            for instruction in self.instructions:
+                                stack.forward(instruction, target_id=self.predictor.child_id )
+                            print('instructed: ',*self.instructions)
 
                 frozen_flights = self.aman.Flights[self.aman.Flights['planningstate'] == 'frozen']
                 busy_exists = (frozen_flights['TPstate'] == 'busy').any()
@@ -127,7 +138,6 @@ class ATC(core.Entity):
 
 
 
-    @stack.command
     def instruction_required(self,acid, row = None):
         if row is None:
             row = self.aman.Flights.loc[acid]
@@ -207,17 +217,21 @@ class ATC(core.Entity):
 
         if selspd > minclean and required_spd > minclean:
                 selspd = required_spd
-                self.instructions.append(f'SPD {acid} {selspd}')
+                # self.instructions.append(f'SPD {acid} {selspd}')
                 # print("Selspd 1: ", selspd)
-                # traf.ap.selspdcmd(idx, selspd)
+                # traf.ap.selspdcmd(idx, selspd*kts)
+                self.sendspeedcmd(acid, selspd)
+                self.add_instruction(acid, selspd, 'spd delay')
 
                 self.aman.Flights.loc[acid, 'selspd'] = selspd
                 print("Selspd 1: ", selspd)
         elif selspd > minclean and required_spd <= minclean:
             selspd = minclean
-            self.instructions.append(f'SPD {acid} {selspd}')
-            # traf.ap.selspdcmd(idx, selspd)
+            # self.instructions.append(f'SPD {acid} {selspd}')
+            # traf.ap.selspdcmd(idx, selspd*kts)
             self.aman.Flights.loc[acid, 'selspd'] = selspd
+            self.sendspeedcmd(acid, selspd)
+            self.add_instruction(acid,selspd, 'spd delay')
 
             # if minor == False:
             #     self.dogleg(acid,ttlg)
@@ -239,9 +253,11 @@ class ATC(core.Entity):
     def delay_mach(self, acid):
         mach = self.aman.mach_reduction
         self.instructions.append(f'REDUCE_MACH {acid} {mach}')
-
+        # deze moet nog aangepast
         self.aman.Flights.at[acid, 'selspd'] = mach
         print(mach)
+        self.add_instruction(acid, mach, 'mach')
+        return False
 
 
 
@@ -262,6 +278,7 @@ class ATC(core.Entity):
         reqdist = (reqdist - trackmiles) * self.aman.dogleg_multiplyer + trackmiles
         self.replacewaypoint(acid, direct_dist, reqdist, trackmiles, direct_qdr)
         self.aman.Flights.loc[acid, 'dogleg'] = True
+        self.add_instruction(acid,(trackmiles, reqdist), 'dogleg')
         # print(self.instructions)
 
 
@@ -289,11 +306,13 @@ class ATC(core.Entity):
 
                 self.directiaf(acid)
                 # speed will be done next iteration
+                self.add_instruction(acid, 'iaf', 'direct')
 
             else:
                 # shorter using dogleg logic
                 self.replacewaypoint(acid, direct_dist, reqdist, trackmiles, direct_qdr)
                 self.aman.Flights.at[acid, 'dogleg'] = True
+                self.add_instruction(acid,(trackmiles, reqdist), 'shortened dogleg')
 
 
         if speed:
@@ -306,30 +325,44 @@ class ATC(core.Entity):
                 return
 
             elif reqspd > selspd:
-
+                print('reqspd selspd: ',reqspd, selspd)
                 # find out max speed from mach
                 maxspd = self.aman.Flights.loc[acid]['max_casdesc']
                 if reqspd > maxspd:
-                    self.instructions.append(f'SPD {acid} {maxspd}')
-                    # traf.ap.selspdcmd(idx, maxspd)
+                    # self.instructions.append(f'SPD {acid} {maxspd}')
+                    # traf.ap.selspdcmd(idx, maxspd*kts)
                     self.aman.Flights.loc[acid, 'required'] = False
                     self.aman.Flights.loc[acid, 'selspd'] = maxspd
                     self.aman.Flights.loc[acid, 'earliest'] = True
+                    self.sendspeedcmd(acid, maxspd)
+                    self.add_instruction(acid, maxspd, 'maxspd')
 
 
                 else:
-                    self.instructions.append(f'SPD {acid} {reqspd}')
-                    # traf.ap.selspdcmd(idx, selspd)
+                    # self.instructions.append(f'SPD {acid} {reqspd}')
+                    # traf.ap.selspdcmd(idx, selspd*kts)
                     self.aman.Flights.loc[acid, 'selspd'] = reqspd
-
+                    self.sendspeedcmd(acid, reqspd)
+                    self.add_instruction(acid,reqspd, 'speed up')
 
     def directiaf(self, acid):
         idxac = traf.id2idx(acid)
         iaf = self.aman.Flights.loc[acid, 'IAF']
-        self.instructions.append(f'DIRECT {acid} {iaf}')
+        # self.instructions.append(f'DIRECT {acid} {iaf}')
 
-        # traf.ap.route[idxac].direct(idxac,iaf)
+        traf.ap.route[idxac].direct(idxac,iaf)
         self.aman.Flights.loc[acid, 'direct'] = True
+
+
+    def sendspeedcmd(self, acid, speed):
+        #speed in knots
+        speed = float(speed)
+        idx = traf.id2idx(acid)
+        print('sendspeed: ', speed)
+        traf.ap.selspdcmd(idx, speed * kts)
+        self.instructions.append(f'SPEED {acid} {speed}')
+
+
 
 
     @stack.command
@@ -387,6 +420,17 @@ class ATC(core.Entity):
         alt = traf.alt[idx]
         iaf_alt = acrte.wpalt[iaf_index]
 
+        qdrcheck, distcheck = kwikqdrdist(acrte.wplat[iaf_index], acrte.wplon[iaf_index], lat, lon)
+
+        qdrcheck_next, distcheck_next = kwikqdrdist(acrte.wplat[iaf_index], acrte.wplon[iaf_index], acrte.wplat[iaf_index +1], acrte.wplon[iaf_index+1])
+
+
+
+
+        if abs(qdrcheck - qdrcheck_next) < 90 or abs(qdrcheck -qdrcheck_next) >270:
+            alpha = -alpha
+            lat, lon = qdrpos(traf.lat[idx], traf.lon[idx], direct_qdr + alpha, hypothenuse)
+
 
 #old method
         # wpt_alt = (alt+iaf_alt)/2
@@ -412,13 +456,18 @@ class ATC(core.Entity):
 
 
         newwp_name = f'DOGLEG{acid}'
-
+        if newwp_name in acrte.wpname:
+            acrte.delwpt(idx, newwp_name)
         # Route.addwptstack(f'ADDWPT {acid} {lat} {lon} ,{wpt_alt} , , , {iaf}')
         newwp_index = acrte.addwpt(idx, newwp_name, 0, lat, lon, alt= wpt_alt, beforewp=iaf) # must be in meters
 
         Route.direct(idx, newwp_name)
 
-        self.instructions.append(f'PREDICTOR UPDATE {acid}')
+
+
+        # self.instructions.append(f'PREDICTOR UPDATE {acid}')
+
+
         #
         #
         # self.instructions.append(f'ADDWPT {acid} {lat} {lon} ,{wpt_alt} , , , {iaf}')
@@ -459,15 +508,15 @@ class ATC(core.Entity):
         dist = planned_dist + planned_dist*(aim_ttlg/to_eto)  #aim ttlg will be negative if speed up required
         return dist
 
-    def storeinstruction(self,acid, instruction):
-        if type(instruction) == float:
-            instruction = round(instruction,2)
-        if type(self.aman.Flights.loc[acid]['instruction']) == list:
-            self.aman.Flights.at[acid, 'instruction'].append(instruction)
-        else:
-            self.aman.Flights.at[acid, 'instruction'] = [instruction]
-
-        self.aman.Flights.at[acid, 'TPstate'] = 'busy'
+    # def storeinstruction(self,acid, instruction):
+    #     if type(instruction) == float:
+    #         instruction = round(instruction,2)
+    #     if type(self.aman.Flights.loc[acid]['instruction']) == list:
+    #         self.aman.Flights.at[acid, 'instruction'].append(instruction)
+    #     else:
+    #         self.aman.Flights.at[acid, 'instruction'] = [instruction]
+    #
+    #     self.aman.Flights.at[acid, 'TPstate'] = 'busy'
 
 
         # if type(self.aman.Flights.loc[acid,'tp_time']) == list:
@@ -632,8 +681,15 @@ class ATC(core.Entity):
         self.aman.Flights.at[acid, 'count'] += 1
 
 
+    def add_instruction(self, acid, instruction, name):
+        if acid not in self.instructionlist:
+            self.instructionlist[acid] = []
+        self.instructionlist[acid].append(name + str(instruction))
 
 
+    @stack.command
+    def print_instruction(self, acid):
+        print(self.instructionlist[acid])
 
 
 

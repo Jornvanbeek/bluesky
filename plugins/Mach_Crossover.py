@@ -23,10 +23,10 @@ def init_plugin():
         'M_cruise': None,
         'M_descent': None,
         'CAS_descent': None,
-        'M_climb': None,      # <-- new field for climb Mach
+        'M_climb': None,
         'CAS_climb': None,
         'CAS_cruise': None,
-        'max_CAS_desc': None,# <-- new field for climb CAS
+        'max_CAS_desc': None,
     }
     return config
 
@@ -348,10 +348,10 @@ class MachCrossoverPlugin(core.Entity):
         # print(selspd)
         # print(selspd[cond_d1])
         # 2) For each aircraft that just crossed, stack a 'CROSSOVER' command
-        for idx in crossed_idxs:
-            acid = traf.id[idx]  # get aircraft callsign
-            stack.stack(f'PREDICTOR CROSSOVER {acid}')
-            # print(acid)
+        # for idx in crossed_idxs:
+        #     acid = traf.id[idx]  # get aircraft callsign
+        #     stack.stack(f'PREDICTOR CROSSOVER {acid}')
+        #     # print(acid)
 
         traf.selspd[:] = selspd
 
@@ -383,6 +383,19 @@ class MachCrossoverPlugin(core.Entity):
                         print(f'mach crossover {acid} not found in vnav on cmdline')
                         return
             self.user_spdcmd[idx] = False
+
+
+    @stack.command
+    def CROSSOVERCOMMAND(self, acid, speed):
+        speed = float(speed)
+
+        idx = traf.id2idx(acid)
+        if idx < 0:
+            print(f'mach crossover {acid} not found in onspeedinstruction')
+        else:
+            self.user_spdcmd[idx] = True
+            traf.ap.selspdcmd(idx, speed * kts)
+
 
     @stack.command
     def reduce_mach(self,acid, mach):

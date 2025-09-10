@@ -1,52 +1,133 @@
-from bluesky import core, stack, traf
+""" BlueSky Holding plugin"""
+# Import the global bluesky objects. Uncomment the ones you need
+from bluesky import core, stack, traf  #, settings, navdb, sim, scr, tools
+import math
+from bluesky.tools import aero
+import numpy as np
 
 
-
-
-
+### Initialization function of your plugin. Do not change the name of this
+### function, as it is the way BlueSky recognises this file as a plugin.
 def init_plugin():
+
+    # Addtional initilisation code
+        # Configuration parameters
     config = {
-        'plugin_name': 'HOLDING',
-        'plugin_type': 'sim'
-    }
-    plugin_inst = HoldingPattern()
+        # The name of your plugin
+        'plugin_name':     'Holding',
+
+        # The type of this plugin.
+        'plugin_type':     'sim'
+        }
+        # init_plugin() should always return the config dict.
     return config
 
 
-class HoldingPattern(core.Entity):
+holding_patterns = {
+    'SUGOL' : [110,70,100,250],
+    'RIVER' : [41,70,100,250],
+    'ARTIP' : [252,70,100,250],
+    'NARSO' : [355,200,999,220]
+}
+
+
+# determine the entry of the holding pattern
+def determine_entry(inbound_track, radial_to_IAF):
+    relative_bearing = (radial_to_IAF - inbound_track) % 360
+    if relative_bearing < 180 and relative_bearing > 110: # teardrop
+        return (inbound_track + 150) % 360, "teardrop"
+    elif relative_bearing >= 180 and relative_bearing < 290: # parallel
+        return (inbound_track + 180) % 360, "parallel"
+    return None
+
+
+class Holding(core.Entity):
+    def __init__(self):
+        super().__init__()
+
+        with self.settrafarrays():
+            # per-aircraft list to store waypoint names where aircraft are holding
+            self.holding_at = []
+
     @stack.command
-    def holdiaf(self, acid, ttlg, iaf, to_eto=None, direction="R"):
-        """
-        Holding pattern voor exact ttlg seconden op het opgegeven iaf-fix.
-        """
-        #to eto should be in seconds
-        acid = acid.upper()
-        iaf = iaf.upper()
-        ttlg = float(ttlg)
-        if to_eto:
-            to_eto = float(to_eto) - 30
-        else: to_eto = 0.0
-        turn_time = 60.0
-        total_turn_time = 2 * turn_time
+    def holdat(self, acid: 'acid', wpt: 'wpt'):
+        ''' Fly the aircraft to holding pattern and let it hold.'''
 
-        # Compute current selected heading and add 180° for relative turn
-        idx = traf.id2idx(acid)
-        current_hdg = traf.hdg[idx]
-        # Determine turn direction: right (R) or left (L)
-        turn_sign = 1 if direction.upper() == "R" else -1
-        turn_angle = 90.0 * turn_sign
-        # Initial 90° turn to start hold
-        first_hdg = (current_hdg + turn_angle) % 360.0
+        if wpt not in holding_patterns:
+            return True, f'{wpt} currently has no holding pattern.'
+        
+        # Define aircraft name and index
+        ac  = traf.id[acid]
+        index = traf.ap.route[acid].wpname.index(wpt)
 
-        stack.stack(f"DELAY {to_eto} BANK {acid} 40")
-        stack.stack(f"DELAY {to_eto} HDG {acid} {first_hdg:.1f}")
-        # Complete racetrack: 180° back inbound
-        second_hdg = (first_hdg + turn_angle) % 360.0
-        stack.stack(f"DELAY {to_eto + 15} HDG {acid} {second_hdg:.1f}")
-        # Final 90° turn before direct to IAF
-        direct_turn_hdg = (second_hdg + turn_angle) % 360.0
+        # Check if the aircraft is at the right altitude for the holding
+        if traf.selalt[acid] < holding_patterns[wpt][1]*0.3048 or traf.selalt[acid] > holding_patterns[wpt][2]*0.3048:
+            return True, f'{ac} has an altitude outside the holding pattern limits.'
+        
+        # Check if the aircraft is at the right speed for the holding
+        if traf.selspd[acid] > holding_patterns[wpt][3]*1.852/3.6:
+            return True, f'{ac} has a speed higher than the maximum holding speed.'
+        
+        # check when to print in terminal
+        echo = False
 
-        stack.stack(f"DELAY {to_eto + 0.5*ttlg} HDG {acid} {direct_turn_hdg:.1f}")
-        stack.stack(f"DELAY {to_eto + 0.5*ttlg} DIRECT {acid} {iaf}")
+        # Calculate the wind correction
+        vnorth, veast = traf.wind.getdata(traf.ap.route[acid].wplat[index],traf.ap.route[acid].wplat[index],traf.alt[acid])
+        windspeed, angle = np.hypot(vnorth, veast), np.rad2deg(np.arctan2(veast, vnorth))%360
+        perpendicular_wind = np.sin(np.deg2rad(angle)-holding_patterns[wpt][0])*windspeed
+        correction = np.rad2deg(np.arctan(perpendicular_wind/traf.tas[acid]))
 
-        stack.stack(f"DELAY {to_eto + 0.5*ttlg + 90} BANK {acid} 25")
+        # Check if the flight level is already occupied in holding at the waypoint
+        if not self.holding_at[acid]:
+            echo = True
+            for i in range(len(self.holding_at)):
+                if self.holding_at[i] == wpt and traf.alt[i] == traf.alt[acid] and i != acid:
+                    return True,  f'{traf.id[i]} is already holding at {wpt}.'
+
+        self.holding_at[acid] = wpt
+        
+        # Determine the entry of the holding pattern
+        entry_track = determine_entry(holding_patterns[wpt][0],(traf.ap.route[acid].wpdirto[index]))
+
+        # Make the waypoint a flyover point
+        traf.ap.route[acid].wpflyby[index] = False
+        if traf.ap.route[acid].wpname[0] == wpt:
+            traf.actwp.flyby[acid] = False
+
+        # Set the holding pattern inbound time
+        timing = (90 if traf.selalt[acid]*100/aero.ft > 14000 else 60)
+
+        # rate one turn
+        stack.stack('BANK %s %s' % (ac, math.degrees(math.atan(traf.tas[acid]*3.6/1.852/364))))
+
+        if entry_track and entry_track[1] == "parallel":
+            traf.ap.route[acid].wpstack[index] = [f'DIRECT {ac} {wpt}']
+            traf.ap.route[acid].wpstack[index] += [f'{ac} HDG {entry_track[0]+2*correction}']
+            traf.ap.route[acid].wpstack[index] += [f'DELAY {timing} HDG {ac} {(entry_track[0]-90+2*correction) %360}']
+            traf.ap.route[acid].wpstack[index] += [f'DELAY {timing+30} DIRECT {ac} {wpt}']
+            traf.ap.route[acid].wpstack[index] += [f'DELAY {timing+30} start_holding {ac} {wpt}']
+
+        elif entry_track and entry_track[1] == "teardrop":
+            traf.ap.route[acid].wpstack[index] = [f'DIRECT {ac} {wpt}']
+            traf.ap.route[acid].wpstack[index] += [f'{ac} HDG {entry_track[0]+2*correction}']
+            traf.ap.route[acid].wpstack[index] += [f'DELAY {timing+10} HDG {ac} {(entry_track[0]+120) %360}']
+            traf.ap.route[acid].wpstack[index] += [f'DELAY {timing+40} DIRECT {ac} {wpt}']
+            traf.ap.route[acid].wpstack[index] += [f'DELAY {timing+40} start_holding {ac} {wpt}']
+
+        elif not entry_track:
+            traf.ap.route[acid].wpstack[index] = [f'DIRECT {ac} {wpt}']
+            traf.ap.route[acid].wpstack[index] += [f'{ac} HDG {(holding_patterns[wpt][0]+90)%360}']
+            traf.ap.route[acid].wpstack[index] += [f'DELAY 30 HDG {ac} {(holding_patterns[wpt][0]+180+3*correction)%360}']
+            traf.ap.route[acid].wpstack[index] += [f'DELAY {timing+60} DIRECT {ac} {wpt}']
+
+        if echo:
+            return True, f'{ac} is now holding at {wpt}.'
+
+    @stack.command
+    def cancel_holding(acid: 'acid', wpt: 'wpt'):
+        ''' Cancel holding pattern and let the aircraft continue its route.'''
+        ac  = traf.id[acid]
+        self.holding_at[acid] = []
+        traf.ap.route[acid].wpstack[traf.ap.route[acid].wpname.index(wpt)] = []
+        stack.stack('DIRECT %s %s' % (ac, wpt))
+        return True, f'{ac} is no longer holding.'

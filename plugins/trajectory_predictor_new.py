@@ -168,7 +168,7 @@ class Predictor(core.Entity):
         traf.traf_parent_id = None
 
         # self.incorrect_predictions = ['AIA6768', 'KLM76QSH', 'EZY91XM']
-        self.incorrect_predictions = ['KLM590SH']
+        self.incorrect_predictions = ['KLM1830', 'KAC127SH','THY8ZXSH']
         # Change the route class implementation for the child node using PredictorNodeRoute class.
         stack.stack('IMPLEMENTATION Route Route')
 
@@ -399,9 +399,13 @@ class Predictor(core.Entity):
             print('sent info: ', info)
 
             net.send('UPDATE_PREDICTOR', info, self.child_id)
-            newcommand = self.filter_per_aircraft(acid)[-1][1]
-            print(newcommand)
-            stack.forward(newcommand, target_id=self.child_id)
+
+            if acid in self.incorrect_predictions:
+                stack.stack('hold')
+                stack.forward('HOLD', target_id=self.child_id)
+            # newcommand = self.filter_per_aircraft(acid)[-1][1]
+            # print('forwarded: ',newcommand)
+            # stack.forward(newcommand, target_id=self.child_id)
 
     @network.subscriber(topic='UPDATE_PREDICTOR')
     def update_requested(self, acid, route_info, actwp_info, traf_info):
@@ -446,7 +450,7 @@ class Predictor(core.Entity):
             "wpturnspd", "wpturnhdgr", "iactwp", "swflyby", "swflyturn", "bank",
             "turnbank", "turnrad", "turnspd", "turnhdgr", "last_2_defined",
             "flag_landed_runway", "wpdirfrom", "wpdirto", "wpdistto", "wpialt",
-            "wptoalt", "wpxtoalt", "wptorta", "wpxtorta", 'wptpredutc', 'actwp.lat']
+            "wptoalt", "wpxtoalt", "wptorta", "wpxtorta", 'wptpredutc']
 
         include_traf = ['type', 'lat', 'lon', 'alt', 'hdg', 'trk', 'vs', 'selspd', 'swlnav',
          'swvnav', 'swvnavspd', 'cas', 'selalt', 'selvs'] #optionally selspd selalt selvs
@@ -458,6 +462,9 @@ class Predictor(core.Entity):
             "turnbank", "turnrad", "turnspd", "turnhdgr", "oldturnspd",
             "turnfromlastwp", "turntonextwp", "torta", "xtorta", "next_qdr",
             "swlastwp", "curlegdir", "curleglen"]
+
+
+        #todo exclude list hiervan maken
         acid = acid.upper()
         idxac = traf.id2idx(acid)
 

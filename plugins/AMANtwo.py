@@ -354,7 +354,7 @@ class ArrivalManager(core.Entity):
                 dest, runway = parse_destination(wpt)
                 idxac = traf.id2idx(acid)
                 tp_dt = sim.simt - traf.ap.route[idxac].createtime
-                data = {'ETA': wptime, 'runway': runway, 'TPstate': 'updated', 'tp_time': tp_dt, 'instrtime': traf.ap.route[idxac].createtime, 'updatetime': sim.simt}
+                data = {'ETA': wptime, 'runway': runway, 'TPstate': 'updated', 'tp_time': tp_dt}
 
 
 
