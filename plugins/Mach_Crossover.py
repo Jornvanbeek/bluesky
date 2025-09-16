@@ -47,7 +47,7 @@ class MachCrossoverPlugin(core.Entity):
             standard_mclimb=0.77,
             standard_casclimb=270,
             standard_cascruise = 280,
-            transition_altitude=100,
+            transition_altitude=101,
             descentspd=250,
             descent_threshold=3000 * ft,
             standard_max_casdesc = 295

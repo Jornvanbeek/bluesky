@@ -43,7 +43,7 @@ class ATC(core.Entity):
         self.aman.Flights['instruction'] = self.aman.Flights['instruction'].astype(object)
         self.aman.Flights['TPstate'] = self.aman.Flights['TPstate'].astype(object)
         self.aman.Flights['AMANstate'] = self.aman.Flights['AMANstate'].astype(object)
-        self.aman.Flights['tp_time'] = None
+
         self.aman.Flights['selspd'] = None
         self.aman.Flights['dogleg'] = None
         self.aman.Flights['dogleg'] = self.aman.Flights['dogleg'].astype(bool)
@@ -634,7 +634,7 @@ class ATC(core.Entity):
 
 
     @stack.command
-    def holding(self, acid, direction="R"):
+    def holdingpattern(self, acid, direction="R"):
         """
         Holding pattern voor exact ttlg seconden op het opgegeven iaf-fix.
         """

@@ -67,7 +67,7 @@ class ArrivalManager(core.Entity):
         super().__init__()
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'ETO_act', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA flighttime', 'EAT adherence', 'LAS', 'LAf', 'origin', 'crossover', 'instruction', 'AMANstate', 'TPstate','tp_time', 'count', 'Flighttime', 'ETO adherence', 'casdesc', 'max_casdesc', 'min_casdesc']
+        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'ETO_act', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA flighttime', 'EAT adherence', 'LAS', 'LAf', 'origin', 'crossover', 'TPstate', 'count', 'Flighttime', 'ETO adherence', 'casdesc', 'max_casdesc', 'min_casdesc']
 
 
         self.Flights = pd.DataFrame(columns = columns)
@@ -108,6 +108,9 @@ class ArrivalManager(core.Entity):
         self.workload_adjacent_dogleg = 3.0
         self.workload_adjacent_direct = 2.0
         self.workload_holding = 3.0
+        # self.dynamic_LIV = False
+        # self.single_rwy_capacity = 38 #aircraft per hour
+        # self.double_rwy_capacity = 34 #each
 
 
 
@@ -348,13 +351,14 @@ class ArrivalManager(core.Entity):
             if wpt in self.iafs:
                 data = {'ETO IAF': wptime, 'IAF': wpt , 'TPstate': 'updated iaf', 'ttlg': self.Flights.loc[acid,'EAT']-wptime}
 
-
+                # TMA = self.Flights.loc[acid, 'TMA']
+                # 'ETA': wptime + TMA
 
             elif '/RW' in wpt:
                 dest, runway = parse_destination(wpt)
                 idxac = traf.id2idx(acid)
                 tp_dt = sim.simt - traf.ap.route[idxac].createtime
-                data = {'ETA': wptime, 'runway': runway, 'TPstate': 'updated', 'tp_time': tp_dt}
+                data = {'ETA': wptime, 'runway': runway, 'TPstate': 'updated'}
 
 
 
