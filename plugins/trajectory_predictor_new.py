@@ -168,7 +168,7 @@ class Predictor(core.Entity):
         traf.traf_parent_id = None
 
         # self.incorrect_predictions = ['AIA6768', 'KLM76QSH', 'EZY91XM']
-        self.incorrect_predictions = ['KLM1830', 'KAC127SH','THY8ZXSH']
+        self.incorrect_predictions = []#['KLM1830', 'KAC127SH','THY8ZXSH']
         # Change the route class implementation for the child node using PredictorNodeRoute class.
         stack.stack('IMPLEMENTATION Route Route')
 
@@ -396,7 +396,7 @@ class Predictor(core.Entity):
             # route_info = traf.ap.route[idxac].pack_route()
             # autopilot_info = pack_ap_idx(idxac)
 
-            print('sent info: ', info)
+            # print('sent info: ', info)
 
             net.send('UPDATE_PREDICTOR', info, self.child_id)
 
@@ -422,7 +422,7 @@ class Predictor(core.Entity):
             acspd = traf_info['cas']
 
             idxac = traf.id2idx(acid)
-            print('update received: ', acid, aclat, aclon, achdg, acalt, acspd)
+            # print('update received: ', acid, aclat, aclon, achdg, acalt, acspd)
 
             if idxac < 0:
                 traf.cre(acid, actype, aclat, aclon, achdg, acalt, acspd)
@@ -872,17 +872,17 @@ class Predictor(core.Entity):
             self.iscomplete()
 
 
-    @predictor.subcommand
-    def crossover(self, acid: str):
-        """Handles aircraft waypoint crossing."""
-        idxac = traf.id2idx(acid)
-        createtime = traf.ap.route[idxac].createtime
-        # print('crossover subcommand called')
-        if self.parent_id:
-            # net.send('PREDICTION', (acid, 'CROSSOVER', sim.simt, sim.simt-createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac]), GROUPID_SIM)
-
-            net.send('PREDICTION', (acid, 'CROSSOVER', sim.simt, sim.simt - createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac]),
-             self.parent_id)
+    # @predictor.subcommand
+    # def crossover(self, acid: str):
+    #     """Handles aircraft waypoint crossing."""
+    #     idxac = traf.id2idx(acid)
+    #     createtime = traf.ap.route[idxac].createtime
+    #     # print('crossover subcommand called')
+    #     if self.parent_id:
+    #         # net.send('PREDICTION', (acid, 'CROSSOVER', sim.simt, sim.simt-createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac]), GROUPID_SIM)
+    #
+    #         net.send('PREDICTION', (acid, 'CROSSOVER', sim.simt, sim.simt - createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac]),
+    #          self.parent_id)
 
     # @predictor.subcommand
     # def publish(self):
@@ -915,9 +915,6 @@ class Predictor(core.Entity):
             #scr.echo(f'Prediction stored: {acid} reached {wpt} at {datetime.fromtimestamp(wptpredutc, tz=None)} seconds, stored in object')
 
         else:
-            if 'CROSSOVER' in wpt:
-                # print('crossover update not handled yet')
-                return
 
             # idxwp = traf.ap.route[idxac].wpname.index(wpt)
             try:

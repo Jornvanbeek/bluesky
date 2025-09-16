@@ -23,6 +23,8 @@ pd.set_option('display.width', 250)
 import numpy as np
 import random
 import pickle
+import time
+from datetime import timedelta
 from bluesky.tools.aero import casormach2tas, fpm, kts, ft, g0, Rearth, nm, tas2cas,\
                          vatmos,  vtas2cas, vtas2mach, vcasormach
 
@@ -67,7 +69,7 @@ class ArrivalManager(core.Entity):
         super().__init__()
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'ETO_act', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA flighttime', 'EAT adherence', 'LAS', 'LAf', 'origin', 'crossover', 'TPstate', 'count', 'Flighttime', 'ETO adherence', 'casdesc', 'max_casdesc', 'min_casdesc']
+        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'ETO_act', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'ETO adherence', 'casdesc', 'max_casdesc', 'min_casdesc']
 
 
         self.Flights = pd.DataFrame(columns = columns)
@@ -111,6 +113,7 @@ class ArrivalManager(core.Entity):
         # self.dynamic_LIV = False
         # self.single_rwy_capacity = 38 #aircraft per hour
         # self.double_rwy_capacity = 34 #each
+        self.starttime = time.time()
 
 
 
@@ -183,8 +186,8 @@ class ArrivalManager(core.Entity):
 
             self.Flights.at[acid, 'slot'] = new_slot
 
-            if pd.notna(row['TMA flighttime']):
-                self.Flights.at[acid, 'EAT'] = new_slot - row['TMA flighttime']
+            if pd.notna(row['TMA']):
+                self.Flights.at[acid, 'EAT'] = new_slot - row['TMA']
 
             # Color and set planningstate to 'POPUP'
             stack.stack(f"COLOR {acid} 255,0,0")
@@ -260,7 +263,7 @@ class ArrivalManager(core.Entity):
                 # Update the slot in the DataFrame
                 self.Flights.loc[idx, ['slot', 'EAT', 'LIV', 'LAS', 'LAf']] = [
                     slot,
-                    slot - row['TMA flighttime'],
+                    slot - row['TMA'],
                     separation,
                     last_assigned_slot,
                     last_assigned_flight,
@@ -349,25 +352,24 @@ class ArrivalManager(core.Entity):
             wptime = traf.ap.route[idxac].createtime + flighttime
             # print(f'{acid} at {wpt}')
             if wpt in self.iafs:
-                data = {'ETO IAF': wptime, 'IAF': wpt , 'TPstate': 'updated iaf', 'ttlg': self.Flights.loc[acid,'EAT']-wptime}
+                # data = {'ETO IAF': wptime, 'IAF': wpt , 'TPstate': 'updated iaf', 'ttlg': self.Flights.loc[acid,'EAT']-wptime}
 
-                # TMA = self.Flights.loc[acid, 'TMA']
+                TMA = self.Flights.loc[acid, 'TMA']
                 # 'ETA': wptime + TMA
+                data = {'ETO IAF': wptime, 'IAF': wpt, 'TPstate': 'updated', 'ttlg': self.Flights.loc[acid, 'EAT'] - wptime, 'ETA': wptime + TMA}
+
+
 
             elif '/RW' in wpt:
                 dest, runway = parse_destination(wpt)
                 idxac = traf.id2idx(acid)
                 tp_dt = sim.simt - traf.ap.route[idxac].createtime
-                data = {'ETA': wptime, 'runway': runway, 'TPstate': 'updated'}
+                data = {'ETA': wptime, 'runway': runway, 'TPstate': 'updated including TMA'}
 
 
 
 
 
-
-            # print(acid,wpt,wptime)
-            elif 'CROSSOVER' in wpt:
-                data = {'crossover': wptime}
 
             # Updates the existing row for acid
 
@@ -375,7 +377,7 @@ class ArrivalManager(core.Entity):
                 # print(f'{key}: {value}')
                 self.Flights.at[acid, key] = value
 
-            if '/RW' in wpt:
+            if '/RW' in wpt or data['TPstate'] == 'updated':
                 stack.stack('instruct_frozen')
 
         else:
@@ -390,8 +392,7 @@ class ArrivalManager(core.Entity):
                 dest, runway = parse_destination(wpt)
                 data = {'planningstate': 'new', 'ETA': wptime, 'runway': runway, 'type': type, 'origin': '', 'LAf': '', 'count': 0}
             # print(acid,wpt,wptime)
-            elif 'CROSSOVER' in wpt:
-                data = {'planningstate': 'new', 'crossover': wptime}
+
 
             # data['instruction'] = []
             if acid not in self.Flights.index:
@@ -427,8 +428,7 @@ class ArrivalManager(core.Entity):
                     elif '/RW' in wpt:
                         dest, runway = parse_destination(wpt)
                         data = {'planningstate': 'new', 'ETA': wptime, 'runway':runway, 'type': type, 'origin': '', 'LAf': '','count':0, 'Flighttime': flighttime}
-                    elif 'CROSSOVER' in wpt:
-                        data = {'planningstate': 'new', 'crossover': wptime}
+
 
                     else:
                         print('something wrong with waypoints and prediction in aman')
@@ -461,7 +461,7 @@ class ArrivalManager(core.Entity):
         """ Clear all traffic data when sim is reset and reset data for the predictor. """
         stack.stack('ECHO resetting AMAN, placeholder for storing planning permanently')
         super().reset()
-        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'IAF', 'runway', 'EAT', 'slot', 'TMA flighttime', 'EAT adherence', 'LAS', 'LAf', 'origin', 'crossover']
+        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'IAF', 'runway', 'EAT', 'slot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin']
 
 
         self.Flights = pd.DataFrame(columns = columns)
@@ -510,7 +510,7 @@ class ArrivalManager(core.Entity):
     def update_times(self):
         if self.aman_parent_id:
             return
-        self.Flights['TMA flighttime'] = self.Flights['ETA'] - self.Flights['ETO IAF']
+        self.Flights['TMA'] = self.Flights['ETA'] - self.Flights['ETO IAF']
         self.Flights['to eto'] = round((self.Flights['ETO IAF'] - sim.simt) / 60, 0)
         self.Flights['ttlg'] = self.Flights['EAT'] - self.Flights['ETO IAF']
 
@@ -599,7 +599,7 @@ class ArrivalManager(core.Entity):
         # Split Flights into two subsets based on runway
         Flights_hhmmss = self.Flights.copy()
         Flights_hhmmss.rename(columns={'runway': 'rwy'}, inplace=True)
-        Flights_hhmmss.rename(columns={'TMA flighttime': 'TMA'}, inplace=True)
+        # Flights_hhmmss.rename(columns={'TMA flighttime': 'TMA'}, inplace=True)
         if 'rwy' in Flights_hhmmss.columns:
             Flights_hhmmss['rwy'] = Flights_hhmmss['rwy'].str[3:]  # Remove first 3 characters
 
@@ -614,7 +614,7 @@ class ArrivalManager(core.Entity):
                 )
 
         # Transform specified columns to HH:MM:SS
-        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original','ETO_act', 'EAT', 'slot', 'LAS', 'crossover']
+        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original','ETO_act', 'EAT', 'slot', 'LAS']
         for col in columns_to_transform:
             if col in Flights_hhmmss.columns:
                 Flights_hhmmss[col] = Flights_hhmmss[col].apply(
@@ -669,7 +669,7 @@ class ArrivalManager(core.Entity):
         <body>
         <div class="container">
             <div class="table-container">
-                <h3>Runway RWY27  time:{sim_hhmmss}</h3>
+                <h3>Runway RWY27  simtime: {sim_hhmmss}, elapsedtime: {timedelta(seconds= int(time.time()-self.starttime))}</h3>
                 {html_RWY27}
             </div>
             <div class="table-container">

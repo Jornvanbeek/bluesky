@@ -106,6 +106,8 @@ class ATC(core.Entity):
                             stack.stack(*self.instructions)
                             for instruction in self.instructions:
                                 stack.forward(instruction, target_id=self.predictor.child_id )
+                            iaf = self.aman.Flights.loc[acid,'IAF']
+                            stack.forward(f'AT {acid} {iaf} DO DELAY 10 DEL {acid}', target_id=self.predictor.child_id)
                             print('instructed: ',*self.instructions)
 
                 frozen_flights = self.aman.Flights[self.aman.Flights['planningstate'] == 'frozen']
