@@ -510,9 +510,21 @@ class ArrivalManager(core.Entity):
     def update_times(self):
         if self.aman_parent_id:
             return
+
+        # error introduction here
+        # self.Flights['totalerror'] = self.Flights['takeoff'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights
+        # self.Flights['ETA'] = self.Flights['correct_ETA'] + self.Flights['totalerror']
+        # self.errors(self)
+
         self.Flights['TMA'] = self.Flights['ETA'] - self.Flights['ETO IAF']
         self.Flights['to eto'] = round((self.Flights['ETO IAF'] - sim.simt) / 60, 0)
         self.Flights['ttlg'] = self.Flights['EAT'] - self.Flights['ETO IAF']
+
+
+    def update_errors(self):
+
+        self.Flights['ETA'] = self.Flights['correct_ETA'] + error
+        # self.Flights['totalerror'] = self.Flights['takeoff'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights['insidefir']
 
 
 
@@ -520,7 +532,7 @@ class ArrivalManager(core.Entity):
         if self.aman_parent_id:
             return
         if type(df) != str:
-            # Iterate over the filtered DataFrame and calculate slots
+
             for idx in df.index:
                 stack.stack('COLOR ' + idx +' '+ rgb)
         elif type(df) == str:
