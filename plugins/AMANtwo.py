@@ -16,6 +16,7 @@ from datetime import datetime
 from collections import defaultdict
 from plugins.RunwayConfigurations import RunwayConfiguration
 from plugins.LIV_separation import LivSeparation
+from plugins.errorgenerator import ErrorGenerator
 import pandas as pd
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
@@ -85,6 +86,7 @@ class ArrivalManager(core.Entity):
         self.visible_altitude = 10000 #(FL100)
         self.separation = 75
         self.LIV_separation = LivSeparation()
+        self.errorgenerator = ErrorGenerator() #todo seed
         self.cntrlz = None          # planning times backup
 
         self.standard_early = 60 # seconds that ASAP plans early if there is no slot taken before the slot being planned, make negative?
@@ -330,7 +332,7 @@ class ArrivalManager(core.Entity):
 # ___________________________________ PREDICTOR FUNCTIONS
     # new prediction received
     @network.subscriber(topic='PREDICTION')
-    def on_prediction_received(self, acid, wpt, wptime,flighttime, wptpredutc, parent_id, type):
+    def on_prediction_received(self, acid, wpt, wptime,flighttime, wptpredutc, parent_id, type, origin):
         """
         Each acid getting a new ETA will be added to aircraft needing to get a slot.
         """
@@ -342,8 +344,16 @@ class ArrivalManager(core.Entity):
         idxac = traf.id2idx(acid)
         estimatedcreatetime = wptime - flighttime
         if idxac == -1:
+            if wpt in self.iafs:
+                #determining errors at iaf
+                lookahead = round(int(self.freezehorizon - flighttime) / 60)  # minutes
+                if lookahead < 0:
+                    lookahead = 0
+                takeoff, dep_route, enroute, fir = self.errorgenerator.return_sample(acid, origin, lookahead=lookahead)
 
-            self.not_spawned[acid].append((wpt, wptime,flighttime,estimatedcreatetime, wptpredutc, parent_id, type))
+            else:
+                takeoff, dep_route, enroute, fir = 0,0,0,0# to be disregarded later
+            self.not_spawned[acid].append((wpt, wptime,flighttime,estimatedcreatetime, wptpredutc, parent_id, type, takeoff, dep_route, enroute, fir))
             # dest, runway = parse_destination(wpt)
             # self.Flights.loc[acid] = {'planningstate': 'ground', 'ETA': wptime, 'runway': runway, 'type': type}
             # the above is future code for popups?
@@ -420,11 +430,11 @@ class ArrivalManager(core.Entity):
             id = len(traf.id) - i
             if acid in self.not_spawned.keys():
                 for prediction in self.not_spawned[acid]:
-                    wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type = prediction
+                    wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, takeoff, dep_route, enroute, fir = prediction
                     wptime = sim.simt + flighttime
 
                     if wpt in self.iafs:
-                        data = {'planningstate': 'new', 'ETO IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime}
+                        data = {'planningstate': 'new', 'ETO IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir}
                     elif '/RW' in wpt:
                         dest, runway = parse_destination(wpt)
                         data = {'planningstate': 'new', 'ETA': wptime, 'runway':runway, 'type': type, 'origin': '', 'LAf': '','count':0, 'Flighttime': flighttime}
@@ -514,7 +524,7 @@ class ArrivalManager(core.Entity):
         # error introduction here
         # self.Flights['totalerror'] = self.Flights['takeoff'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights
         # self.Flights['ETA'] = self.Flights['correct_ETA'] + self.Flights['totalerror']
-        # self.errors(self)
+        # self.update_errors()
 
         self.Flights['TMA'] = self.Flights['ETA'] - self.Flights['ETO IAF']
         self.Flights['to eto'] = round((self.Flights['ETO IAF'] - sim.simt) / 60, 0)
@@ -525,6 +535,7 @@ class ArrivalManager(core.Entity):
 
         self.Flights['ETA'] = self.Flights['correct_ETA'] + error
         # self.Flights['totalerror'] = self.Flights['takeoff'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights['insidefir']
+
 
 
 
@@ -566,6 +577,7 @@ class ArrivalManager(core.Entity):
         if not self.aman_parent_id:
             cache = self.open_cache()
             self.not_spawned = cache
+            self.regenerate_errors()
             self.predictions_cache = cache
             self.use_cache = True
 
@@ -582,6 +594,38 @@ class ArrivalManager(core.Entity):
             # If either file is missing, return None for both
             return None, None
         return predictions
+
+
+
+
+    def regenerate_errors(self):
+        """
+        Re-run the error generator for all not_spawned predictions
+        to ensure fresh errors instead of cached ones.
+        """
+        updated_not_spawned = defaultdict(list)
+
+        for acid, predictions in self.not_spawned.items():
+            for (wpt, wptime, flighttime, estimatedcreatetime,
+                 wptpredutc, parent_id, type, takeoff, dep_route, enroute, fir) in predictions:
+
+                # compute lookahead in minutes
+                lookahead = round(int(self.freezehorizon - flighttime) / 60)
+                if lookahead < 0:
+                    lookahead = 0
+
+                # always regenerate fresh errors
+                new_takeoff, new_dep_route, new_enroute, new_fir = \
+                    self.errorgenerator.return_sample(acid, '', lookahead=lookahead)
+
+                updated_not_spawned[acid].append(
+                    (wpt, wptime, flighttime, estimatedcreatetime,
+                     wptpredutc, parent_id, type,
+                     new_takeoff, new_dep_route, new_enroute, new_fir)
+                )
+
+        self.not_spawned = updated_not_spawned
+
 
 
     @stack.command

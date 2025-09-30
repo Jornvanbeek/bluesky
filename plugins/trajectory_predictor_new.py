@@ -867,7 +867,7 @@ class Predictor(core.Entity):
 
         if self.parent_id and (val != sim.utc.timestamp()):
 
-            net.send('PREDICTION', (acid, wpt, sim.simt, sim.simt - createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac]), self.parent_id)
+            net.send('PREDICTION', (acid, wpt, sim.simt, sim.simt - createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac], traf.ap.orig[idxac]), self.parent_id)
             self.predictions +=1
             self.iscomplete()
 
@@ -890,7 +890,7 @@ class Predictor(core.Entity):
     #     net.send('prediction', 'Prediction data should go here :)', self.parent_id)
 
     @network.subscriber(topic='PREDICTION')#, to_group=GROUPID_SIM)
-    def on_prediction_received(self, acid, wpt, wptime, flighttime, wptpredutc, parent_id, type):
+    def on_prediction_received(self, acid, wpt, wptime, flighttime, wptpredutc, parent_id, type, origin):
         """ Displays the prediction results received from the child process. """
         # print(acid)
         # print(self.parent_id)
