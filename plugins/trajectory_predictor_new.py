@@ -168,7 +168,7 @@ class Predictor(core.Entity):
         self.fast_tp = True
 
         traf.traf_parent_id = None
-
+        self.departure_route_alt = 'FL200'
         # self.incorrect_predictions = ['AIA6768', 'KLM76QSH', 'EZY91XM']
         self.incorrect_predictions = []#['KLM1830', 'KAC127SH','THY8ZXSH']
         # Change the route class implementation for the child node using PredictorNodeRoute class.
@@ -309,6 +309,10 @@ class Predictor(core.Entity):
         # print(traf.ap.route[-n].createtime)
         # Ensure this runs only in the main node.
         if self.parent_id:
+            # In child node: schedule one ATALT trigger per newly created aircraft
+            for i in range(n):
+                acid = traf.id[-1 - i]
+                stack.stack(f'ATALT {acid} {self.departure_route_alt} PREDICTOR ALTCROSS {acid}')
             return
         self.acid_to_predict.update(traf.id[-1 - i] for i in range(n))
 
@@ -800,6 +804,26 @@ class Predictor(core.Entity):
                                              traf.ap.orig[i]),
                              self.parent_id)
                 self._fir_inside[acid] = inside
+
+
+    @predictor.subcommand
+    def altcross(self, acid):
+        idx = traf.id2idx(acid)
+        createtime = traf.ap.route[idx].createtime
+        if traf.vs[idx] > 0:
+            climbdescend = 'ALTCROSS CLIMB'
+        elif traf.vs[idx] <= 0:
+            climbdescend = 'ALTCROSS DESC'
+        if self.parent_id:
+            net.send('PREDICTION', (acid,
+                                    climbdescend,
+                                    sim.simt,
+                                    sim.simt - createtime,
+                                    sim.utc.timestamp(),
+                                    self.parent_id,
+                                    traf.type[idx],
+                                    traf.ap.orig[idx]),
+                     self.parent_id)
 
     # @predictor.subcommand
     # def crossover(self, acid: str):
