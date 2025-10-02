@@ -28,6 +28,7 @@ import time
 from datetime import timedelta
 from bluesky.tools.aero import casormach2tas, fpm, kts, ft, g0, Rearth, nm, tas2cas,\
                          vatmos,  vtas2cas, vtas2mach, vcasormach
+from bluesky.tools import areafilter
 
 
 
@@ -70,13 +71,14 @@ class ArrivalManager(core.Entity):
         super().__init__()
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'ETO_act', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'ETO adherence', 'casdesc', 'max_casdesc', 'min_casdesc']
+        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'ETO_act', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'ETO adherence', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'FIR entry']
 
 
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
 
         self.iafs = ['ARTIP', 'SUGOL', 'RIVER']
+        self.firname = 'FIRNL'
 
         self.not_spawned = defaultdict(list)
         self.aman_parent_id = None
@@ -349,11 +351,12 @@ class ArrivalManager(core.Entity):
                 lookahead = round(int(self.freezehorizon - flighttime) / 60)  # minutes
                 if lookahead < 0:
                     lookahead = 0
+                print(acid, 'error should be generated')
                 takeoff, dep_route, enroute, fir = self.errorgenerator.return_sample(acid, origin, lookahead=lookahead)
 
             else:
                 takeoff, dep_route, enroute, fir = 0,0,0,0# to be disregarded later
-            self.not_spawned[acid].append((wpt, wptime,flighttime,estimatedcreatetime, wptpredutc, parent_id, type, takeoff, dep_route, enroute, fir))
+            self.not_spawned[acid].append((wpt, wptime,flighttime,estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir))
             # dest, runway = parse_destination(wpt)
             # self.Flights.loc[acid] = {'planningstate': 'ground', 'ETA': wptime, 'runway': runway, 'type': type}
             # the above is future code for popups?
@@ -375,6 +378,9 @@ class ArrivalManager(core.Entity):
                 idxac = traf.id2idx(acid)
                 tp_dt = sim.simt - traf.ap.route[idxac].createtime
                 data = {'ETA': wptime, 'runway': runway, 'TPstate': 'updated including TMA'}
+
+            elif self.firname in wpt:
+                data = {'FIR entry': flighttime} #time to fir entry from spawning
 
 
 
@@ -430,14 +436,18 @@ class ArrivalManager(core.Entity):
             id = len(traf.id) - i
             if acid in self.not_spawned.keys():
                 for prediction in self.not_spawned[acid]:
-                    wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, takeoff, dep_route, enroute, fir = prediction
+                    wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir = prediction
                     wptime = sim.simt + flighttime
 
                     if wpt in self.iafs:
                         data = {'planningstate': 'new', 'ETO IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir}
+
                     elif '/RW' in wpt:
                         dest, runway = parse_destination(wpt)
                         data = {'planningstate': 'new', 'ETA': wptime, 'runway':runway, 'type': type, 'origin': '', 'LAf': '','count':0, 'Flighttime': flighttime}
+
+                    elif self.firname in wpt:
+                        data = {'FIR entry': wptime}
 
 
                     else:
@@ -449,6 +459,7 @@ class ArrivalManager(core.Entity):
                         # Adds a new row for acid if it doesn't exist
                         self.Flights.loc[acid] = {'runway': '', 'type': '', 'IAF': '', 'planningstate': '', 'origin': '', 'LAf': ''}
                         self.Flights.loc[acid] = data
+
                     else:
                         # Updates the existing row for acid
                         for key, value in data.items():
@@ -578,6 +589,7 @@ class ArrivalManager(core.Entity):
             cache = self.open_cache()
             self.not_spawned = cache
             self.regenerate_errors()
+            print('regenerate errors?')
             self.predictions_cache = cache
             self.use_cache = True
 
@@ -607,7 +619,8 @@ class ArrivalManager(core.Entity):
 
         for acid, predictions in self.not_spawned.items():
             for (wpt, wptime, flighttime, estimatedcreatetime,
-                 wptpredutc, parent_id, type, takeoff, dep_route, enroute, fir) in predictions:
+                 wptpredutc, parent_id, type, origin) in predictions:
+                #note that the errors are not stored in the previous predictions, these are stored in the TP, which does not include errors
 
                 # compute lookahead in minutes
                 lookahead = round(int(self.freezehorizon - flighttime) / 60)
@@ -616,11 +629,11 @@ class ArrivalManager(core.Entity):
 
                 # always regenerate fresh errors
                 new_takeoff, new_dep_route, new_enroute, new_fir = \
-                    self.errorgenerator.return_sample(acid, '', lookahead=lookahead)
+                    self.errorgenerator.return_sample(acid, origin, lookahead=lookahead)
 
                 updated_not_spawned[acid].append(
                     (wpt, wptime, flighttime, estimatedcreatetime,
-                     wptpredutc, parent_id, type,
+                     wptpredutc, parent_id, type, origin,
                      new_takeoff, new_dep_route, new_enroute, new_fir)
                 )
 
@@ -670,7 +683,7 @@ class ArrivalManager(core.Entity):
                 )
 
         # Transform specified columns to HH:MM:SS
-        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original','ETO_act', 'EAT', 'slot', 'LAS']
+        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original','ETO_act', 'EAT', 'slot', 'LAS', 'FIR entry']
         for col in columns_to_transform:
             if col in Flights_hhmmss.columns:
                 Flights_hhmmss[col] = Flights_hhmmss[col].apply(
@@ -776,6 +789,14 @@ class ArrivalManager(core.Entity):
             self.assignslots()
             self.update_times()
             self.freeze()
+
+
+    @stack.command
+    def fircheck(self, acid):
+        acid = acid.upper()
+        idx = traf.id2idx(acid)
+
+
 
 
     @stack.command

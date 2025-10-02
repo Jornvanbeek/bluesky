@@ -22,7 +22,7 @@ class ErrorGenerator:
         self.cop_pdf = (-0.1840341263226265, 1.3898584120283286, -0.22623562655786733, 9.968335882486613)
         self.PDF_file = 'plugins/PDF.pkl'
         self.load_distributions(self.PDF_file)
-        self.seed = 1
+        self.seed = 2
 
 
     def load_distributions(self, file):
