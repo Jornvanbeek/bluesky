@@ -561,7 +561,7 @@ class ArrivalManager(core.Entity):
         # self.Flights['totalerror'] = self.Flights['takeoff'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights['insidefir']
         # self.Flights['Time error'] =
         # (SID - FH) * E_DEP
-        # 
+        #
 
 
 
