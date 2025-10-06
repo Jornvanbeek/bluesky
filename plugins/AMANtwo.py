@@ -71,7 +71,7 @@ class ArrivalManager(core.Entity):
         super().__init__()
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'ETO_act', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'ETO adherence', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'FIR entry']
+        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'ETO_act', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'ETO adherence', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'FH', 'SID', 'FIR entry', 'Time error']
 
 
         self.Flights = pd.DataFrame(columns = columns)
@@ -380,7 +380,10 @@ class ArrivalManager(core.Entity):
                 data = {'ETA': wptime, 'runway': runway, 'TPstate': 'updated including TMA'}
 
             elif self.firname in wpt:
-                data = {'FIR entry': flighttime} #time to fir entry from spawning
+                data = {'FIR entry': wptime} #time to fir entry from spawning
+
+            elif 'ALTCROSS CLIMB' in wpt:
+                data = {'SID': wptime}
 
 
 
@@ -408,6 +411,12 @@ class ArrivalManager(core.Entity):
                 dest, runway = parse_destination(wpt)
                 data = {'planningstate': 'new', 'ETA': wptime, 'runway': runway, 'type': type, 'origin': '', 'LAf': '', 'count': 0}
             # print(acid,wpt,wptime)
+
+            elif self.firname in wpt:
+                data = {'FIR entry': wptime} #time to fir entry from spawning
+
+            elif 'ALTCROSS CLIMB' in wpt:
+                data = {'SID': wptime}
 
 
             # data['instruction'] = []
@@ -448,6 +457,9 @@ class ArrivalManager(core.Entity):
 
                     elif self.firname in wpt:
                         data = {'FIR entry': wptime}
+
+                    elif 'ALTCROSS CLIMB' in wpt:
+                        data = {'SID': wptime}
 
 
                     else:
@@ -540,12 +552,16 @@ class ArrivalManager(core.Entity):
         self.Flights['TMA'] = self.Flights['ETA'] - self.Flights['ETO IAF']
         self.Flights['to eto'] = round((self.Flights['ETO IAF'] - sim.simt) / 60, 0)
         self.Flights['ttlg'] = self.Flights['EAT'] - self.Flights['ETO IAF']
-
+        self.Flights['FH'] = self.Flights['ETO IAF'] - self.freezehorizon
 
     def update_errors(self):
 
+
         self.Flights['ETA'] = self.Flights['correct_ETA'] + error
         # self.Flights['totalerror'] = self.Flights['takeoff'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights['insidefir']
+        # self.Flights['Time error'] =
+        # (SID - FH) * E_DEP
+        # 
 
 
 
@@ -683,7 +699,7 @@ class ArrivalManager(core.Entity):
                 )
 
         # Transform specified columns to HH:MM:SS
-        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original','ETO_act', 'EAT', 'slot', 'LAS', 'FIR entry']
+        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original','ETO_act', 'EAT', 'slot', 'LAS', 'FIR entry', 'SID', 'FH']
         for col in columns_to_transform:
             if col in Flights_hhmmss.columns:
                 Flights_hhmmss[col] = Flights_hhmmss[col].apply(
