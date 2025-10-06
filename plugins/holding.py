@@ -190,7 +190,7 @@ class Holding(core.Entity):
 
         #standard stackcommands
         stackcommands.append('BANK %s %s' % (ac, math.degrees(math.atan(expected_tas / aero.kts / 364))))
-        stackcommands.append(f'{ac} SPD {calculation_spd / aero.kts}')
+        stackcommands.append(f'{ac} SPD {calculation_spd / aero.kts}')# todo add comment
 
         if entry_track and entry_track[1] == "parallel":
             stackcommands.append(f'DELAY 1 {ac} HDG {(entry_track[0] + 2 * correction + 90) % 360}')
