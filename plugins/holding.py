@@ -1,4 +1,5 @@
 """ BlueSky Holding plugin"""
+
 from bluesky import core, stack, traf, sim  # , settings, navdb, scr, tools
 import math
 from bluesky.tools import aero
@@ -25,7 +26,11 @@ def init_plugin():
     return config
 
 
-
+# Plugin use: holding + second command
+# first holding define, if standard holding at schiphol is not sufficient
+# then holding at {acid} {wpt} to start holding once aircraft arrives at waypoint (must be in route)
+# a holding time can be included, which is approximately followed, or it can be indefinite
+# holding cancel {acid} stops the hold
 
 
 # determine the entry of the holding pattern
@@ -43,8 +48,8 @@ class Holding(core.Entity):
     def __init__(self):
         super().__init__()
         self.altlimit = 14000
-        self.shortleg = 60 #seconds
-        self.longleg = 90 #seconds
+        self.standardleg = 60 #seconds
+
         self.rate_one = 60 #seconds
         #standard holding patterns for schiphol
         self.holdingpatterns = {
@@ -70,6 +75,7 @@ class Holding(core.Entity):
     @holding.subcommand
     def at(self, acid: 'acid', wpt: 'wpt', delay: 'time' = 0.0):
         ''' Fly the aircraft to holding pattern and let it hold.'''
+        # this function starts up the holding logic
 
         # check if wpt has a holding pattern
         if wpt not in self.holdingpatterns:
@@ -131,7 +137,7 @@ class Holding(core.Entity):
     #stackcommand used to actually hold, not by the user but by the plugin itself
     @holding.subcommand
     def atwp(self, acid: 'acid', entry_hdg: 'hdg', entry_type: 'txt'= 'none', delay: 'time'= 0.0):
-
+        # this function is called each time the aircraft passes over the selected iaf, to perform holding logic
 
         ac = traf.id[acid]
         wpt = self.holding_at[acid]
@@ -172,53 +178,61 @@ class Holding(core.Entity):
 
 
         # determining leg length
-        # in short: <100 s is no delay, hold is canceled.
-        # multiple holds? standard leglength for the coming one
-        # (1 full and) 1 partial hold? determine leglength to end up near to the delay goal
+        # - Indefinite: fixed short legs for stability and predictable shape.
+        # - <100 s remain: cancel (not worth another pattern).
+        # - 100–120 s: send a final short segment (0 → handled below) then cancel.
+        # - Otherwise: if multiple full patterns needed, use standard leg timing;
+        #   if near target, split remainder after budgeting two turns (~2×60 s).
+
         if indefinite:
-            timing = self.shortleg
+            timing = self.standardleg
+
         elif 100 < remaining_delay < 120:
             timing = 0
+
         elif remaining_delay < 100:
             # continue route
             stack.stack(f'HOLDING CANCEL {ac}')
             stack.stack(f'PREDICTOR WPTCROSS {ac} {wpt}')
             stack.stack(f'TMA_CROSS {ac}')
             return True, f'{ac} continuing with route, remaining delay of {remaining_delay} seconds.'
+
         else:
             full_holds = int(remaining_delay / 240)
             if full_holds > 1:
-                timing = self.shortleg
+                timing = self.standardleg
             else:
                 timing = (remaining_delay - 2*60) /2
-
+        #timing is the time in each leg
 
         entry_track = None if str(entry_type).lower() == 'none' else (float(entry_hdg), str(entry_type).lower())
 
         #standard stackcommands, bank to make sure that a standard rate turn is maintained, the speed is due to a vnav bug requiring an override in selected speed
         stackcommands.append('BANK %s %s' % (ac, math.degrees(math.atan(expected_tas / aero.kts / 364))))
         stackcommands.append(f'{ac} SPD {calculation_spd / aero.kts}')
+        stability_delay = 1 #second, to make sure that the aircraft behaves correctly
 
         if entry_track and entry_track[1] == "parallel":
             compensation = 20 ## assumption that part of the initial turn is skipped, (20 seconds is approximation)
-            stackcommands.append(f'DELAY 1 {ac} HDG {(entry_track[0] + 2 * correction + 90) % 360}')                                            # turning away from entry track
+            stackcommands.append(f'DELAY {stability_delay} {ac} HDG {(entry_track[0] + 2 * correction + 90) % 360}')                            # turning away from entry track
             stackcommands.append(f'DELAY {compensation} {ac} HDG {entry_track[0] + 2 * correction}')                                            # turning onto entry track
             stackcommands.append(f'DELAY {timing + compensation + 0.5*self.rate_one} HDG {ac} {(entry_track[0] - 90 + 2 * correction) % 360}')  #turning away again from entry track
             stackcommands.append(f'DELAY {timing + compensation + self.rate_one} DIRECT {ac} {wpt}')                                            # heading towards holding point
 
 
         elif entry_track and entry_track[1] == "teardrop":
-            compensation =
-            stackcommands.append(f'DELAY 1 {ac} HDG {entry_track[0] + 2 * correction}')
-            stackcommands.append(f'DELAY {timing + 30} HDG {ac} {(entry_track[0] + 120) % 360}')
-            stackcommands.append(f'DELAY {timing + 60} DIRECT {ac} {wpt}')
-            # approximation that outbound leg is 30 seconds longer than calculated due to lack of initial turn
+
+            stackcommands.append(f'DELAY {stability_delay} {ac} HDG {entry_track[0] + 2 * correction}')
+            stackcommands.append(f'DELAY {timing + 0.5*self.rate_one} HDG {ac} {(entry_track[0] + 120) % 360}')
+            stackcommands.append(f'DELAY {timing + self.rate_one} DIRECT {ac} {wpt}')
+            # approximation that outbound leg is half a turn longer than calculated due to lack of initial turn
 
         elif not entry_track:
-            stackcommands.append(f'DELAY 1 HDG {ac} {(self.holdingpatterns[wpt][0] + 90) % 360}')
-            stackcommands.append(f'DELAY 30 HDG {ac} {(self.holdingpatterns[wpt][0] + 180 + 3 * correction) % 360}')
-            stackcommands.append(f'DELAY {timing + 60} DIRECT {ac} {wpt}')
+            stackcommands.append(f'DELAY {stability_delay} HDG {ac} {(self.holdingpatterns[wpt][0] + 90) % 360}')
+            stackcommands.append(f'DELAY {0.5*self.rate_one} HDG {ac} {(self.holdingpatterns[wpt][0] + 180 + 3 * correction) % 360}')           #heading away from iaf
+            stackcommands.append(f'DELAY {timing + self.rate_one} DIRECT {ac} {wpt}')                                                           # direct iaf after leg
 
+        # command to be called recursively each time the aircraft passes the iaf
         stackcommands.append(f'AT {ac} {wpt} DO HOLDING ATWP {ac} 0 none')
         stack.stack(*stackcommands)
 
@@ -226,6 +240,7 @@ class Holding(core.Entity):
     @holding.subcommand
     def cancel(self,acid: 'acid'):
         ''' Cancel holding pattern and let the aircraft continue its route.'''
+        # automatically called if a holding time is included in holding at
         ac  = traf.id[acid]
         wpt = self.holding_at[acid]
         acrte = traf.ap.route[acid]
@@ -248,7 +263,7 @@ class Holding(core.Entity):
             stack.stack(f'ECHO WARNING: overwriting existing holdingpattern at {wpt}')
         self.holdingpatterns[wpt] = [radial, round(lower_FL/aero.ft,1), round(upper_FL/aero.ft,1), round(max_ias/aero.kts,1)]
 
-
+        return True, f'Holding at {wpt} defined. radial: {radial}, lower FL {lower_FL}, upper FL {upper_FL}, max ias {max_ias}.`'
 
 
 

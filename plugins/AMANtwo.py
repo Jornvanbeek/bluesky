@@ -461,6 +461,8 @@ class ArrivalManager(core.Entity):
                     elif 'ALTCROSS CLIMB' in wpt:
                         data = {'SID': wptime}
 
+                    elif 'ALTCROSS DESC' in wpt:
+                        data = {}
 
                     else:
                         print('something wrong with waypoints and prediction in aman')
@@ -547,7 +549,7 @@ class ArrivalManager(core.Entity):
         # error introduction here
         # self.Flights['totalerror'] = self.Flights['takeoff'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights
         # self.Flights['ETA'] = self.Flights['correct_ETA'] + self.Flights['totalerror']
-        # self.update_errors()
+        self.update_errors()
 
         self.Flights['TMA'] = self.Flights['ETA'] - self.Flights['ETO IAF']
         self.Flights['to eto'] = round((self.Flights['ETO IAF'] - sim.simt) / 60, 0)
@@ -557,11 +559,17 @@ class ArrivalManager(core.Entity):
     def update_errors(self):
 
 
-        self.Flights['ETA'] = self.Flights['correct_ETA'] + error
+
+        # self.Flights['ETA'] = self.Flights['correct_ETA'] + error
         # self.Flights['totalerror'] = self.Flights['takeoff'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights['insidefir']
         # self.Flights['Time error'] =
         # (SID - FH) * E_DEP
         #
+        #TODO deze goed checken, met name de signs
+
+        tdep = self.Flights['']
+
+        self.Flights['Time error'] = -self.Flights['E_TO']*60 + self.Flights['E_dep']
 
 
 
