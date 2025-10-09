@@ -32,7 +32,7 @@
         <body>
         <div class="container">
             <div class="table-container">
-                <h3>Runway RWY27  simtime: 00:41:00, elapsedtime: 0:03:03</h3>
+                <h3>Runway RWY27  simtime: 00:41:00, elapsedtime: 0:03:12</h3>
                 <table border="1" class="dataframe table table-bordered">
   <thead>
     <tr style="text-align: right;">
@@ -67,7 +67,8 @@
       <th>E_dep</th>
       <th>E_enroute</th>
       <th>E_fir</th>
-      <th>FH</th>
+      <th>takeoff</th>
+      <th>planning</th>
       <th>SID</th>
       <th>FIR entry</th>
       <th>Time error</th>
@@ -82,6 +83,7 @@
     </tr>
     <tr>
       <th>ACID</th>
+      <th></th>
       <th></th>
       <th></th>
       <th></th>
@@ -159,8 +161,9 @@
       <td>61.475069</td>
       <td>-2.108887</td>
       <td>2.768725</td>
-      <td>01:01:48</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:35:48</td>
+      <td>NaN</td>
       <td>01:08:26</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -204,8 +207,9 @@
       <td>0.000000</td>
       <td>3.447597</td>
       <td>-0.991493</td>
-      <td>01:04:58</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:38:58</td>
+      <td>NaN</td>
       <td>01:09:42</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -249,8 +253,9 @@
       <td>10.364765</td>
       <td>0.481213</td>
       <td>-2.584176</td>
-      <td>00:54:39</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:28:39</td>
+      <td>NaN</td>
       <td>01:01:46</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -294,8 +299,9 @@
       <td>0.000000</td>
       <td>-3.849468</td>
       <td>-0.165537</td>
-      <td>00:51:58</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:25:58</td>
+      <td>NaN</td>
       <td>00:59:00</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -339,8 +345,9 @@
       <td>2.445898</td>
       <td>4.224582</td>
       <td>0.780258</td>
-      <td>00:53:27</td>
-      <td>00:43:39</td>
+      <td>0.0</td>
+      <td>00:27:27</td>
+      <td>2619.0</td>
       <td>00:58:33</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -384,8 +391,9 @@
       <td>-11.264705</td>
       <td>-13.955243</td>
       <td>-1.527903</td>
-      <td>00:53:26</td>
-      <td>00:26:48</td>
+      <td>0.0</td>
+      <td>00:27:26</td>
+      <td>1608.0</td>
       <td>00:58:29</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -429,8 +437,9 @@
       <td>14.400069</td>
       <td>8.170575</td>
       <td>-1.803588</td>
-      <td>00:52:37</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:26:37</td>
+      <td>NaN</td>
       <td>00:54:34</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -474,8 +483,9 @@
       <td>17.004229</td>
       <td>0.903680</td>
       <td>1.057814</td>
-      <td>00:46:27</td>
-      <td>00:30:40</td>
+      <td>0.0</td>
+      <td>00:20:27</td>
+      <td>1840.0</td>
       <td>00:55:03</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -519,8 +529,9 @@
       <td>-7.850522</td>
       <td>0.855726</td>
       <td>1.600220</td>
-      <td>00:37:22</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:11:22</td>
+      <td>NaN</td>
       <td>00:42:07</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -564,8 +575,9 @@
       <td>0.000000</td>
       <td>7.517592</td>
       <td>0.575882</td>
-      <td>01:18:58</td>
-      <td>00:29:50</td>
+      <td>0.0</td>
+      <td>00:52:58</td>
+      <td>1790.0</td>
       <td>01:21:04</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -609,8 +621,9 @@
       <td>0.000000</td>
       <td>-9.018826</td>
       <td>0.809377</td>
-      <td>01:12:52</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:46:52</td>
+      <td>NaN</td>
       <td>01:19:39</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -654,8 +667,9 @@
       <td>-5.471826</td>
       <td>-1.006173</td>
       <td>-0.355413</td>
-      <td>01:11:10</td>
-      <td>00:29:10</td>
+      <td>0.0</td>
+      <td>00:45:10</td>
+      <td>1750.0</td>
       <td>01:19:47</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -699,8 +713,9 @@
       <td>9.465782</td>
       <td>-1.407524</td>
       <td>0.777698</td>
-      <td>01:15:48</td>
-      <td>00:46:25</td>
+      <td>0.0</td>
+      <td>00:49:48</td>
+      <td>2785.0</td>
       <td>01:21:27</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -744,8 +759,9 @@
       <td>0.000000</td>
       <td>-1.673443</td>
       <td>-2.121232</td>
-      <td>01:13:09</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:47:09</td>
+      <td>NaN</td>
       <td>01:18:59</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -789,8 +805,9 @@
       <td>-27.000327</td>
       <td>4.752328</td>
       <td>-0.643549</td>
-      <td>01:08:40</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:42:40</td>
+      <td>NaN</td>
       <td>01:04:23</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -834,8 +851,9 @@
       <td>0.000000</td>
       <td>8.469820</td>
       <td>-3.389303</td>
-      <td>01:08:12</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:42:12</td>
+      <td>NaN</td>
       <td>01:13:07</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -886,7 +904,8 @@
       <th>E_dep</th>
       <th>E_enroute</th>
       <th>E_fir</th>
-      <th>FH</th>
+      <th>takeoff</th>
+      <th>planning</th>
       <th>SID</th>
       <th>FIR entry</th>
       <th>Time error</th>
@@ -901,6 +920,7 @@
     </tr>
     <tr>
       <th>ACID</th>
+      <th></th>
       <th></th>
       <th></th>
       <th></th>
@@ -978,8 +998,9 @@
       <td>0.000000</td>
       <td>-2.911789</td>
       <td>-1.289454</td>
-      <td>01:06:15</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:40:15</td>
+      <td>NaN</td>
       <td>01:14:03</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -1023,8 +1044,9 @@
       <td>-7.596856</td>
       <td>10.164685</td>
       <td>1.139115</td>
-      <td>01:02:22</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:36:22</td>
+      <td>NaN</td>
       <td>01:08:34</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -1068,8 +1090,9 @@
       <td>14.173595</td>
       <td>-9.727324</td>
       <td>1.380805</td>
-      <td>00:58:37</td>
-      <td>00:21:22</td>
+      <td>84401.0</td>
+      <td>00:32:37</td>
+      <td>1282.0</td>
       <td>01:04:31</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -1113,8 +1136,9 @@
       <td>0.000000</td>
       <td>2.335466</td>
       <td>-1.946166</td>
-      <td>00:53:55</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:27:55</td>
+      <td>NaN</td>
       <td>01:01:40</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -1158,8 +1182,9 @@
       <td>-13.799130</td>
       <td>-6.518991</td>
       <td>0.644921</td>
-      <td>00:40:59</td>
-      <td>00:40:23</td>
+      <td>0.0</td>
+      <td>00:14:59</td>
+      <td>2423.0</td>
       <td>00:45:08</td>
       <td>NaN</td>
       <td>NaN</td>
@@ -1203,8 +1228,9 @@
       <td>0.000000</td>
       <td>-9.701990</td>
       <td>-1.413297</td>
-      <td>00:41:04</td>
-      <td>None</td>
+      <td>0.0</td>
+      <td>00:15:04</td>
+      <td>NaN</td>
       <td>00:48:49</td>
       <td>NaN</td>
       <td>NaN</td>

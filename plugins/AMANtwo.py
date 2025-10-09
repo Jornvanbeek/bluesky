@@ -71,7 +71,7 @@ class ArrivalManager(core.Entity):
         super().__init__()
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'ETO_act', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'ETO adherence', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'FH', 'SID', 'FIR entry', 'Time error']
+        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'ETO_act', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'ETO adherence', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'takeoff', 'planning', 'SID', 'FIR entry', 'Time error']
 
 
         self.Flights = pd.DataFrame(columns = columns)
@@ -376,7 +376,6 @@ class ArrivalManager(core.Entity):
             elif '/RW' in wpt:
                 dest, runway = parse_destination(wpt)
                 idxac = traf.id2idx(acid)
-                tp_dt = sim.simt - traf.ap.route[idxac].createtime
                 data = {'ETA': wptime, 'runway': runway, 'TPstate': 'updated including TMA'}
 
             elif self.firname in wpt:
@@ -449,7 +448,7 @@ class ArrivalManager(core.Entity):
                     wptime = sim.simt + flighttime
 
                     if wpt in self.iafs:
-                        data = {'planningstate': 'new', 'ETO IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir}
+                        data = {'planningstate': 'new', 'ETO IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir, 'takeoff': estimatedcreatetime}
 
                     elif '/RW' in wpt:
                         dest, runway = parse_destination(wpt)
@@ -549,12 +548,12 @@ class ArrivalManager(core.Entity):
         # error introduction here
         # self.Flights['totalerror'] = self.Flights['takeoff'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights
         # self.Flights['ETA'] = self.Flights['correct_ETA'] + self.Flights['totalerror']
-        self.update_errors()
+        # self.update_errors()
 
         self.Flights['TMA'] = self.Flights['ETA'] - self.Flights['ETO IAF']
         self.Flights['to eto'] = round((self.Flights['ETO IAF'] - sim.simt) / 60, 0)
         self.Flights['ttlg'] = self.Flights['EAT'] - self.Flights['ETO IAF']
-        self.Flights['FH'] = self.Flights['ETO IAF'] - self.freezehorizon
+        self.Flights['planning'] = self.Flights['ETO IAF'] - self.planninghorizon
 
     def update_errors(self):
 
@@ -571,8 +570,50 @@ class ArrivalManager(core.Entity):
 
         self.Flights['Time error'] = -self.Flights['E_TO']*60 + self.Flights['E_dep']
 
+    # def segments(self):
+    #     if sid not none:
+    #         t_departure = self.Flights['SID'] - max(sim.simt, self.Flights['takeoff'])
+    #         if t_departure < 0:
+    #             t_departure = 0
+    #         t_enroute = self.Flights['FIR entry'] - max(sim.simt, self.Flights['planning'], self.Flights['SID'])
+    #         if t_enroute < 0:
+    #             t_enroute = 0
+    #         t_fir = self.Flights['ETO IAF'] - max(sim.simt, self.Flights['FIR entry'])
+    #         if t_fir < 0:
+    #             t_fir = 0
+    #     store in df
 
 
+    @stack.command
+    def segments(self):
+        df = self.Flights
+
+        S = df['SID']  # tijdstip einde departure-segment
+        F = df['FIR entry']  # tijdstip einde enroute-segment
+        I = df['ETO IAF']  # tijdstip einde FIR-segment (IAF)
+        TO = df['takeoff']  # werkelijke/geschatte takeoff-tijd
+        PL = df['planning']  # planning time (ETO IAF - planninghorizon)
+
+        # Starttijden per segment (max over relevante beginpunten)
+        start_dep = pd.concat([sim.simt, TO], axis=1).max(axis=1, skipna=True)
+        start_enr = pd.concat([sim.simt, PL, S], axis=1).max(axis=1, skipna=True)
+        start_fir = pd.concat([sim.simt, F], axis=1).max(axis=1, skipna=True)
+
+        # Duur = eind - start, nooit negatief
+        t_departure = (S - start_dep).clip(lower=0)
+        t_enroute = (F - start_enr).clip(lower=0)
+        t_fir = (I - start_fir).clip(lower=0)
+
+        # Als eindpunt ontbreekt, laat segment op NaN
+        t_departure = t_departure.where(S.notna())
+        t_enroute = t_enroute.where(F.notna())
+        t_fir = t_fir.where(I.notna())
+
+        # Wegschrijven
+        df['t_departure'] = t_departure
+        df['t_enroute'] = t_enroute
+        df['t_fir'] = t_fir
+        df['FH'] = df[['t_departure', 't_enroute', 't_fir']].sum(axis=1, min_count=1)
 
     def color(self, df, rgb):
         if self.aman_parent_id:
@@ -707,7 +748,7 @@ class ArrivalManager(core.Entity):
                 )
 
         # Transform specified columns to HH:MM:SS
-        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original','ETO_act', 'EAT', 'slot', 'LAS', 'FIR entry', 'SID', 'FH']
+        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original','ETO_act', 'EAT', 'slot', 'LAS', 'FIR entry','takeoff' 'SID', 'planning']
         for col in columns_to_transform:
             if col in Flights_hhmmss.columns:
                 Flights_hhmmss[col] = Flights_hhmmss[col].apply(
