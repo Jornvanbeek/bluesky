@@ -72,7 +72,7 @@ class ArrivalManager(core.Entity):
         super().__init__()
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'takeoff', 'planning', 'SID', 'FIR entry', 'Time error']
+        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'creation', 'planning', 'SID', 'FIR entry', 'Time error']
 
 
         self.Flights = pd.DataFrame(columns = columns)
@@ -84,7 +84,7 @@ class ArrivalManager(core.Entity):
         self.not_spawned = defaultdict(list)
         self.aman_parent_id = None
         self.planninghorizon = 40*60
-        self.freezehorizon = 14*60
+        self.freezehorizon = 25*60
         self.TMA_scan = 5*60 #only aircraft within 5 mins of the tma get checked if they are in the tma
         self.visible_altitude = 10000 #(FL100)
         self.separation = 75
@@ -162,7 +162,7 @@ class ArrivalManager(core.Entity):
                 continue  # Not yet in traf
 
             alt_ft = round(traf.alt[idxac] / ft)
-            if alt_ft < 100:
+            if alt_ft < self.visible_altitude:
                 # Below FL100, skip assigning slot (remain 'new')
                 continue
 
@@ -351,6 +351,7 @@ class ArrivalManager(core.Entity):
             if wpt in self.iafs:
                 #determining errors at iaf
                 lookahead = round(int(self.freezehorizon - flighttime) / 60)  # minutes
+                abslookahead = lookahead
                 if lookahead < 0:
                     lookahead = 0
                 print(acid, 'error should be generated')
@@ -358,8 +359,8 @@ class ArrivalManager(core.Entity):
                 if float(takeoff) != 0.0:
                     self.shiftflight.shift(acid, takeoff * 60)
             else:
-                takeoff, dep_route, enroute, fir = 0,0,0,0# to be disregarded later
-            self.not_spawned[acid].append((wpt, wptime,flighttime,estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir))
+                takeoff, dep_route, enroute, fir, abslookahead = 0,0,0,0,0# to be disregarded later
+            self.not_spawned[acid].append((wpt, wptime,flighttime,estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead))
             # dest, runway = parse_destination(wpt)
             # self.Flights.loc[acid] = {'planningstate': 'ground', 'TP ETA': wptime, 'runway': runway, 'type': type}
             # the above is future code for popups?
@@ -447,11 +448,11 @@ class ArrivalManager(core.Entity):
             id = len(traf.id) - i
             if acid in self.not_spawned.keys():
                 for prediction in self.not_spawned[acid]:
-                    wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir = prediction
+                    wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead = prediction
                     wptime = sim.simt + flighttime
 
                     if wpt in self.iafs:
-                        data = {'planningstate': 'new', 'TP IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir, 'takeoff': estimatedcreatetime}
+                        data = {'planningstate': 'new', 'TP IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir, 'creation': sim.simt, 'lookahead':abslookahead}
 
                     elif '/RW' in wpt:
                         dest, runway = parse_destination(wpt)
@@ -549,7 +550,7 @@ class ArrivalManager(core.Entity):
             return
 
         # error introduction here
-        # self.Flights['totalerror'] = self.Flights['takeoff'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights
+        # self.Flights['totalerror'] = self.Flights['creation'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights
         # self.Flights['ETA'] = self.Flights['correct_ETA'] + self.Flights['totalerror']
         self.update_errors()
 
@@ -563,7 +564,7 @@ class ArrivalManager(core.Entity):
 
 
         # self.Flights['ETA'] = self.Flights['correct_ETA'] + error
-        # self.Flights['totalerror'] = self.Flights['takeoff'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights['insidefir']
+        # self.Flights['totalerror'] = self.Flights['creation'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights['insidefir']
         # self.Flights['Time error'] =
         # (SID - FH) * E_DEP
         #
@@ -588,7 +589,7 @@ class ArrivalManager(core.Entity):
 
 
         # Extract main timestamps
-        SID, FIR, IAF, TO, Planning = df['SID'], df['FIR entry'], df['TP IAF'], df['takeoff'], df['planning']
+        SID, FIR, IAF, TO, Planning = df['SID'], df['FIR entry'], df['TP IAF'], df['creation'], df['planning']
 
         # Determine actual segment start times
         start_dep = pd.concat([simt_s, Planning, TO], axis=1).max(axis=1, skipna=True)
@@ -674,20 +675,24 @@ class ArrivalManager(core.Entity):
                  wptpredutc, parent_id, type, origin) in predictions:
                 #note that the errors are not stored in the previous predictions, these are stored in the TP, which does not include errors
 
+                if wpt in self.iafs:
                 # compute lookahead in minutes
-                lookahead = round(int(self.freezehorizon - flighttime) / 60)
-                if lookahead < 0:
-                    lookahead = 0
+                    lookahead = round(int(self.freezehorizon - flighttime) / 60)
+                    abslookahead = lookahead
+                    if lookahead < 0:
+                        lookahead = 0
 
-                # always regenerate fresh errors
-                new_takeoff, new_dep_route, new_enroute, new_fir = \
-                    self.errorgenerator.return_sample(acid, origin, lookahead=lookahead)
-                if float(new_takeoff) != 0.0:
-                    self.shiftflight.shift(acid, new_takeoff * 60)
+                    # always regenerate fresh errors
+                    new_takeoff, new_dep_route, new_enroute, new_fir = \
+                        self.errorgenerator.return_sample(acid, origin, lookahead=lookahead)
+                    if float(new_takeoff) != 0.0:
+                        self.shiftflight.shift(acid, new_takeoff * 60)
+                else:
+                    new_takeoff, new_dep_route, new_enroute, new_fir, abslookahead = 0,0,0,0,0
                 updated_not_spawned[acid].append(
                     (wpt, wptime, flighttime, estimatedcreatetime,
                      wptpredutc, parent_id, type, origin,
-                     new_takeoff, new_dep_route, new_enroute, new_fir)
+                     new_takeoff, new_dep_route, new_enroute, new_fir, abslookahead)
                 )
 
         self.not_spawned = updated_not_spawned

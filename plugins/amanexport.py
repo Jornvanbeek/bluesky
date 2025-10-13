@@ -21,7 +21,7 @@ class exporter(core.Entity):
         super().__init__()
 
         self.aman = plugin.Plugin.plugins['AMANTWO'].imp.AMAN
-        self.Flights = self.aman.Flights
+
         self.aman_parent_id = self.aman.aman_parent_id
         self.starttime = self.aman.starttime
 
@@ -33,7 +33,7 @@ class exporter(core.Entity):
             return
 
         # Split Flights into two subsets based on runway
-        Flights_hhmmss = self.Flights.copy()
+        Flights_hhmmss = self.aman.Flights.copy()
         Flights_hhmmss.rename(columns={'runway': 'rwy'}, inplace=True)
         # Flights_hhmmss.rename(columns={'TMA flighttime': 'TMA'}, inplace=True)
         if 'rwy' in Flights_hhmmss.columns:
@@ -51,7 +51,7 @@ class exporter(core.Entity):
 
         # Transform specified columns to HH:MM:SS
         columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'EAT', 'slot', 'LAS', 'FIR entry',
-                                'takeoff', 'SID', 'planning']
+                                'creation', 'SID', 'planning']
         for col in columns_to_transform:
             if col in Flights_hhmmss.columns:
                 Flights_hhmmss[col] = Flights_hhmmss[col].apply(
@@ -150,13 +150,13 @@ class exporter(core.Entity):
             return
         self.printflights()
         self.pickleflights()
-        self.Flights.to_csv('dataframe.txt', sep=',', index=True)
+        self.aman.Flights.to_csv('dataframe.txt', sep=',', index=True)
 
     @stack.command
     def pickleflights(self):
         if self.aman_parent_id:
             return
-        self.Flights.to_pickle('flights.pkl')
+        self.aman.Flights.to_pickle('flights.pkl')
         # Flights = pd.read_pickle('flights.pkl')
 
 
@@ -166,8 +166,8 @@ class exporter(core.Entity):
             return
         if key is None:
             # Print the entire DataFrame
-            print(self.Flights)
+            print(self.aman.Flights)
         else:
             # Check if the key is a valid column in the DataFrame
-            if key in self.Flights.columns:
-                print(self.Flights[key])
+            if key in self.aman.Flights.columns:
+                print(self.aman.Flights[key])
