@@ -609,13 +609,13 @@ class Predictor(core.Entity):
             stack.stack('FF')
             self.complete()
 
-    @stack.command
-    def REMOVEWPTS(self,acid):
-        if self.parent_id:
-            idxac = traf.id2idx(acid)
-            if idxac >=0:
-                for name in traf.ap.route[idxac].wpname:
-                    traf.ap.route[idxac].delwpt(idxac, name)
+    # @stack.command
+    # def REMOVEWPTS(self,acid):
+    #     if self.parent_id:
+    #         idxac = traf.id2idx(acid)
+    #         if idxac >=0:
+    #             for name in traf.ap.route[idxac].wpname:
+    #                 traf.ap.route[idxac].delwpt(idxac, name)
 
 
     def open_cache(self):
@@ -861,8 +861,6 @@ class Predictor(core.Entity):
             #scr.echo(f'Prediction stored: {acid} reached {wpt} at {datetime.fromtimestamp(wptpredutc, tz=None)} seconds, stored in object')
 
         else:
-
-            # idxwp = traf.ap.route[idxac].wpname.index(wpt)
             try:
                 idxwp = traf.ap.route[idxac].wpname.index(wpt)
                 traf.ap.route[idxac].wptpredutc[idxwp] = wptpredutc
@@ -873,12 +871,14 @@ class Predictor(core.Entity):
 
 
             except:
-                stack.stack('ECHO ERROR IN PREDICTION RECEIVEMENT, CHECK COMMANDLINE FOR SPECIFICS')
-                print(acid, wptime, wpt)
-                print(traf.ap.route[idxac].wpname)
-                print('parent: ', self.parent_id)
-                print('child: ', self.child_id)
-                stack.forward(f'PRINT_WPNAMES {acid}', target_id=self.child_id)
+                pass
+
+            #     stack.stack('ECHO ERROR IN PREDICTION RECEIVEMENT, CHECK COMMANDLINE FOR SPECIFICS')
+            #     print(acid, wptime, wpt)
+            #     print(traf.ap.route[idxac].wpname)
+            #     print('parent: ', self.parent_id)
+            #     print('child: ', self.child_id)
+            #     stack.forward(f'PRINT_WPNAMES {acid}', target_id=self.child_id)
             #scr.echo(f'Prediction received: {acid} reached {wpt} at {datetime.fromtimestamp(wptpredutc, tz=None)} seconds, stored in traf')
 
 

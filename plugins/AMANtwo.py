@@ -17,6 +17,7 @@ from collections import defaultdict
 from plugins.RunwayConfigurations import RunwayConfiguration
 from plugins.LIV_separation import LivSeparation
 from plugins.errorgenerator import ErrorGenerator
+from plugins.shiftflight import shiftflight
 import pandas as pd
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
@@ -71,7 +72,7 @@ class ArrivalManager(core.Entity):
         super().__init__()
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'ETO_act', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'ETO adherence', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'takeoff', 'planning', 'SID', 'FIR entry', 'Time error']
+        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'takeoff', 'planning', 'SID', 'FIR entry', 'Time error']
 
 
         self.Flights = pd.DataFrame(columns = columns)
@@ -89,6 +90,7 @@ class ArrivalManager(core.Entity):
         self.separation = 75
         self.LIV_separation = LivSeparation()
         self.errorgenerator = ErrorGenerator() #todo seed
+        self.shiftflight = shiftflight()
         self.cntrlz = None          # planning times backup
 
         self.standard_early = 60 # seconds that ASAP plans early if there is no slot taken before the slot being planned, make negative?
@@ -313,7 +315,7 @@ class ArrivalManager(core.Entity):
             if idxac > -1:
                 if traf.ap.route[idxac].iactwp > traf.ap.route[idxac].wpname.index(iaf):
                     self.Flights.at[flight, 'planningstate'] = 'TMA'
-                    self.Flights.at[flight, 'ETO adherence'] = sim.simt - self.Flights.loc[flight]['ETO IAF']
+                    self.Flights.at[flight, 'TP accuracy'] = sim.simt - self.Flights.loc[flight]['TP IAF']
                     self.Flights.at[flight, 'EAT adherence'] = sim.simt - self.Flights.loc[flight]['EAT']
                     # self.printflights()
         self.color(self.Flights.loc[self.Flights['planningstate'] == 'TMA'], '230,0,0')
@@ -325,7 +327,7 @@ class ArrivalManager(core.Entity):
         # idxac = traf.id2idx(acid)
         # iaf = self.Flights.at[acid, 'IAF']
         self.Flights.at[acid, 'planningstate'] = 'TMA'
-        self.Flights.at[acid, 'ETO adherence'] = sim.simt - self.Flights.loc[acid]['ETO IAF']
+        self.Flights.at[acid, 'TP accuracy'] = sim.simt - self.Flights.loc[acid]['TP IAF']
         self.Flights.at[acid, 'ETO_act'] = sim.simt
         self.Flights.at[acid, 'EAT adherence'] = round(sim.simt - self.Flights.loc[acid]['EAT'],1)
         # self.printflights()
@@ -353,30 +355,31 @@ class ArrivalManager(core.Entity):
                     lookahead = 0
                 print(acid, 'error should be generated')
                 takeoff, dep_route, enroute, fir = self.errorgenerator.return_sample(acid, origin, lookahead=lookahead)
-
+                if float(takeoff) != 0.0:
+                    self.shiftflight.shift(acid, takeoff * 60)
             else:
                 takeoff, dep_route, enroute, fir = 0,0,0,0# to be disregarded later
             self.not_spawned[acid].append((wpt, wptime,flighttime,estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir))
             # dest, runway = parse_destination(wpt)
-            # self.Flights.loc[acid] = {'planningstate': 'ground', 'ETA': wptime, 'runway': runway, 'type': type}
+            # self.Flights.loc[acid] = {'planningstate': 'ground', 'TP ETA': wptime, 'runway': runway, 'type': type}
             # the above is future code for popups?
 
         elif acid in self.Flights.index:
             wptime = traf.ap.route[idxac].createtime + flighttime
             # print(f'{acid} at {wpt}')
             if wpt in self.iafs:
-                # data = {'ETO IAF': wptime, 'IAF': wpt , 'TPstate': 'updated iaf', 'ttlg': self.Flights.loc[acid,'EAT']-wptime}
+                # data = {'TP IAF': wptime, 'IAF': wpt , 'TPstate': 'updated iaf', 'ttlg': self.Flights.loc[acid,'EAT']-wptime}
 
                 TMA = self.Flights.loc[acid, 'TMA']
-                # 'ETA': wptime + TMA
-                data = {'ETO IAF': wptime, 'IAF': wpt, 'TPstate': 'updated', 'ttlg': self.Flights.loc[acid, 'EAT'] - wptime, 'ETA': wptime + TMA}
+                # 'TP ETA': wptime + TMA
+                data = {'TP IAF': wptime, 'IAF': wpt, 'TPstate': 'updated', 'ttlg': self.Flights.loc[acid, 'EAT'] - wptime, 'TP ETA': wptime + TMA}
 
 
 
             elif '/RW' in wpt:
                 dest, runway = parse_destination(wpt)
                 idxac = traf.id2idx(acid)
-                data = {'ETA': wptime, 'runway': runway, 'TPstate': 'updated including TMA'}
+                data = {'TP ETA': wptime, 'runway': runway, 'TPstate': 'updated including TMA'}
 
             elif self.firname in wpt:
                 data = {'FIR entry': wptime} #time to fir entry from spawning
@@ -386,16 +389,16 @@ class ArrivalManager(core.Entity):
 
 
 
-
+            else:
+                data = {}
 
 
             # Updates the existing row for acid
 
             for key, value in data.items():
-                # print(f'{key}: {value}')
                 self.Flights.at[acid, key] = value
 
-            if '/RW' in wpt or data['TPstate'] == 'updated':
+            if '/RW' in wpt or ('TPstate' in data.keys() and data['TPstate'] == 'updated'):
                 stack.stack('instruct_frozen')
 
         else:
@@ -404,11 +407,11 @@ class ArrivalManager(core.Entity):
 
 
             if wpt in self.iafs:
-                data = {'planningstate': 'new', 'ETO IAF': wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count': 0}
+                data = {'planningstate': 'new', 'TP IAF': wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count': 0}
 
             elif '/RW' in wpt:
                 dest, runway = parse_destination(wpt)
-                data = {'planningstate': 'new', 'ETA': wptime, 'runway': runway, 'type': type, 'origin': '', 'LAf': '', 'count': 0}
+                data = {'planningstate': 'new', 'TP ETA': wptime, 'runway': runway, 'type': type, 'origin': '', 'LAf': '', 'count': 0}
             # print(acid,wpt,wptime)
 
             elif self.firname in wpt:
@@ -448,11 +451,11 @@ class ArrivalManager(core.Entity):
                     wptime = sim.simt + flighttime
 
                     if wpt in self.iafs:
-                        data = {'planningstate': 'new', 'ETO IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir, 'takeoff': estimatedcreatetime}
+                        data = {'planningstate': 'new', 'TP IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir, 'takeoff': estimatedcreatetime}
 
                     elif '/RW' in wpt:
                         dest, runway = parse_destination(wpt)
-                        data = {'planningstate': 'new', 'ETA': wptime, 'runway':runway, 'type': type, 'origin': '', 'LAf': '','count':0, 'Flighttime': flighttime}
+                        data = {'planningstate': 'new', 'TP ETA': wptime, 'runway':runway, 'type': type, 'origin': '', 'LAf': '','count':0, 'Flighttime': flighttime}
 
                     elif self.firname in wpt:
                         data = {'FIR entry': wptime}
@@ -548,12 +551,12 @@ class ArrivalManager(core.Entity):
         # error introduction here
         # self.Flights['totalerror'] = self.Flights['takeoff'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights
         # self.Flights['ETA'] = self.Flights['correct_ETA'] + self.Flights['totalerror']
-        # self.update_errors()
+        self.update_errors()
 
-        self.Flights['TMA'] = self.Flights['ETA'] - self.Flights['ETO IAF']
+        self.Flights['TMA'] = self.Flights['TP ETA'] - self.Flights['TP IAF']
         self.Flights['to eto'] = round((self.Flights['ETO IAF'] - sim.simt) / 60, 0)
         self.Flights['ttlg'] = self.Flights['EAT'] - self.Flights['ETO IAF']
-        self.Flights['planning'] = self.Flights['ETO IAF'] - self.planninghorizon
+        self.Flights['planning'] = self.Flights['TP IAF'] - self.planninghorizon
 
     def update_errors(self):
 
@@ -565,55 +568,39 @@ class ArrivalManager(core.Entity):
         # (SID - FH) * E_DEP
         #
         #TODO deze goed checken, met name de signs
-
-        tdep = self.Flights['']
-
-        self.Flights['Time error'] = -self.Flights['E_TO']*60 + self.Flights['E_dep']
-
-    # def segments(self):
-    #     if sid not none:
-    #         t_departure = self.Flights['SID'] - max(sim.simt, self.Flights['takeoff'])
-    #         if t_departure < 0:
-    #             t_departure = 0
-    #         t_enroute = self.Flights['FIR entry'] - max(sim.simt, self.Flights['planning'], self.Flights['SID'])
-    #         if t_enroute < 0:
-    #             t_enroute = 0
-    #         t_fir = self.Flights['ETO IAF'] - max(sim.simt, self.Flights['FIR entry'])
-    #         if t_fir < 0:
-    #             t_fir = 0
-    #     store in df
+        self.segments()
+        self.Flights['Time error'] = (
+                -self.Flights['t_departure'].fillna(0) * self.Flights['E_dep'].fillna(0) / 100
+                - self.Flights['t_enroute'].fillna(0) * self.Flights['E_enroute'].fillna(0) / 100
+                - self.Flights['t_fir'].fillna(0) * self.Flights['E_fir'].fillna(0) / 100
+                #- self.Flights['E_TO'].fillna(0) * 60
+        )
+        self.Flights['ETO IAF'] = self.Flights['TP IAF'] + self.Flights['Time error']
+        self.Flights['ETA'] = self.Flights['ETO IAF'] + self.Flights['TMA']
+        # tdep = self.Flights['']
+        #
+        # self.Flights['Time error'] = -self.Flights['E_TO']*60 + self.Flights['E_dep']
 
 
-    @stack.command
     def segments(self):
         df = self.Flights
+        simt_s = pd.Series(float(sim.simt), index=df.index)
 
-        S = df['SID']  # tijdstip einde departure-segment
-        F = df['FIR entry']  # tijdstip einde enroute-segment
-        I = df['ETO IAF']  # tijdstip einde FIR-segment (IAF)
-        TO = df['takeoff']  # werkelijke/geschatte takeoff-tijd
-        PL = df['planning']  # planning time (ETO IAF - planninghorizon)
 
-        # Starttijden per segment (max over relevante beginpunten)
-        start_dep = pd.concat([sim.simt, TO], axis=1).max(axis=1, skipna=True)
-        start_enr = pd.concat([sim.simt, PL, S], axis=1).max(axis=1, skipna=True)
-        start_fir = pd.concat([sim.simt, F], axis=1).max(axis=1, skipna=True)
+        # Extract main timestamps
+        SID, FIR, IAF, TO, Planning = df['SID'], df['FIR entry'], df['TP IAF'], df['takeoff'], df['planning']
 
-        # Duur = eind - start, nooit negatief
-        t_departure = (S - start_dep).clip(lower=0)
-        t_enroute = (F - start_enr).clip(lower=0)
-        t_fir = (I - start_fir).clip(lower=0)
+        # Determine actual segment start times
+        start_dep = pd.concat([simt_s, Planning, TO], axis=1).max(axis=1, skipna=True)
+        start_enr = pd.concat([simt_s, Planning, SID], axis=1).max(axis=1, skipna=True)
+        start_fir = pd.concat([simt_s, Planning, FIR], axis=1).max(axis=1, skipna=True)
+        # Compute durations, ensuring non-negative results
+        t_departure = (SID - start_dep).clip(lower=0).where(SID.notna())
+        t_enroute = (FIR - start_enr).clip(lower=0).where(FIR.notna())
+        t_fir = (IAF - start_fir).clip(lower=0).where(IAF.notna())
 
-        # Als eindpunt ontbreekt, laat segment op NaN
-        t_departure = t_departure.where(S.notna())
-        t_enroute = t_enroute.where(F.notna())
-        t_fir = t_fir.where(I.notna())
+        df['t_departure'], df['t_enroute'], df['t_fir'] = t_departure, t_enroute, t_fir
 
-        # Wegschrijven
-        df['t_departure'] = t_departure
-        df['t_enroute'] = t_enroute
-        df['t_fir'] = t_fir
-        df['FH'] = df[['t_departure', 't_enroute', 't_fir']].sum(axis=1, min_count=1)
 
     def color(self, df, rgb):
         if self.aman_parent_id:
@@ -695,7 +682,8 @@ class ArrivalManager(core.Entity):
                 # always regenerate fresh errors
                 new_takeoff, new_dep_route, new_enroute, new_fir = \
                     self.errorgenerator.return_sample(acid, origin, lookahead=lookahead)
-
+                if float(new_takeoff) != 0.0:
+                    self.shiftflight.shift(acid, new_takeoff * 60)
                 updated_not_spawned[acid].append(
                     (wpt, wptime, flighttime, estimatedcreatetime,
                      wptpredutc, parent_id, type, origin,
@@ -705,141 +693,6 @@ class ArrivalManager(core.Entity):
         self.not_spawned = updated_not_spawned
 
 
-
-    @stack.command
-    def storeflights(self):
-        if self.aman_parent_id:
-            return
-        if traf.traf_parent_id and self.aman_parent_id is None:
-            self.aman_parent_id = traf.traf_parent_id
-            return
-        self.printflights()
-        self.pickleflights()
-        self.Flights.to_csv('dataframe.txt', sep=',', index=True)
-
-    @stack.command
-    def pickleflights(self):
-        if self.aman_parent_id:
-            return
-        self.Flights.to_pickle('flights.pkl')
-        # Flights = pd.read_pickle('flights.pkl')
-
-    @stack.command
-    def totwohtml(self):
-
-        if self.aman_parent_id:
-            return
-
-        # Split Flights into two subsets based on runway
-        Flights_hhmmss = self.Flights.copy()
-        Flights_hhmmss.rename(columns={'runway': 'rwy'}, inplace=True)
-        # Flights_hhmmss.rename(columns={'TMA flighttime': 'TMA'}, inplace=True)
-        if 'rwy' in Flights_hhmmss.columns:
-            Flights_hhmmss['rwy'] = Flights_hhmmss['rwy'].str[3:]  # Remove first 3 characters
-
-        # Convert specified columns to integers
-        columns_to_convert = ['ttlg', 'to eto', 'TMA', 'manualslot']
-        for col in columns_to_convert:
-            if col in Flights_hhmmss.columns:
-                Flights_hhmmss[col] = (
-                    pd.to_numeric(Flights_hhmmss[col], errors='coerce')  # strings -> NaN
-                    .fillna(0)  # NaN -> 0
-                    .astype(int)  # float -> int
-                )
-
-        # Transform specified columns to HH:MM:SS
-        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original','ETO_act', 'EAT', 'slot', 'LAS', 'FIR entry','takeoff' 'SID', 'planning']
-        for col in columns_to_transform:
-            if col in Flights_hhmmss.columns:
-                Flights_hhmmss[col] = Flights_hhmmss[col].apply(
-                    lambda x: None if pd.isna(x) else f"{int(x // 3600):02}:{int((x % 3600) // 60):02}:{int(x % 60):02}"
-                )
-
-        # Split data into RWY27 and RWY18C
-        Flights_RWY27 = Flights_hhmmss[Flights_hhmmss['rwy'] == '27']
-        Flights_RWY18C = Flights_hhmmss[Flights_hhmmss['rwy'] == '18C']
-
-        # Generate HTML tables for each runway
-        html_RWY27 = Flights_RWY27.to_html(classes='table table-bordered', index=True)
-        html_RWY18C = Flights_RWY18C.to_html(classes='table table-bordered', index=True)
-
-        # After creating html_RWY27 / html_RWY18C
-        sim_sec = int(sim.simt)
-        sim_hhmmss = f"{sim_sec // 3600:02d}:{(sim_sec % 3600) // 60:02d}:{sim_sec % 60:02d}"
-
-
-        # Updated HTML layout with CSS to avoid compression and enable scrolling
-        html_with_style = f"""
-        <html>
-        <head>
-        <style>
-            .container {{
-                display: flex;
-                gap: 10px;
-                flex-wrap: nowrap;
-                overflow-x: auto; /* Allow scrolling for the container if content overflows */
-            }}
-            .table-container {{
-                flex: 0 0 auto;  /* Prevent container from compressing */
-                overflow-x: auto; /* Enable horizontal scrolling for each table container */
-            }}
-            .table {{
-                border-collapse: collapse;
-                font-size: 12px;
-                white-space: nowrap; /* Prevent cell content from wrapping */
-            }}
-            .table th {{
-                position: sticky;
-                top: 0;
-                background: #f1f1f1;
-            }}
-            .table th, .table td {{
-                border: 1px solid black;
-                padding: 4px;
-                text-align: left;
-            }}
-        </style>
-        </head>
-        <body>
-        <div class="container">
-            <div class="table-container">
-                <h3>Runway RWY27  simtime: {sim_hhmmss}, elapsedtime: {timedelta(seconds= int(time.time()-self.starttime))}</h3>
-                {html_RWY27}
-            </div>
-            <div class="table-container">
-                <h3>Runway RWY18C</h3>
-                {html_RWY18C}
-            </div>
-        </div>
-        </body>
-        </html>
-        """
-        output_path = "output.html"
-
-        # Write the HTML output to a file
-        with open(output_path, "w") as f:
-            f.write(html_with_style)
-
-        # Automatically open in the browser
-        # webbrowser.open(f"file://{os.path.abspath(output_path)}")
-
-    @core.timed_function(dt=10 )
-    def autohtmlflights(self):
-        if not sim.ffmode:
-            # self.htmlflights()
-            self.totwohtml()
-    @core.timed_function(dt=10) #is approx every 10 sec in ff mode
-    def autohtmlflightsff(self):
-        # self.time = time.time()
-        # if self.previoustime - self.time < 60:
-        if sim.ffmode and traf.ntraf >0:
-            # self.htmlflights()
-            self.totwohtml()
-
-
-
-
-#---------------debugging------------------------
 
     @stack.command
     def setslot(self,acid,ttlg, planningstate = 'frozen'):
@@ -856,25 +709,10 @@ class ArrivalManager(core.Entity):
             self.freeze()
 
 
-    @stack.command
-    def fircheck(self, acid):
-        acid = acid.upper()
-        idx = traf.id2idx(acid)
 
 
 
 
-    @stack.command
-    def printflights(self, key=None):
-        if self.aman_parent_id:
-            return
-        if key is None:
-            # Print the entire DataFrame
-            print(self.Flights)
-        else:
-            # Check if the key is a valid column in the DataFrame
-            if key in self.Flights.columns:
-                print(self.Flights[key])
 
     @stack.command
     def stopinstruct(self):

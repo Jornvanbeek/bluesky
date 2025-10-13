@@ -1,0 +1,173 @@
+
+from bluesky import core, stack, traf, sim, HOLD, net
+from bluesky.core import plugin
+import pandas as pd
+import time
+import numpy as np
+
+from datetime import timedelta
+
+def init_plugin():
+    config = {
+        'plugin_name': 'amanexport',
+        'plugin_type': 'sim'
+    }
+    # Create an instance of the class below so BlueSky recognizes it as a plugin
+    atc_plugin = exporter()
+    return config
+
+class exporter(core.Entity):
+    def __init__(self):
+        super().__init__()
+
+        self.aman = plugin.Plugin.plugins['AMANTWO'].imp.AMAN
+        self.Flights = self.aman.Flights
+        self.aman_parent_id = self.aman.aman_parent_id
+        self.starttime = self.aman.starttime
+
+
+    @stack.command
+    def totwohtml(self):
+
+        if self.aman_parent_id:
+            return
+
+        # Split Flights into two subsets based on runway
+        Flights_hhmmss = self.Flights.copy()
+        Flights_hhmmss.rename(columns={'runway': 'rwy'}, inplace=True)
+        # Flights_hhmmss.rename(columns={'TMA flighttime': 'TMA'}, inplace=True)
+        if 'rwy' in Flights_hhmmss.columns:
+            Flights_hhmmss['rwy'] = Flights_hhmmss['rwy'].str[3:]  # Remove first 3 characters
+
+        # Convert specified columns to integers
+        columns_to_convert = ['ttlg', 'to eto', 'TMA', 'manualslot']
+        for col in columns_to_convert:
+            if col in Flights_hhmmss.columns:
+                Flights_hhmmss[col] = (
+                    pd.to_numeric(Flights_hhmmss[col], errors='coerce')  # strings -> NaN
+                    .fillna(0)  # NaN -> 0
+                    .astype(int)  # float -> int
+                )
+
+        # Transform specified columns to HH:MM:SS
+        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'EAT', 'slot', 'LAS', 'FIR entry',
+                                'takeoff', 'SID', 'planning']
+        for col in columns_to_transform:
+            if col in Flights_hhmmss.columns:
+                Flights_hhmmss[col] = Flights_hhmmss[col].apply(
+                    lambda x: None if pd.isna(x) else f"{int(x // 3600):02}:{int((x % 3600) // 60):02}:{int(x % 60):02}"
+                )
+
+        # Split data into RWY27 and RWY18C
+        Flights_RWY27 = Flights_hhmmss[Flights_hhmmss['rwy'] == '27']
+        Flights_RWY18C = Flights_hhmmss[Flights_hhmmss['rwy'] == '18C']
+
+        # Generate HTML tables for each runway
+        html_RWY27 = Flights_RWY27.to_html(classes='table table-bordered', index=True)
+        html_RWY18C = Flights_RWY18C.to_html(classes='table table-bordered', index=True)
+
+        # After creating html_RWY27 / html_RWY18C
+        sim_sec = int(sim.simt)
+        sim_hhmmss = f"{sim_sec // 3600:02d}:{(sim_sec % 3600) // 60:02d}:{sim_sec % 60:02d}"
+
+        # Updated HTML layout with CSS to avoid compression and enable scrolling
+        html_with_style = f"""
+            <html>
+            <head>
+            <style>
+                .container {{
+                    display: flex;
+                    gap: 10px;
+                    flex-wrap: nowrap;
+                    overflow-x: auto; /* Allow scrolling for the container if content overflows */
+                }}
+                .table-container {{
+                    flex: 0 0 auto;  /* Prevent container from compressing */
+                    overflow-x: auto; /* Enable horizontal scrolling for each table container */
+                }}
+                .table {{
+                    border-collapse: collapse;
+                    font-size: 12px;
+                    white-space: nowrap; /* Prevent cell content from wrapping */
+                }}
+                .table th {{
+                    position: sticky;
+                    top: 0;
+                    background: #f1f1f1;
+                }}
+                .table th, .table td {{
+                    border: 1px solid black;
+                    padding: 4px;
+                    text-align: left;
+                }}
+            </style>
+            </head>
+            <body>
+            <div class="container">
+                <div class="table-container">
+                    <h3>Runway RWY27  simtime: {sim_hhmmss}, elapsedtime: {timedelta(seconds=int(time.time() - self.starttime))}</h3>
+                    {html_RWY27}
+                </div>
+                <div class="table-container">
+                    <h3>Runway RWY18C</h3>
+                    {html_RWY18C}
+                </div>
+            </div>
+            </body>
+            </html>
+            """
+        output_path = "output.html"
+
+        # Write the HTML output to a file
+        with open(output_path, "w") as f:
+            f.write(html_with_style)
+
+        # Automatically open in the browser
+        # webbrowser.open(f"file://{os.path.abspath(output_path)}")
+
+    @core.timed_function(dt=10)
+    def autohtmlflights(self):
+        if not sim.ffmode:
+            # self.htmlflights()
+            self.totwohtml()
+
+    @core.timed_function(dt=10)  # is approx every 10 sec in ff mode
+    def autohtmlflightsff(self):
+        # self.time = time.time()
+        # if self.previoustime - self.time < 60:
+        if sim.ffmode and traf.ntraf > 0:
+            # self.htmlflights()
+            self.totwohtml()
+
+
+
+    @stack.command
+    def storeflights(self):
+        if self.aman_parent_id:
+            return
+        if traf.traf_parent_id and self.aman_parent_id is None:
+            self.aman_parent_id = traf.traf_parent_id
+            return
+        self.printflights()
+        self.pickleflights()
+        self.Flights.to_csv('dataframe.txt', sep=',', index=True)
+
+    @stack.command
+    def pickleflights(self):
+        if self.aman_parent_id:
+            return
+        self.Flights.to_pickle('flights.pkl')
+        # Flights = pd.read_pickle('flights.pkl')
+
+
+    @stack.command
+    def printflights(self, key=None):
+        if self.aman_parent_id:
+            return
+        if key is None:
+            # Print the entire DataFrame
+            print(self.Flights)
+        else:
+            # Check if the key is a valid column in the DataFrame
+            if key in self.Flights.columns:
+                print(self.Flights[key])

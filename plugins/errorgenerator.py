@@ -89,8 +89,13 @@ class ErrorGenerator:
         rng = self._rng(acid) #rng is the same for each sample of the flight, should only change between different global seeds
 
         if lookahead >0:
-            takeoffdist = self.stats.loc[(airport,lookahead),'distribution']
-            takeoff = self.sample(rng,takeoffdist )
+            try:
+                takeoffdist = self.stats.loc[(airport,lookahead),'distribution']
+                takeoff = self.sample(rng,takeoffdist )
+            except KeyError:
+                print(airport, lookahead, 'Not in error database, takeoff error set to 0')
+                takeoff = 0
+
         else:
             takeoff = 0
 

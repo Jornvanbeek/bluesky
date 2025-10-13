@@ -119,7 +119,8 @@ class ATC(core.Entity):
                 required_exists = (frozen_flights['required'].astype('boolean').fillna(False).any())
 
 
-                self.aman.totwohtml()
+                # self.aman.totwohtml()
+                stack.stack('TOTWOHTML')
                 self.aman.Flights.to_pickle('flights.pkl')
 
                 # break
