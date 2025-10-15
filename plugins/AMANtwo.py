@@ -18,6 +18,7 @@ from plugins.RunwayConfigurations import RunwayConfiguration
 from plugins.LIV_separation import LivSeparation
 from plugins.errorgenerator import ErrorGenerator
 from plugins.shiftflight import shiftflight
+import plugins.aman_settings as settings
 import pandas as pd
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
@@ -71,54 +72,20 @@ class ArrivalManager(core.Entity):
     def __init__(self):
         super().__init__()
 
+        for k, v in vars(settings).items():
+            if not k.startswith('_') and not callable(v):
+                setattr(self, k, v)
+
         # Define the column names
-        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'creation', 'planning', 'SID', 'FIR entry', 'Time error']
-
-
+        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'creation', 'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'minwork', 'totalwork', 'extrawork']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
-
-        self.iafs = ['ARTIP', 'SUGOL', 'RIVER']
-        self.firname = 'FIRNL'
-
         self.not_spawned = defaultdict(list)
         self.aman_parent_id = None
-        self.planninghorizon = 40*60
-        self.freezehorizon = 25*60
-        self.TMA_scan = 5*60 #only aircraft within 5 mins of the tma get checked if they are in the tma
-        self.visible_altitude = 10000 #(FL100)
-        self.separation = 75
         self.LIV_separation = LivSeparation()
         self.errorgenerator = ErrorGenerator() #todo seed
         self.shiftflight = shiftflight()
         self.cntrlz = None          # planning times backup
-
-        self.standard_early = 60 # seconds that ASAP plans early if there is no slot taken before the slot being planned, make negative?
-        self.late_approach_margin = 120
-        self.early_approach_margin = 120 #s, make negative?
-        self.tight_margin = 20# if only a speed instruction is required, in the first instruction, for optimization purposes, from aim
-        self.tighter_count = 1000 #if aircraft has 1 or 0 instructions: tight approach margin is used
-        self.approach_aim = 0 # 90 seconds before eat if an instruction is given is the aim (make negative)
-        self.late_adjacent_threshold = 5*60 # if an aircraft is late then this is the threshold before communicating to an adjacent center
-        self.early_adjacent_threshold = 5*60 # if an aircraft is early, then this is the ttlg threshold before communicating to an adjacent center, make negative?
-        self.instruct = True # easy setting to disable all instructions to frozen aircraft
-        self.mach_reduction = 0.04
-        self.max_speedup = 25 #knots
-        self.max_slowdown = 50 #knots
-        self.abs_minspd = 180 #knots outside of tma
-        self.nearby_threshold = 120 #seconds before iaf, no more instructions possible
-        self.dogleg_multiplyer = 0.9
-        self.descent_angle = 3.0 #degrees
-        self.workload_speedinstruction = 1.0
-        self.workload_dogleg = 2.0
-        self.workload_direct = 1.0
-        self.workload_adjacent_speed = 2.0
-        self.workload_adjacent_dogleg = 3.0
-        self.workload_adjacent_direct = 2.0
-        self.workload_holding = 3.0
-        # self.dynamic_LIV = False
-        # self.single_rwy_capacity = 38 #aircraft per hour
-        # self.double_rwy_capacity = 34 #each
         self.starttime = time.time()
 
 
@@ -298,7 +265,9 @@ class ArrivalManager(core.Entity):
 
             # Set their planningstate to 'frozen'
             self.Flights.loc[newfrozen.index, 'planningstate'] = 'frozen'
+            self.Flights.loc[newfrozen.index, 'Error at Freeze'] = self.Flights.loc[newfrozen.index, 'Time error']
             self.Flights.loc[preplanned_before_max_slot.index, 'planningstate'] = 'frozen'
+            self.Flights.loc[preplanned_before_max_slot.index, 'Error at Freeze'] = self.Flights.loc[preplanned_before_max_slot.index, 'Time error']
             self.color(newfrozen, '100,255,100')
             self.color(preplanned_before_max_slot, '100,255,100')
 
@@ -328,7 +297,7 @@ class ArrivalManager(core.Entity):
         # iaf = self.Flights.at[acid, 'IAF']
         self.Flights.at[acid, 'planningstate'] = 'TMA'
         self.Flights.at[acid, 'TP accuracy'] = sim.simt - self.Flights.loc[acid]['TP IAF']
-        self.Flights.at[acid, 'ETO_act'] = sim.simt
+        # self.Flights.at[acid, 'ETO_act'] = sim.simt
         self.Flights.at[acid, 'EAT adherence'] = round(sim.simt - self.Flights.loc[acid]['EAT'],1)
         # self.printflights()
         self.color(acid, '230,230,230')
@@ -336,7 +305,7 @@ class ArrivalManager(core.Entity):
 # ___________________________________ PREDICTOR FUNCTIONS
     # new prediction received
     @network.subscriber(topic='PREDICTION')
-    def on_prediction_received(self, acid, wpt, wptime,flighttime, wptpredutc, parent_id, type, origin):
+    def on_prediction_received(self, acid, wpt, wptime,flighttime, wptpredutc, parent_id, type, origin, work):
         """
         Each acid getting a new ETA will be added to aircraft needing to get a slot.
         """
@@ -360,7 +329,7 @@ class ArrivalManager(core.Entity):
                     self.shiftflight.shift(acid, takeoff * 60)
             else:
                 takeoff, dep_route, enroute, fir, abslookahead = 0,0,0,0,0# to be disregarded later
-            self.not_spawned[acid].append((wpt, wptime,flighttime,estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead))
+            self.not_spawned[acid].append((wpt, wptime,flighttime,estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead, work))
             # dest, runway = parse_destination(wpt)
             # self.Flights.loc[acid] = {'planningstate': 'ground', 'TP ETA': wptime, 'runway': runway, 'type': type}
             # the above is future code for popups?
@@ -448,7 +417,7 @@ class ArrivalManager(core.Entity):
             id = len(traf.id) - i
             if acid in self.not_spawned.keys():
                 for prediction in self.not_spawned[acid]:
-                    wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead = prediction
+                    wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead, work = prediction
                     wptime = sim.simt + flighttime
 
                     if wpt in self.iafs:
@@ -456,7 +425,7 @@ class ArrivalManager(core.Entity):
 
                     elif '/RW' in wpt:
                         dest, runway = parse_destination(wpt)
-                        data = {'planningstate': 'new', 'TP ETA': wptime, 'runway':runway, 'type': type, 'origin': '', 'LAf': '','count':0, 'Flighttime': flighttime}
+                        data = {'planningstate': 'new', 'TP ETA': wptime, 'runway':runway, 'type': type, 'origin': '', 'LAf': '','count':0, 'Flighttime': flighttime, 'minwork':work}
 
                     elif self.firname in wpt:
                         data = {'FIR entry': wptime}
@@ -494,38 +463,29 @@ class ArrivalManager(core.Entity):
                 acid = traf.id[id]
                 if acid in self.Flights.index:
                     self.Flights.at[acid, 'planningstate'] = 'deleted'
+                    self.Flights.at[acid, 'totalwork'] = traf.work[id]
+                    self.Flights.at[acid, 'extrawork'] = traf.work[id] - self.Flights.at[acid, 'minwork']
 
     def reset(self):
         """ Clear all traffic data when sim is reset and reset data for the predictor. """
         stack.stack('ECHO resetting AMAN, placeholder for storing planning permanently')
         super().reset()
-        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'IAF', 'runway', 'EAT', 'slot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin']
 
+        for k, v in vars(settings).items():
+            if not k.startswith('_') and not callable(v):
+                setattr(self, k, v)
 
+        # Define the column names
+        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'creation', 'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'minwork', 'totalwork', 'extrawork']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
-
-        self.iafs = ['ARTIP', 'SUGOL', 'RIVER']
-
         self.not_spawned = defaultdict(list)
         self.aman_parent_id = None
-        self.planninghorizon = 40*60
-        self.freezehorizon = 14*60
-        self.TMA_scan = 5*60 #only aircraft within 5 mins of the tma get checked if they are in the tma
-        self.visible_altitude = 10000 #(FL100)
-        self.separation = 75
         self.LIV_separation = LivSeparation()
+        self.errorgenerator = ErrorGenerator() #todo seed
+        self.shiftflight = shiftflight()
         self.cntrlz = None          # planning times backup
-        self.standard_early = 60 # seconds that ASAP plans early if there is no slot taken before the slot being planned, make negative?
-        self.late_approach_margin = 120
-        self.early_approach_margin = 120 #s, make negative?
-        self.tight_margin = 20 # if only a speed instruction is required, in the first instruction, for optimization purposes, from aim
-        self.approach_aim = 0 # 90 seconds before eat if an instruction is given is the aim (make negative)
-        self.late_adjacent_threshold = 5*60 # if an aircraft is late then this is the threshold before communicating to an adjacent center
-        self.early_adjacent_threshold = 5*60 # if an aircraft is early, then this is the ttlg threshold before communicating to an adjacent center, make negative?
-        self.instruct = False # easy setting to disable all instructions to frozen aircraft
-
-
+        self.starttime = time.time()
 
 # ----------------------------------------------------------- misc functions
     def origin(self):
@@ -578,6 +538,7 @@ class ArrivalManager(core.Entity):
         )
         self.Flights['ETO IAF'] = self.Flights['TP IAF'] + self.Flights['Time error']
         self.Flights['ETA'] = self.Flights['ETO IAF'] + self.Flights['TMA']
+
         # tdep = self.Flights['']
         #
         # self.Flights['Time error'] = -self.Flights['E_TO']*60 + self.Flights['E_dep']
@@ -672,7 +633,7 @@ class ArrivalManager(core.Entity):
 
         for acid, predictions in self.not_spawned.items():
             for (wpt, wptime, flighttime, estimatedcreatetime,
-                 wptpredutc, parent_id, type, origin) in predictions:
+                 wptpredutc, parent_id, type, origin, work) in predictions:
                 #note that the errors are not stored in the previous predictions, these are stored in the TP, which does not include errors
 
                 if wpt in self.iafs:
@@ -692,7 +653,7 @@ class ArrivalManager(core.Entity):
                 updated_not_spawned[acid].append(
                     (wpt, wptime, flighttime, estimatedcreatetime,
                      wptpredutc, parent_id, type, origin,
-                     new_takeoff, new_dep_route, new_enroute, new_fir, abslookahead)
+                     new_takeoff, new_dep_route, new_enroute, new_fir, abslookahead, work)
                 )
 
         self.not_spawned = updated_not_spawned
@@ -712,7 +673,6 @@ class ArrivalManager(core.Entity):
             self.assignslots()
             self.update_times()
             self.freeze()
-
 
 
 

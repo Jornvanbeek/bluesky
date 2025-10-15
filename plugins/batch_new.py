@@ -96,7 +96,7 @@ class aman_batch(core.Entity):
 
 
     @stack.command
-    def montecarlo(self, scenarioname, n, holdtime='48:00:00', usecache= True):
+    def montecarlo(self, scenarioname, n, holdtime='48:00:00', usecache= False):
         self.usecache = usecache
         for i in range(int(n)):
             name = f'MC_{i}'
@@ -113,7 +113,7 @@ class aman_batch(core.Entity):
 
 
     @stack.command
-    def batchscen(self, scenarioname, name=None, holdtime='48:00:00'):  # add holdtime?
+    def batchscen(self, scenarioname, name=None, holdtime='48:00:00'):  # still being used??
         # Determine a unique name
         if name is None:
             name = scenarioname
@@ -213,11 +213,11 @@ class aman_batch(core.Entity):
         stack.forward(f'SCEN {name}', target_id=node)
         #
         if self.usecache:
-            stack.forward('USECACHE', target_id=node)
+            stack.forward(f'USECACHE {scenario}', target_id=node)
         else:
             stack.forward(f'PCALL {scenario}', target_id=node)
         stack.forward(f'DELAY {holdtime} BATCHES FINISH', target_id=node)
-        stack.forward('FF', target_id=node)
+        # stack.forward('FF', target_id=node)
         stack.forward('DT 0.5', target_id=node)
 
 
@@ -229,7 +229,7 @@ class aman_batch(core.Entity):
         # Check if the added node is the child node to start the predict method.
         if node_id in self.children.keys():
             stack.forward('BATCHES CLAIM', target_id=node_id)
-            scr.echo('BATCH successfully started.')
+            stack.stack('BATCH successfully started.')
 
             self.sendscen(node_id)
             # Mark as sent

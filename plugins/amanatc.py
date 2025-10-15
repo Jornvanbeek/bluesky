@@ -34,15 +34,14 @@ class ATC(core.Entity):
         self.aman = plugin.Plugin.plugins['AMANTWO'].imp.AMAN
         self.predictor = plugin.Plugin.plugins['NEWTP'].imp.predictor
         self.mach_threshold = 0
-        self.handover_alt = 260.*100
+        self.handover_alt = 260.*100 # moet naar amansettings
         self.aman.Flights['instruction'] = None
-        self.aman.Flights['AMANstate'] = ' '
         self.aman.Flights['TPstate'] = ' '
         self.aman.Flights['count'] = 0
         self.aman.Flights['count'] = self.aman.Flights['count'].astype(int)
         self.aman.Flights['instruction'] = self.aman.Flights['instruction'].astype(object)
         self.aman.Flights['TPstate'] = self.aman.Flights['TPstate'].astype(object)
-        self.aman.Flights['AMANstate'] = self.aman.Flights['AMANstate'].astype(object)
+
 
         self.aman.Flights['selspd'] = None
         self.aman.Flights['dogleg'] = None
@@ -58,12 +57,28 @@ class ATC(core.Entity):
 
     def reset(self):
         super().reset()
+        self.crossover = None#this gives some errors with initialization
+        # plugin.Plugin.plugins['MACH_CROSSOVER'].imp.CROSSOVER
         self.aman = plugin.Plugin.plugins['AMANTWO'].imp.AMAN
+        self.predictor = plugin.Plugin.plugins['NEWTP'].imp.predictor
+        self.mach_threshold = 0
+        self.handover_alt = 260.*100
         self.aman.Flights['instruction'] = None
-        self.aman.Flights['AMANstate'] = ' '
         self.aman.Flights['TPstate'] = ' '
         self.aman.Flights['count'] = 0
         self.aman.Flights['count'] = self.aman.Flights['count'].astype(int)
+        self.aman.Flights['instruction'] = self.aman.Flights['instruction'].astype(object)
+        self.aman.Flights['TPstate'] = self.aman.Flights['TPstate'].astype(object)
+        self.aman.Flights['selspd'] = None
+        self.aman.Flights['dogleg'] = None
+        self.aman.Flights['dogleg'] = self.aman.Flights['dogleg'].astype(bool)
+        self.aman.Flights['direct'] = None
+        self.aman.Flights['holding'] = None
+        self.aman.Flights['earliest'] = False
+        self.instructionlist = {}
+        self.instructions = []
+
+
 
 
 
@@ -243,12 +258,6 @@ class ATC(core.Entity):
             selspd = minclean
             if minor == False:
                 self.dogleg(acid,ttlg)
-
-
-
-
-
-
 
 
 
@@ -680,7 +689,7 @@ class ATC(core.Entity):
         # self.storeinstruction(acid, "hold")
 
 
-        self.aman.Flights.at[acid, 'AMANstate'] = "holding"
+
         self.aman.Flights.at[acid, 'count'] += 1
 
 

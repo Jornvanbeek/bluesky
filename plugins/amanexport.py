@@ -22,14 +22,20 @@ class exporter(core.Entity):
 
         self.aman = plugin.Plugin.plugins['AMANTWO'].imp.AMAN
 
-        self.aman_parent_id = self.aman.aman_parent_id
+        # self.aman_parent_id = self.aman.aman_parent_id
         self.starttime = self.aman.starttime
 
+    def reset(self):
+        super().reset()
+        self.aman = plugin.Plugin.plugins['AMANTWO'].imp.AMAN
+
+        # self.aman_parent_id = self.aman.aman_parent_id
+        self.starttime = self.aman.starttime
 
     @stack.command
     def totwohtml(self):
 
-        if self.aman_parent_id:
+        if self.aman.aman_parent_id:
             return
 
         # Split Flights into two subsets based on runway
@@ -127,6 +133,8 @@ class exporter(core.Entity):
 
     @core.timed_function(dt=10)
     def autohtmlflights(self):
+        if self.aman.aman_parent_id:
+            return
         if not sim.ffmode:
             # self.htmlflights()
             self.totwohtml()
@@ -135,6 +143,8 @@ class exporter(core.Entity):
     def autohtmlflightsff(self):
         # self.time = time.time()
         # if self.previoustime - self.time < 60:
+        if self.aman.aman_parent_id:
+            return
         if sim.ffmode and traf.ntraf > 0:
             # self.htmlflights()
             self.totwohtml()
@@ -143,9 +153,9 @@ class exporter(core.Entity):
 
     @stack.command
     def storeflights(self):
-        if self.aman_parent_id:
+        if self.aman.aman_parent_id:
             return
-        if traf.traf_parent_id and self.aman_parent_id is None:
+        if traf.traf_parent_id and self.aman.aman_parent_id is None:
             self.aman_parent_id = traf.traf_parent_id
             return
         self.printflights()
@@ -154,7 +164,7 @@ class exporter(core.Entity):
 
     @stack.command
     def pickleflights(self):
-        if self.aman_parent_id:
+        if self.aman.aman_parent_id:
             return
         self.aman.Flights.to_pickle('flights.pkl')
         # Flights = pd.read_pickle('flights.pkl')
@@ -162,7 +172,7 @@ class exporter(core.Entity):
 
     @stack.command
     def printflights(self, key=None):
-        if self.aman_parent_id:
+        if self.aman.aman_parent_id:
             return
         if key is None:
             # Print the entire DataFrame

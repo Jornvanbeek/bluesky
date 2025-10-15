@@ -322,7 +322,7 @@ class Predictor(core.Entity):
         idxac = traf.id2idx(acid)
         # if idxac == id:
         for items in wptlist:
-            (wpt, wptime, wptpredutc,flighttime, estimatedcreatetime, parent_id, type, origin) = items
+            (wpt, wptime, wptpredutc,flighttime, estimatedcreatetime, parent_id, type, origin, work) = items
             if wpname == wpt:
 
                 idxwp = traf.ap.route[idxac].wpname.index(wpt)
@@ -342,6 +342,7 @@ class Predictor(core.Entity):
         # Check if the added node is the child node to start the predict method.
         if node_id == self.child_id:
             stack.forward('PREDICTOR CLAIM', target_id=node_id)
+            stack.forward('SCEN TP', target_id=node_id)
             stack.stack('ECHO PREDICTOR_successfully started.')
             self.predict()
 
@@ -766,7 +767,7 @@ class Predictor(core.Entity):
 
         if self.parent_id and (val != sim.utc.timestamp()):
 
-            net.send('PREDICTION', (acid, wpt, sim.simt, sim.simt - createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac], traf.ap.orig[idxac]), self.parent_id)
+            net.send('PREDICTION', (acid, wpt, sim.simt, sim.simt - createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac], traf.ap.orig[idxac], traf.work[idxac]), self.parent_id)
             self.predictions +=1
             self.iscomplete()
 
@@ -801,7 +802,7 @@ class Predictor(core.Entity):
                                              sim.utc.timestamp(),
                                              self.parent_id,
                                              traf.type[i],
-                                             traf.ap.orig[i]),
+                                             traf.ap.orig[i], traf.work[i]),
                              self.parent_id)
                 self._fir_inside[acid] = inside
 
@@ -822,7 +823,7 @@ class Predictor(core.Entity):
                                     sim.utc.timestamp(),
                                     self.parent_id,
                                     traf.type[idx],
-                                    traf.ap.orig[idx]),
+                                    traf.ap.orig[idx], traf.work[idx]),
                      self.parent_id)
 
     # @predictor.subcommand
@@ -840,7 +841,7 @@ class Predictor(core.Entity):
 
 
     @network.subscriber(topic='PREDICTION')#, to_group=GROUPID_SIM)
-    def on_prediction_received(self, acid, wpt, wptime, flighttime, wptpredutc, parent_id, type, origin):
+    def on_prediction_received(self, acid, wpt, wptime, flighttime, wptpredutc, parent_id, type, origin, work):
         """ Displays the prediction results received from the child process. """
 
         if self.parent_id:
@@ -855,9 +856,9 @@ class Predictor(core.Entity):
         estimatedcreatetime = wptime - flighttime
         #following code stores the tp data from non-airborne aircraft in a different object
         if self.predictions_complete == False:
-            self.predictions_cache.setdefault(acid, []).append((wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin))
+            self.predictions_cache.setdefault(acid, []).append((wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, work))
         if idxac == -1:
-            self.predicted_ac_not_spawned.setdefault(acid, []).append((wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin))
+            self.predicted_ac_not_spawned.setdefault(acid, []).append((wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, work))
             #scr.echo(f'Prediction stored: {acid} reached {wpt} at {datetime.fromtimestamp(wptpredutc, tz=None)} seconds, stored in object')
 
         else:
@@ -882,14 +883,57 @@ class Predictor(core.Entity):
             #scr.echo(f'Prediction received: {acid} reached {wpt} at {datetime.fromtimestamp(wptpredutc, tz=None)} seconds, stored in traf')
 
 
+    @network.subscriber(topic='INITRESET')
+    def initreset(self,data):
+        if data and self.parent_id:
+            # sim.quit()
+            # sim.reset()
+
+            stack.stack('RESET')
 
     def reset(self):
         """ Clear all traffic data when sim is reset and reset data for the predictor. """
         super().reset()
+        # Initialize class properties with default values.
+
+        if self.child_id:
+            net.send('INITRESET',True, self.child_id)
+
+
+        # self.parent_id = b''
+        # self.child_id = b''
+
+        print(f'resetting in tp, {self.child_id} {self.parent_id}')
         self.commands_to_schedule = []
+
+        # The following attributes are for filtering the scenario commands
+        self.acid_to_predict = set()
         self.previous_scenario_file = ''
         self.scenario_commands = []
+        self.scenario_commands_times = []
+        self.commands_per_flight = defaultdict(list)
+        self.predicted_ac_not_spawned = {}
+        self.predictions_cache = {}
+        self.use_cache = False
+        self.acids = set()
+        self._fir_inside = {}
 
+        # Counter for automatic fast-forward functionality
+        self.counter = 0
+        self.wptcrosscount = 0
+        self.predictions = 0
+        self.predictions_count_required = None
+
+        self.predictions_complete = False
+
+        self.fast_tp = True
+
+        traf.traf_parent_id = None
+        self.departure_route_alt = 'FL200'
+        # self.incorrect_predictions = ['AIA6768', 'KLM76QSH', 'EZY91XM']
+        self.incorrect_predictions = []#['KLM1830', 'KAC127SH','THY8ZXSH']
+        # Change the route class implementation for the child node using PredictorNodeRoute class.
+        stack.stack('IMPLEMENTATION Route Route')
 
 
 
@@ -942,6 +986,7 @@ class Predictor(core.Entity):
         else:
 
             stack.stack(f"ECHO {arr}")
+            print(arr)
 
 
 
