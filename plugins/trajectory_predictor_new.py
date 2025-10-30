@@ -582,7 +582,7 @@ class Predictor(core.Entity):
                         cmds_to_forward.append(cmd.upper())
                 print(cmds_to_forward)
                 stack.forward(*cmds_to_forward, target_id=self.child_id)
-                stack.forward('DT 1', target_id=self.child_id)
+                stack.forward('DT 3', target_id=self.child_id)
                 # stack.forward('ff', target_id=self.child_id)
 
             else:
@@ -772,7 +772,7 @@ class Predictor(core.Entity):
             self.iscomplete()
 
 
-    #todo altcross
+
 
 
     @timed_function(dt=10)

@@ -83,7 +83,7 @@ class ArrivalManager(core.Entity):
         self.not_spawned = defaultdict(list)
         self.aman_parent_id = None
         self.LIV_separation = LivSeparation()
-        self.errorgenerator = ErrorGenerator() #todo seed
+        self.errorgenerator = ErrorGenerator() #todo check seed
         self.shiftflight = shiftflight()
         self.cntrlz = None          # planning times backup
         self.starttime = time.time()
@@ -459,6 +459,8 @@ class ArrivalManager(core.Entity):
         if self.aman_parent_id:
             return
         else:
+            if np.isscalar(idx):
+                idx = [idx]
             for id in idx:
                 acid = traf.id[id]
                 if acid in self.Flights.index:
@@ -482,7 +484,7 @@ class ArrivalManager(core.Entity):
         self.not_spawned = defaultdict(list)
         self.aman_parent_id = None
         self.LIV_separation = LivSeparation()
-        self.errorgenerator = ErrorGenerator() #todo seed
+        self.errorgenerator = ErrorGenerator() #todo check seed
         self.shiftflight = shiftflight()
         self.cntrlz = None          # planning times backup
         self.starttime = time.time()
@@ -517,12 +519,9 @@ class ArrivalManager(core.Entity):
         self.Flights['TMA'] = self.Flights['TP ETA'] - self.Flights['TP IAF']
         self.Flights['to eto'] = round((self.Flights['ETO IAF'] - sim.simt) / 60, 0)
         self.Flights['ttlg'] = self.Flights['EAT'] - self.Flights['ETO IAF']
-        self.Flights['planning'] = self.Flights['TP IAF'] - self.planninghorizon
+        self.Flights['planning'] = self.Flights['EAT'] - self.planninghorizon
 
     def update_errors(self):
-
-
-
         # self.Flights['ETA'] = self.Flights['correct_ETA'] + error
         # self.Flights['totalerror'] = self.Flights['creation'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights['insidefir']
         # self.Flights['Time error'] =
@@ -543,6 +542,10 @@ class ArrivalManager(core.Entity):
         #
         # self.Flights['Time error'] = -self.Flights['E_TO']*60 + self.Flights['E_dep']
 
+    @stack.command
+    def printseed(self):
+
+        print('seed: ', self.errorgenerator.seed)
 
     def segments(self):
         df = self.Flights
@@ -688,7 +691,7 @@ class ArrivalManager(core.Entity):
         self.instruct = True
 
     @stack.command
-    def randomspeedinstruction(self, n, group='preplanned', seed=42):
+    def randomspeedinstruction(self, n, group='preplanned', seed=np.random.get_state()[1][0]):
         """
         Randomly selects 'n' aircraft from the specified 'group' (default 'preplanned')
         and issues a random speed (between 150 and 350) instruction to each.
@@ -711,9 +714,6 @@ class ArrivalManager(core.Entity):
         for acid in selected_flights:
             spd_cmd = random.randint(150, 350)
             stack.stack(f"SPD {acid} {spd_cmd}")
-
-
-
 
 
 def parse_destination(wpt_name):

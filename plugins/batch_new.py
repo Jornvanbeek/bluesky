@@ -1,5 +1,3 @@
-
-
 """
 Plugin containing a deterministic trajectory predictor that predicts the arrival times of aircraft at the waypoints.
 

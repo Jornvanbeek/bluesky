@@ -15,7 +15,7 @@ tighter_count = 1000  # if aircraft has 1 or 0 instructions: tight approach marg
 approach_aim = 0  # 90 seconds before eat if an instruction is given is the aim (make negative)
 late_adjacent_threshold = 5 * 60  # if an aircraft is late then this is the threshold before communicating to an adjacent center
 early_adjacent_threshold = 5 * 60  # if an aircraft is early, then this is the ttlg threshold before communicating to an adjacent center, make negative?
-instruct = True  # easy setting to disable all instructions to frozen aircraft
+instruct = True # easy setting to disable all instructions to frozen aircraft
 mach_reduction = 0.04
 max_speedup = 25  # knots
 max_slowdown = 50  # knots
@@ -23,13 +23,11 @@ abs_minspd = 190  # knots outside of tma
 nearby_threshold = 120  # seconds before iaf, no more instructions possible
 dogleg_multiplyer = 0.9
 descent_angle = 3.0  # degrees
-workload_speedinstruction = 1.0
-workload_dogleg = 2.0
-workload_direct = 1.0
-workload_adjacent_speed = 2.0
-workload_adjacent_dogleg = 3.0
-workload_adjacent_direct = 2.0
-workload_holding = 3.0
+
+TP_DT = 3.0 #s
+
+
+
 # dynamic_LIV = False
 # single_rwy_capacity = 38 #aircraft per hour
 # double_rwy_capacity = 34 #each

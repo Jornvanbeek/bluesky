@@ -181,3 +181,77 @@ class exporter(core.Entity):
             # Check if the key is a valid column in the DataFrame
             if key in self.aman.Flights.columns:
                 print(self.aman.Flights[key])
+
+
+
+    def results(self):
+        df = self.aman.Flights
+        if df is None or df.empty:
+            return {'n_acids': 0}
+
+        # veilige numerieke Series
+        s_eat = pd.to_numeric(df.get('EAT adherence'), errors='coerce')
+        s_cnt = pd.to_numeric(df.get('count'), errors='coerce')
+        s_eto = pd.to_numeric(df.get('E_TO'), errors='coerce')
+        s_tpa = pd.to_numeric(df.get('TP accuracy'), errors='coerce')
+        s_frz = pd.to_numeric(df.get('Error at Freeze'), errors='coerce')
+        s_mw = pd.to_numeric(df.get('minwork'), errors='coerce')
+        s_tw = pd.to_numeric(df.get('totalwork'), errors='coerce')
+        s_xw = pd.to_numeric(df.get('extrawork'), errors='coerce')
+
+        denom = s_tw.replace(0, np.nan)
+        pct_xw = (s_xw / denom) * 100.0
+
+        # counts
+        max_count = s_cnt.max(skipna=True)
+        uniq = np.sort(s_cnt.dropna().unique())
+        second_highest = uniq[-2] if uniq.size >= 2 else (uniq[-1] if uniq.size == 1 else np.nan)
+        max_count_acid = s_cnt.idxmax() if s_cnt.notna().any() else None
+
+        return {
+            # EAT adherence
+            'mean_abs_eat_adherence': float(s_eat.abs().mean(skipna=True)),
+            'max_abs_eat_adherence': float(s_eat.abs().max(skipna=True)),
+
+            # count stats
+            'pct_count_eq_0': float((s_cnt.fillna(0) == 0).mean() * 100.0),
+            'mean_count': float(s_cnt.mean(skipna=True)),
+            'max_count': float(max_count) if pd.notna(max_count) else np.nan,
+            'second_highest_count': float(second_highest) if pd.notna(second_highest) else np.nan,
+            'max_count_acid': str(max_count_acid) if max_count_acid is not None else None,
+
+            # E_TO
+            'mean_E_TO': float(s_eto.mean(skipna=True)),
+            'mean_abs_E_TO': float(s_eto.abs().mean(skipna=True)),
+            'min_E_TO': float(s_eto.min(skipna=True)),
+            'max_E_TO': float(s_eto.max(skipna=True)),
+
+            # TP accuracy
+            'mean_TP_accuracy': float(s_tpa.mean(skipna=True)),
+            'max_abs_TP_accuracy': float(s_tpa.abs().max(skipna=True)),
+
+            # Time error at freeze
+            'mean_time_error_at_freeze': float(s_frz.mean(skipna=True)),
+            'max_time_error_at_freeze': float(s_frz.max(skipna=True)),
+            'min_time_error_at_freeze': float(s_frz.min(skipna=True)),
+            'mean_abs_time_error_at_freeze': float(s_frz.abs().mean(skipna=True)),
+
+            # work
+            'mean_minwork': float(s_mw.mean(skipna=True)),
+            'mean_totalwork': float(s_tw.mean(skipna=True)),
+            'mean_extrawork': float(s_xw.mean(skipna=True)),
+            'mean_pct_extrawork': float(pct_xw.replace([np.inf, -np.inf], np.nan).mean(skipna=True)),
+
+            # size
+            'n_acids': int(len(df)),
+            'error_seed': int(np.random.get_state()[1][0]),
+        }
+
+
+    @stack.command
+    def sendresult(self):
+
+        result = self.results()
+
+        sender = stack.sender()
+        net.send('MONTECARLORESULTS',result, sender)

@@ -22,7 +22,11 @@ class ErrorGenerator:
         self.cop_pdf = (-0.1840341263226265, 1.3898584120283286, -0.22623562655786733, 9.968335882486613)
         self.PDF_file = 'plugins/PDF.pkl'
         self.load_distributions(self.PDF_file)
-        self.seed = 2
+
+        self.seed = np.random.get_state()[1][0]
+
+    def setseed(self, seed):
+        self.seed = seed
 
 
     def load_distributions(self, file):
@@ -85,7 +89,7 @@ class ErrorGenerator:
 
 
     def return_sample(self,acid, airport, lookahead = 0):
-
+        self.seed = np.random.get_state()[1][0]
         rng = self._rng(acid) #rng is the same for each sample of the flight, should only change between different global seeds
 
         if lookahead >0:
