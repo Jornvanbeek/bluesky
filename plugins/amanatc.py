@@ -496,15 +496,15 @@ class ATC(core.Entity):
 
 
 
-
-    @stack.command
-    def direct_index(self,acid,iaf_index):
-
-        acrte = Route._routes[acid]
-        # print(acrte.wpname)
-        newwp = acrte.wpname[int(iaf_index)] # iaf index goes +1 when waypoint is added before
-        # stack.stack(f'ECHO {acid} {newwp}')
-        stack.stack(f'DIRECT {acid} {newwp}')
+    #
+    # @stack.command
+    # def direct_index(self,acid,iaf_index):
+    #
+    #     acrte = Route._routes[acid]
+    #     # print(acrte.wpname)
+    #     newwp = acrte.wpname[int(iaf_index)] # iaf index goes +1 when waypoint is added before
+    #     # stack.stack(f'ECHO {acid} {newwp}')
+    #     stack.stack(f'DIRECT {acid} {newwp}')
 
 
     def reqspd(self,acid, ttlg, idx):

@@ -3,35 +3,22 @@ The Arrival Manager (AMAN) plugin is designed to efficiently allocate arrival sl
 their estimated times of arrival (ETAs) while ensuring necessary separation times. It dynamically updates
 air traffic every 5 seconds around designated areas around airports based on ETAs to anticipate aircraft arrivals.
 """
-from logging import currentframe, error
 
-from numpy.ma.core import swapaxes
 # from setuptools.dist import sequence
 
-from bluesky import core, stack, traf, navdb, net, network, sim
-from bluesky.tools.areafilter import Circle
-from bluesky.network.common import GROUPID_SIM
-from datetime import datetime
+from bluesky import core, stack, traf, network, sim
 
 from collections import defaultdict
-from plugins.RunwayConfigurations import RunwayConfiguration
 from plugins.LIV_separation import LivSeparation
 from plugins.errorgenerator import ErrorGenerator
 from plugins.shiftflight import shiftflight
 import plugins.aman_settings as settings
 import pandas as pd
-pd.set_option('display.max_columns', None)
-pd.set_option('display.max_rows', None)
-pd.set_option('display.width', 250)
 import numpy as np
 import random
 import pickle
 import time
-from datetime import timedelta
-from bluesky.tools.aero import casormach2tas, fpm, kts, ft, g0, Rearth, nm, tas2cas,\
-                         vatmos,  vtas2cas, vtas2mach, vcasormach
-from bluesky.tools import areafilter
-
+from bluesky.tools.aero import ft
 
 
 #from bluesky.ui.palette import initialized
