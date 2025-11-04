@@ -122,7 +122,8 @@ class exporter(core.Entity):
             </body>
             </html>
             """
-        output_path = "output.html"
+        scen = stack.get_scenname()
+        output_path = f"AMAN_DF/output_{scen}.html"
 
         # Write the HTML output to a file
         with open(output_path, "w") as f:
@@ -166,7 +167,8 @@ class exporter(core.Entity):
     def pickleflights(self):
         if self.aman.aman_parent_id:
             return
-        self.aman.Flights.to_pickle('flights.pkl')
+        scen = stack.get_scenname()
+        self.aman.Flights.to_pickle(f'AMAN_DF/flights_{scen}.pkl')
         # Flights = pd.read_pickle('flights.pkl')
 
 

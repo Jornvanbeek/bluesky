@@ -210,12 +210,12 @@ class monte_carlo(core.Entity):
         net.send('MONTECARLORESULTS',result, sender)
         #example of function that can be placed in other plugin to emit results, automatically get added to dataframe
 
-    def storedf(self, path = "montecarlo_batch.pkl"):
+    def storedf(self, path = "Montecarlo/montecarlo_batch.pkl"):
         self.batch.to_pickle(path)
 
 
     @stack.command
-    def df_to_html(self, path: str = "montecarlo.html"):
+    def df_to_html(self, path: str = "Montecarlo/montecarlo.html"):
         """Exporteer de batch-DataFrame naar een nette HTML-tabel."""
         df = self.batch.copy()
 

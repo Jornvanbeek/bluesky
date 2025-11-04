@@ -401,7 +401,7 @@ class Predictor(core.Entity):
     def update_requested(self, acid, route_info, actwp_info, traf_info):
         if self.parent_id:
 
-            print('received INFO: ', acid, route_info, actwp_info, traf_info)
+            # print('received INFO: ', acid, route_info, actwp_info, traf_info)
             info = (acid, route_info, actwp_info, traf_info)
 
             actype = traf_info['type']
@@ -430,7 +430,8 @@ class Predictor(core.Entity):
 
     @stack.command
     def packer(self, acid):
-
+        # todo exclude ipv include
+        # todo wind
         include_route = [
             "acid", "nwp", "wpname", "wptype", "wplat", "wplon", "wpalt", "wpspd",
             "wprta", "wpflyby", "wpstack", "wpflyturn", "wpturnbank", "wpturnrad",
@@ -507,59 +508,59 @@ class Predictor(core.Entity):
             getattr(traf.actwp, key)[idxac] = value
 
 
-    @predictor.subcommand
-    def update_throughstack(self,acid):
-        if self.child_id:
-            # stack.stack('HOLD')
-            filtered_commands = self.filter_per_aircraft(acid)
-            self.filtered = filtered_commands
-            inittime = filtered_commands[0][0] # use inittime when simulating the entire flight: the amount of seconds into the simulated flight is cmdtime - inittime, but only for an entire flight
-
-            commands_to_schedule_list = [
-                cmdline if (cmdtime - sim.simt) <= 0
-                else f"DELAY {cmdtime - sim.simt} {cmdline}"
-                for cmdtime, cmdline in filtered_commands]
-            idxac = traf.id2idx(acid)
-            traf.ap.route[idxac].createtime = sim.simt # essentially setting cmdtime
-
-            commands_to_schedule_list.insert(5, f'MOVE {acid} {traf.lat[idxac]} {traf.lon[idxac]} {round(traf.alt[idxac]/ft)} {traf.hdg[idxac]} {round(traf.cas[idxac]/kts)} {round(traf.vs[idxac]/ft*60.)}')
-            # todo: possibly insert method to change selspd and selalt
-            commands_to_schedule_list.append(f'set_active_waypoint {acid} {traf.ap.route[idxac].iactwp} {traf.selspd[idxac]} {traf.selvs[idxac]} {traf.selalt[idxac]} {traf.swlnav[idxac]} {traf.swvnav[idxac]} {traf.swvnavspd[idxac]}')
-
-            # todo: setactivewp naar net.send omzetten??
-
-            stack.forward(f'REMOVEWPTS {acid}', target_id=self.child_id)
-            stack.forward(commands_to_schedule_list[0], target_id=self.child_id) #sending the commands in two steps helps with first creating a traf object
-            stack.forward(*commands_to_schedule_list[1:], target_id=self.child_id)
-
-            if self.fast_tp:
-                # stack.forward('DT 1', target_id=self.child_id)
-                stack.forward('ff', target_id=self.child_id)
-            if acid in self.incorrect_predictions:
-                stack.stack('hold')
-                stack.forward('HOLD', target_id=self.child_id)
-                print(commands_to_schedule_list)
-
-    @predictor.subcommand
-    def update_fullflight(self, acid):
-        if self.child_id:
-            filtered_commands = self.filter_per_aircraft(acid)
-            self.filtered = filtered_commands
-            inittime = filtered_commands[0][0]
-            commands_to_schedule_list = [f'DELAY {cmdtime - inittime} {cmdline}' for cmdtime, cmdline in filtered_commands]  # for tp of entire flights
-            idxac = traf.id2idx(acid)
-            # traf.ap.route[idxac].createtime = inittime
-            stack.forward(commands_to_schedule_list[0], target_id=self.child_id) #sending the commands in two steps helps with first creating a traf object
-            stack.forward(*commands_to_schedule_list[1:], target_id=self.child_id)
-            if self.fast_tp:
-                stack.forward('DT 1', target_id=self.child_id)
-                stack.forward('ff', target_id=self.child_id)
-            if acid in self.incorrect_predictions:
-                stack.stack('hold')
-                stack.forward('hold', target_id=self.child_id)
-                print(commands_to_schedule_list)
-                print(acid)
-                print(inittime)
+    # @predictor.subcommand
+    # def update_throughstack(self,acid):
+    #     if self.child_id:
+    #         # stack.stack('HOLD')
+    #         filtered_commands = self.filter_per_aircraft(acid)
+    #         self.filtered = filtered_commands
+    #         inittime = filtered_commands[0][0] # use inittime when simulating the entire flight: the amount of seconds into the simulated flight is cmdtime - inittime, but only for an entire flight
+    #
+    #         commands_to_schedule_list = [
+    #             cmdline if (cmdtime - sim.simt) <= 0
+    #             else f"DELAY {cmdtime - sim.simt} {cmdline}"
+    #             for cmdtime, cmdline in filtered_commands]
+    #         idxac = traf.id2idx(acid)
+    #         traf.ap.route[idxac].createtime = sim.simt # essentially setting cmdtime
+    #
+    #         commands_to_schedule_list.insert(5, f'MOVE {acid} {traf.lat[idxac]} {traf.lon[idxac]} {round(traf.alt[idxac]/ft)} {traf.hdg[idxac]} {round(traf.cas[idxac]/kts)} {round(traf.vs[idxac]/ft*60.)}')
+    #         # todo: possibly insert method to change selspd and selalt
+    #         commands_to_schedule_list.append(f'set_active_waypoint {acid} {traf.ap.route[idxac].iactwp} {traf.selspd[idxac]} {traf.selvs[idxac]} {traf.selalt[idxac]} {traf.swlnav[idxac]} {traf.swvnav[idxac]} {traf.swvnavspd[idxac]}')
+    #
+    #         # todo: setactivewp naar net.send omzetten??
+    #
+    #         stack.forward(f'REMOVEWPTS {acid}', target_id=self.child_id)
+    #         stack.forward(commands_to_schedule_list[0], target_id=self.child_id) #sending the commands in two steps helps with first creating a traf object
+    #         stack.forward(*commands_to_schedule_list[1:], target_id=self.child_id)
+    #
+    #         if self.fast_tp:
+    #             # stack.forward('DT 1', target_id=self.child_id)
+    #             stack.forward('ff', target_id=self.child_id)
+    #         if acid in self.incorrect_predictions:
+    #             stack.stack('hold')
+    #             stack.forward('HOLD', target_id=self.child_id)
+    #             print(commands_to_schedule_list)
+    #
+    # @predictor.subcommand
+    # def update_fullflight(self, acid):
+    #     if self.child_id:
+    #         filtered_commands = self.filter_per_aircraft(acid)
+    #         self.filtered = filtered_commands
+    #         inittime = filtered_commands[0][0]
+    #         commands_to_schedule_list = [f'DELAY {cmdtime - inittime} {cmdline}' for cmdtime, cmdline in filtered_commands]  # for tp of entire flights
+    #         idxac = traf.id2idx(acid)
+    #         # traf.ap.route[idxac].createtime = inittime
+    #         stack.forward(commands_to_schedule_list[0], target_id=self.child_id) #sending the commands in two steps helps with first creating a traf object
+    #         stack.forward(*commands_to_schedule_list[1:], target_id=self.child_id)
+    #         if self.fast_tp:
+    #             stack.forward('DT 1', target_id=self.child_id)
+    #             stack.forward('ff', target_id=self.child_id)
+    #         if acid in self.incorrect_predictions:
+    #             stack.stack('hold')
+    #             stack.forward('hold', target_id=self.child_id)
+    #             print(commands_to_schedule_list)
+    #             print(acid)
+    #             print(inittime)
 
     @predictor.subcommand
     def predict(self):
@@ -638,14 +639,14 @@ class Predictor(core.Entity):
         stack.stack('ECHO PREDICTOR COMPLETE')
         if self.parent_id:
             stack.forward('COMPLETE', target_id=self.parent_id)
-            stack.stack('HOLD')
+            # stack.stack('HOLD')
         elif self.child_id:
             stack.stack('STOREFLIGHTS')
             with open(r'predictions_cache.pkl', 'wb') as f:
                 pickle.dump(self.predictions_cache, f)
             with open(r'commands.pkl', 'wb') as f:
                 pickle.dump(self.commands_per_flight, f)
-            stack.stack('FF 3270')
+            # stack.stack('FF 3270')
 
 
     @stack.command

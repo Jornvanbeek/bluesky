@@ -11,7 +11,7 @@ standard_early = 60  # seconds that ASAP plans early if there is no slot taken b
 late_approach_margin = 120
 early_approach_margin = 120  # s, make negative?
 tight_margin = 20  # if only a speed instruction is required, in the first instruction, for optimization purposes, from aim
-tighter_count = 1000  # if aircraft has 1 or 0 instructions: tight approach margin is used
+tighter_count = 10  # if aircraft has 1 or 0 instructions: tight approach margin is used
 approach_aim = 0  # 90 seconds before eat if an instruction is given is the aim (make negative)
 late_adjacent_threshold = 5 * 60  # if an aircraft is late then this is the threshold before communicating to an adjacent center
 early_adjacent_threshold = 5 * 60  # if an aircraft is early, then this is the ttlg threshold before communicating to an adjacent center, make negative?
@@ -23,6 +23,7 @@ abs_minspd = 190  # knots outside of tma
 nearby_threshold = 120  # seconds before iaf, no more instructions possible
 dogleg_multiplyer = 0.9
 descent_angle = 3.0  # degrees
+
 
 TP_DT = 3.0 #s
 
