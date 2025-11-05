@@ -25,12 +25,14 @@ dogleg_multiplyer = 0.9
 descent_angle = 3.0  # degrees
 
 
+
 TP_DT = 3.0 #s
 
 
 
-# dynamic_LIV = False
-# single_rwy_capacity = 38 #aircraft per hour
-# double_rwy_capacity = 34 #each
+dynamic_LIV = False
+capacity = 34 #aircraft per hour, if no LIV
+separation = round(60*60/capacity,0)
+
 
 

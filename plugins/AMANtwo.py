@@ -20,6 +20,10 @@ import pickle
 import time
 from bluesky.tools.aero import ft
 
+# voeg toe bij de imports bovenaan
+from plugins.amanpredictionhandler import PredictionHandler, parse_destination
+from plugins.errorhandler import ErrorHandler
+
 
 #from bluesky.ui.palette import initialized
 #from plugins.trajectory_predictor_new import total_pred_signals
@@ -40,7 +44,7 @@ def init_plugin():
 
 
 
-class ArrivalManager(core.Entity):
+class ArrivalManager(PredictionHandler, ErrorHandler, core.Entity):
     """
     Manages arrival logic for the Arrival Manager, assigning arrival slots
     based on the estimated time of arrival at the destination waypoint.
@@ -138,10 +142,15 @@ class ArrivalManager(core.Entity):
             else:
                 last_earlier = earlier_df.iloc[-1]
                 slot_earlier = last_earlier['slot']
-                separation = self.LIV_separation.required_separation(
-                    last_earlier.name, last_earlier['type'],
-                    acid, row['type']
-                )
+                if self.dynamic_LIV:
+                    separation = self.LIV_separation.required_separation(
+                        last_earlier.name, last_earlier['type'],
+                        acid, row['type']
+                    )
+
+                else:
+                    separation = self.separation
+
                 new_slot = max(slot_earlier + separation, row['ETA'])
 
             self.Flights.at[acid, 'slot'] = new_slot
@@ -217,7 +226,11 @@ class ArrivalManager(core.Entity):
                 else:
                     # Subsequent flight's slot is the last slot + separation
 
-                    separation = self.LIV_separation.required_separation(last_assigned_flight, last_assigned_type, idx, row['type'])
+                    if self.dynamic_LIV:
+
+                        separation = self.LIV_separation.required_separation(last_assigned_flight, last_assigned_type, idx, row['type'])
+                    else:
+                        separation = self.separation
                     slot = max(last_assigned_slot + separation, row['ETA']-self.standard_early)
 
                 # Update the slot in the DataFrame
@@ -289,154 +302,6 @@ class ArrivalManager(core.Entity):
         # self.printflights()
         self.color(acid, '230,230,230')
 
-# ___________________________________ PREDICTOR FUNCTIONS
-    # new prediction received
-    @network.subscriber(topic='PREDICTION')
-    def on_prediction_received(self, acid, wpt, wptime,flighttime, wptpredutc, parent_id, type, origin, work):
-        """
-        Each acid getting a new ETA will be added to aircraft needing to get a slot.
-        """
-
-        if self.aman_parent_id:
-            return
-
-        self.sim_id_parent = parent_id
-        idxac = traf.id2idx(acid)
-        estimatedcreatetime = wptime - flighttime
-        if idxac == -1:
-            if wpt in self.iafs:
-                #determining errors at iaf
-                lookahead = round(int(self.freezehorizon - flighttime) / 60)  # minutes
-                abslookahead = lookahead
-                if lookahead < 0:
-                    lookahead = 0
-                print(acid, 'error should be generated')
-                takeoff, dep_route, enroute, fir = self.errorgenerator.return_sample(acid, origin, lookahead=lookahead)
-                if float(takeoff) != 0.0:
-                    self.shiftflight.shift(acid, takeoff * 60)
-            else:
-                takeoff, dep_route, enroute, fir, abslookahead = 0,0,0,0,0# to be disregarded later
-            self.not_spawned[acid].append((wpt, wptime,flighttime,estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead, work))
-            # dest, runway = parse_destination(wpt)
-            # self.Flights.loc[acid] = {'planningstate': 'ground', 'TP ETA': wptime, 'runway': runway, 'type': type}
-            # the above is future code for popups?
-
-        elif acid in self.Flights.index:
-            wptime = traf.ap.route[idxac].createtime + flighttime
-            # print(f'{acid} at {wpt}')
-            if wpt in self.iafs:
-                # data = {'TP IAF': wptime, 'IAF': wpt , 'TPstate': 'updated iaf', 'ttlg': self.Flights.loc[acid,'EAT']-wptime}
-
-                TMA = self.Flights.loc[acid, 'TMA']
-                # 'TP ETA': wptime + TMA
-                data = {'TP IAF': wptime, 'IAF': wpt, 'TPstate': 'updated', 'ttlg': self.Flights.loc[acid, 'EAT'] - wptime, 'TP ETA': wptime + TMA}
-
-
-
-            elif '/RW' in wpt:
-                dest, runway = parse_destination(wpt)
-                idxac = traf.id2idx(acid)
-                data = {'TP ETA': wptime, 'runway': runway, 'TPstate': 'updated including TMA'}
-
-            elif self.firname in wpt:
-                data = {'FIR entry': wptime} #time to fir entry from spawning
-
-            elif 'ALTCROSS CLIMB' in wpt:
-                data = {'SID': wptime}
-
-
-
-            else:
-                data = {}
-
-
-            # Updates the existing row for acid
-
-            for key, value in data.items():
-                self.Flights.at[acid, key] = value
-
-            if '/RW' in wpt or ('TPstate' in data.keys() and data['TPstate'] == 'updated'):
-                stack.stack('instruct_frozen')
-
-        else:
-            wptime = traf.ap.route[idxac].createtime + flighttime
-            data = {'planningstate': 'new', 'runway': ''}
-
-
-            if wpt in self.iafs:
-                data = {'planningstate': 'new', 'TP IAF': wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count': 0}
-
-            elif '/RW' in wpt:
-                dest, runway = parse_destination(wpt)
-                data = {'planningstate': 'new', 'TP ETA': wptime, 'runway': runway, 'type': type, 'origin': '', 'LAf': '', 'count': 0}
-            # print(acid,wpt,wptime)
-
-            elif self.firname in wpt:
-                data = {'FIR entry': wptime} #time to fir entry from spawning
-
-            elif 'ALTCROSS CLIMB' in wpt:
-                data = {'SID': wptime}
-
-
-            # data['instruction'] = []
-            if acid not in self.Flights.index:
-                # Adds a new row for acid if it doesn't exist
-                self.Flights.loc[acid] = {'runway': '', 'type': '', 'IAF': '', 'planningstate': '', 'origin': '', 'LAf': '', 'count': 0}
-                self.Flights.loc[acid] = data
-            else:
-                # Updates the existing row for acid
-                for key, value in data.items():
-                    self.Flights.at[acid, key] = value
-
-
-    # new aircraft spawned
-    def create(self, n=1):
-        """ Gets triggered everytime n number of new aircraft are created. """
-        super().create(n)
-
-        # Ensure this runs only in the main node.
-        if traf.traf_parent_id and self.aman_parent_id is None:
-            self.aman_parent_id = traf.traf_parent_id
-            return
-
-        for i in range(n):
-            acid = traf.id[-1 - i]
-            id = len(traf.id) - i
-            if acid in self.not_spawned.keys():
-                for prediction in self.not_spawned[acid]:
-                    wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead, work = prediction
-                    wptime = sim.simt + flighttime
-
-                    if wpt in self.iafs:
-                        data = {'planningstate': 'new', 'TP IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir, 'creation': sim.simt, 'lookahead':abslookahead}
-
-                    elif '/RW' in wpt:
-                        dest, runway = parse_destination(wpt)
-                        data = {'planningstate': 'new', 'TP ETA': wptime, 'runway':runway, 'type': type, 'origin': '', 'LAf': '','count':0, 'Flighttime': flighttime, 'minwork':work}
-
-                    elif self.firname in wpt:
-                        data = {'FIR entry': wptime}
-
-                    elif 'ALTCROSS CLIMB' in wpt:
-                        data = {'SID': wptime}
-
-                    elif 'ALTCROSS DESC' in wpt:
-                        data = {}
-
-                    else:
-                        print('something wrong with waypoints and prediction in aman')
-
-                    # data['instruction'] = []
-                    #add data to dataframe
-                    if acid not in self.Flights.index:
-                        # Adds a new row for acid if it doesn't exist
-                        self.Flights.loc[acid] = {'runway': '', 'type': '', 'IAF': '', 'planningstate': '', 'origin': '', 'LAf': ''}
-                        self.Flights.loc[acid] = data
-
-                    else:
-                        # Updates the existing row for acid
-                        for key, value in data.items():
-                            self.Flights.at[acid, key] = value
 
 
 
@@ -508,51 +373,12 @@ class ArrivalManager(core.Entity):
         self.Flights['ttlg'] = self.Flights['EAT'] - self.Flights['ETO IAF']
         self.Flights['planning'] = self.Flights['EAT'] - self.planninghorizon
 
-    def update_errors(self):
-        # self.Flights['ETA'] = self.Flights['correct_ETA'] + error
-        # self.Flights['totalerror'] = self.Flights['creation'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights['insidefir']
-        # self.Flights['Time error'] =
-        # (SID - FH) * E_DEP
-        #
-        #TODO deze goed checken, met name de signs
-        self.segments()
-        self.Flights['Time error'] = (
-                -self.Flights['t_departure'].fillna(0) * self.Flights['E_dep'].fillna(0) / 100
-                - self.Flights['t_enroute'].fillna(0) * self.Flights['E_enroute'].fillna(0) / 100
-                - self.Flights['t_fir'].fillna(0) * self.Flights['E_fir'].fillna(0) / 100
-                #- self.Flights['E_TO'].fillna(0) * 60
-        )
-        self.Flights['ETO IAF'] = self.Flights['TP IAF'] + self.Flights['Time error']
-        self.Flights['ETA'] = self.Flights['ETO IAF'] + self.Flights['TMA']
 
-        # tdep = self.Flights['']
-        #
-        # self.Flights['Time error'] = -self.Flights['E_TO']*60 + self.Flights['E_dep']
 
     @stack.command
     def printseed(self):
 
         print('seed: ', self.errorgenerator.seed)
-
-    def segments(self):
-        df = self.Flights
-        simt_s = pd.Series(float(sim.simt), index=df.index)
-
-
-        # Extract main timestamps
-        SID, FIR, IAF, TO, Planning = df['SID'], df['FIR entry'], df['TP IAF'], df['creation'], df['planning']
-
-        # Determine actual segment start times
-        start_dep = pd.concat([simt_s, Planning, TO], axis=1).max(axis=1, skipna=True)
-        start_enr = pd.concat([simt_s, Planning, SID], axis=1).max(axis=1, skipna=True)
-        start_fir = pd.concat([simt_s, Planning, FIR], axis=1).max(axis=1, skipna=True)
-        # Compute durations, ensuring non-negative results
-        t_departure = (SID - start_dep).clip(lower=0).where(SID.notna())
-        t_enroute = (FIR - start_enr).clip(lower=0).where(FIR.notna())
-        t_fir = (IAF - start_fir).clip(lower=0).where(IAF.notna())
-
-        df['t_departure'], df['t_enroute'], df['t_fir'] = t_departure, t_enroute, t_fir
-
 
     def color(self, df, rgb):
         if self.aman_parent_id:
@@ -583,70 +409,8 @@ class ArrivalManager(core.Entity):
             self.planninghorizon = self.freezehorizon + 60*1.
 
 
-#--------------------------------------------------------------
-    #exporting functions
 
 
-    @stack.command
-    def usecache_aman(self):
-        if not self.aman_parent_id:
-            cache = self.open_cache()
-            self.not_spawned = cache
-            self.regenerate_errors()
-            print('regenerate errors?')
-            self.predictions_cache = cache
-            self.use_cache = True
-
-
-
-
-    def open_cache(self):
-        try:
-            # Open and load the predictions_cache file
-            with open('predictions_cache.pkl', 'rb') as f:
-                predictions = pickle.load(f)
-            # Open and load the commands file
-        except FileNotFoundError:
-            # If either file is missing, return None for both
-            return None, None
-        return predictions
-
-
-
-
-    def regenerate_errors(self):
-        """
-        Re-run the error generator for all not_spawned predictions
-        to ensure fresh errors instead of cached ones.
-        """
-        updated_not_spawned = defaultdict(list)
-
-        for acid, predictions in self.not_spawned.items():
-            for (wpt, wptime, flighttime, estimatedcreatetime,
-                 wptpredutc, parent_id, type, origin, work) in predictions:
-                #note that the errors are not stored in the previous predictions, these are stored in the TP, which does not include errors
-
-                if wpt in self.iafs:
-                # compute lookahead in minutes
-                    lookahead = round(int(self.freezehorizon - flighttime) / 60)
-                    abslookahead = lookahead
-                    if lookahead < 0:
-                        lookahead = 0
-
-                    # always regenerate fresh errors
-                    new_takeoff, new_dep_route, new_enroute, new_fir = \
-                        self.errorgenerator.return_sample(acid, origin, lookahead=lookahead)
-                    if float(new_takeoff) != 0.0:
-                        self.shiftflight.shift(acid, new_takeoff * 60)
-                else:
-                    new_takeoff, new_dep_route, new_enroute, new_fir, abslookahead = 0,0,0,0,0
-                updated_not_spawned[acid].append(
-                    (wpt, wptime, flighttime, estimatedcreatetime,
-                     wptpredutc, parent_id, type, origin,
-                     new_takeoff, new_dep_route, new_enroute, new_fir, abslookahead, work)
-                )
-
-        self.not_spawned = updated_not_spawned
 
 
 
@@ -701,25 +465,6 @@ class ArrivalManager(core.Entity):
         for acid in selected_flights:
             spd_cmd = random.randint(150, 350)
             stack.stack(f"SPD {acid} {spd_cmd}")
-
-
-def parse_destination(wpt_name):
-    try:
-        # Create an instance of WptArg parser
-        parser = stack.argparser.WptArg()
-
-        # Parse the command string
-        argstring = wpt_name + ", more arguments if any"
-        parsed_name, remaining_string = parser.parse(argstring)
-
-        # Check if the parsed name is a runway (look for the '/' pattern in parsed_name followed by "RW")
-        if '/RW' in parsed_name:
-            airport, runway = parsed_name.split('/')
-            return airport, runway  # Return the airport and runway
-        else:
-            return wpt_name, None  # Return None if it's not a runway
-    except ValueError:
-        return None, None  # Return None if an error occurs, indicating not a valid waypoint or runway
 
 
         # #todo list
