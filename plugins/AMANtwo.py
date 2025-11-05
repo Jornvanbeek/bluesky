@@ -6,23 +6,23 @@ air traffic every 5 seconds around designated areas around airports based on ETA
 
 # from setuptools.dist import sequence
 
-from bluesky import core, stack, traf, network, sim
+from bluesky import core, stack, traf, sim
 
 from collections import defaultdict
 from plugins.LIV_separation import LivSeparation
 from plugins.errorgenerator import ErrorGenerator
 from plugins.shiftflight import shiftflight
-import plugins.aman_settings as settings
+import plugins.amanhelpers.aman_settings as settings
 import pandas as pd
 import numpy as np
 import random
-import pickle
 import time
 from bluesky.tools.aero import ft
 
 # voeg toe bij de imports bovenaan
-from plugins.amanpredictionhandler import PredictionHandler, parse_destination
-from plugins.errorhandler import ErrorHandler
+from plugins.amanhelpers.amanpredictionhandler import PredictionHandler
+from plugins.amanhelpers.errorhandler import ErrorHandler
+from plugins.amanhelpers.amanexport import AmanExporter
 
 
 #from bluesky.ui.palette import initialized
@@ -44,7 +44,7 @@ def init_plugin():
 
 
 
-class ArrivalManager(PredictionHandler, ErrorHandler, core.Entity):
+class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
     """
     Manages arrival logic for the Arrival Manager, assigning arrival slots
     based on the estimated time of arrival at the destination waypoint.

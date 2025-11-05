@@ -7,39 +7,17 @@ import numpy as np
 
 from datetime import timedelta
 
-def init_plugin():
-    config = {
-        'plugin_name': 'amanexport',
-        'plugin_type': 'sim'
-    }
-    # Create an instance of the class below so BlueSky recognizes it as a plugin
-    atc_plugin = exporter()
-    return config
 
-class exporter(core.Entity):
-    def __init__(self):
-        super().__init__()
-
-        self.aman = plugin.Plugin.plugins['AMANTWO'].imp.AMAN
-
-        # self.aman_parent_id = self.aman.aman_parent_id
-        self.starttime = self.aman.starttime
-
-    def reset(self):
-        super().reset()
-        self.aman = plugin.Plugin.plugins['AMANTWO'].imp.AMAN
-
-        # self.aman_parent_id = self.aman.aman_parent_id
-        self.starttime = self.aman.starttime
+class AmanExporter():
 
     @stack.command
     def totwohtml(self):
 
-        if self.aman.aman_parent_id:
+        if self.aman_parent_id:
             return
 
         # Split Flights into two subsets based on runway
-        Flights_hhmmss = self.aman.Flights.copy()
+        Flights_hhmmss = self.Flights.copy()
         Flights_hhmmss.rename(columns={'runway': 'rwy'}, inplace=True)
         # Flights_hhmmss.rename(columns={'TMA flighttime': 'TMA'}, inplace=True)
         if 'rwy' in Flights_hhmmss.columns:
@@ -134,7 +112,7 @@ class exporter(core.Entity):
 
     @core.timed_function(dt=10)
     def autohtmlflights(self):
-        if self.aman.aman_parent_id:
+        if self.aman_parent_id:
             return
         if not sim.ffmode:
             # self.htmlflights()
@@ -144,7 +122,7 @@ class exporter(core.Entity):
     def autohtmlflightsff(self):
         # self.time = time.time()
         # if self.previoustime - self.time < 60:
-        if self.aman.aman_parent_id:
+        if self.aman_parent_id:
             return
         if sim.ffmode and traf.ntraf > 0:
             # self.htmlflights()
@@ -154,40 +132,40 @@ class exporter(core.Entity):
 
     @stack.command
     def storeflights(self):
-        if self.aman.aman_parent_id:
+        if self.aman_parent_id:
             return
-        if traf.traf_parent_id and self.aman.aman_parent_id is None:
+        if traf.traf_parent_id and self.aman_parent_id is None:
             self.aman_parent_id = traf.traf_parent_id
             return
         self.printflights()
         self.pickleflights()
-        self.aman.Flights.to_csv('dataframe.txt', sep=',', index=True)
+        self.Flights.to_csv('dataframe.txt', sep=',', index=True)
 
     @stack.command
     def pickleflights(self):
-        if self.aman.aman_parent_id:
+        if self.aman_parent_id:
             return
         scen = stack.get_scenname()
-        self.aman.Flights.to_pickle(f'AMAN_DF/flights_{scen}.pkl')
+        self.Flights.to_pickle(f'AMAN_DF/flights_{scen}.pkl')
         # Flights = pd.read_pickle('flights.pkl')
 
 
     @stack.command
     def printflights(self, key=None):
-        if self.aman.aman_parent_id:
+        if self.aman_parent_id:
             return
         if key is None:
             # Print the entire DataFrame
-            print(self.aman.Flights)
+            print(self.Flights)
         else:
             # Check if the key is a valid column in the DataFrame
-            if key in self.aman.Flights.columns:
-                print(self.aman.Flights[key])
+            if key in self.Flights.columns:
+                print(self.Flights[key])
 
 
 
     def results(self):
-        df = self.aman.Flights
+        df = self.Flights
         if df is None or df.empty:
             return {'n_acids': 0}
 
