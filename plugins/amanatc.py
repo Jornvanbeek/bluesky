@@ -538,33 +538,33 @@ class ATC(core.Entity):
         #     self.aman.Flights.at[acid, 'tp_time'] = [sim.simt]
 
 
-    @stack.command
-    def miles(self,acid):
-        acrte = Route._routes[acid]
-        idx = traf.id2idx(acid)
-
-        wpdirfrom = []
-        wpdistto = []
-
-        qdr, dist = kwikqdrdist(traf.lat[idx], traf.lon[idx],
-                                acrte.wplat[acrte.iactwp], acrte.wplon[acrte.iactwp])
-
-        wpdirfrom.append(qdr)  # [deg]
-        wpdistto.append(dist)  # [nm]  distto is in nautical miles
-
-        for i in range(acrte.iactwp, len(acrte.wpname) - 1):
-            qdr,dist = kwikqdrdist(acrte.wplat[i]  ,acrte.wplon[i],
-                                acrte.wplat[i+1],acrte.wplon[i+1])
-            wpdirfrom.append(qdr)    # [deg]
-            wpdistto.append(dist) #[nm]  distto is in nautical miles
-            # print(acrte.wpname[i])
-            if acrte.wpname[i+1] == self.aman.Flights.loc[acid, 'IAF']:
-                direct_qdr, direct_dist = kwikqdrdist(traf.lat[idx], traf.lon[idx],
-                                        acrte.wplat[i+1], acrte.wplon[i+1])
-
-                break
-        trackmiles = sum(wpdistto)
-        # print(trackmiles, direct_qdr, direct_dist)
+    # @stack.command
+    # def miles(self,acid):
+    #     acrte = Route._routes[acid]
+    #     idx = traf.id2idx(acid)
+    #
+    #     wpdirfrom = []
+    #     wpdistto = []
+    #
+    #     qdr, dist = kwikqdrdist(traf.lat[idx], traf.lon[idx],
+    #                             acrte.wplat[acrte.iactwp], acrte.wplon[acrte.iactwp])
+    #
+    #     wpdirfrom.append(qdr)  # [deg]
+    #     wpdistto.append(dist)  # [nm]  distto is in nautical miles
+    #
+    #     for i in range(acrte.iactwp, len(acrte.wpname) - 1):
+    #         qdr,dist = kwikqdrdist(acrte.wplat[i]  ,acrte.wplon[i],
+    #                             acrte.wplat[i+1],acrte.wplon[i+1])
+    #         wpdirfrom.append(qdr)    # [deg]
+    #         wpdistto.append(dist) #[nm]  distto is in nautical miles
+    #         # print(acrte.wpname[i])
+    #         if acrte.wpname[i+1] == self.aman.Flights.loc[acid, 'IAF']:
+    #             direct_qdr, direct_dist = kwikqdrdist(traf.lat[idx], traf.lon[idx],
+    #                                     acrte.wplat[i+1], acrte.wplon[i+1])
+    #
+    #             break
+    #     trackmiles = sum(wpdistto)
+    #     # print(trackmiles, direct_qdr, direct_dist)
 
     @stack.command
     def printroute(self, acid, attrib):
@@ -631,66 +631,66 @@ class ATC(core.Entity):
         return (X ** 2 - C ** 2) / denom
 
 
-    @stack.command
-    def set_speed(self, acid, mcruise=None, cascruise=None, mdescent=None, casdesc=None, mclimb=None, casclimb=None,
-                  max_casdesc=None):
-        if casdesc is None:
-            casdesc = 250. # clear basic number to figure out that this is standard
-        max_casdesc = round(float(casdesc) + self.aman.max_speedup)
-        min_casdesc = round(float(casdesc) - self.aman.max_slowdown)
-        self.aman.Flights.at[acid, 'casdesc'] = float(casdesc)
-        self.aman.Flights.at[acid, 'max_casdesc'] = max_casdesc
-        self.aman.Flights.at[acid, 'min_casdesc'] = min_casdesc
+    # @stack.command
+    # def set_speed(self, acid, mcruise=None, cascruise=None, mdescent=None, casdesc=None, mclimb=None, casclimb=None,
+    #               max_casdesc=None):
+    #     if casdesc is None:
+    #         casdesc = 250. # clear basic number to figure out that this is standard
+    #     max_casdesc = round(float(casdesc) + self.aman.max_speedup)
+    #     min_casdesc = round(float(casdesc) - self.aman.max_slowdown)
+    #     self.aman.Flights.at[acid, 'casdesc'] = float(casdesc)
+    #     self.aman.Flights.at[acid, 'max_casdesc'] = max_casdesc
+    #     self.aman.Flights.at[acid, 'min_casdesc'] = min_casdesc
 
 
-
-
-    @stack.command
-    def holdingpattern(self, acid, direction="R"):
-        """
-        Holding pattern voor exact ttlg seconden op het opgegeven iaf-fix.
-        """
-        iaf =self.aman.Flights.loc[acid, 'IAF']
-
-        ttlg = self.aman.Flights.loc[acid, 'ttlg']
-        to_eto = self.aman.Flights.loc[acid, 'ETO IAF'] - sim.simt
-        acid = acid.upper()
-        iaf = iaf.upper()
-        ttlg = float(ttlg)
-        if to_eto:
-            to_eto = float(to_eto) - 30 # to be able to do the holding properly before reaching the IAF
-        else:
-            to_eto = 0.0
-        turn_time = 60.0
-        total_turn_time = 2 * turn_time
-
-        # Compute current selected heading and add 180° for relative turn
-        idx = traf.id2idx(acid)
-        current_hdg = traf.hdg[idx]
-        # Determine turn direction: right (R) or left (L)
-        turn_sign = 1 if direction.upper() == "R" else -1
-        turn_angle = 90.0 * turn_sign
-        # Initial 90° turn to start hold
-        first_hdg = (current_hdg + turn_angle) % 360.0
-
-        stack.stack(f"DELAY {to_eto} BANK {acid} 40")
-        stack.stack(f"DELAY {to_eto} HDG {acid} {first_hdg:.1f}")
-        # Complete racetrack: 180° back inbound
-        second_hdg = (first_hdg + turn_angle) % 360.0
-        stack.stack(f"DELAY {to_eto + 15} HDG {acid} {second_hdg:.1f}")
-        # Final 90° turn before direct to IAF
-        direct_turn_hdg = (second_hdg + turn_angle) % 360.0
-
-        stack.stack(f"DELAY {to_eto + 0.5 * ttlg} HDG {acid} {direct_turn_hdg:.1f}")
-        stack.stack(f"DELAY {to_eto + 0.5 * ttlg} DIRECT {acid} {iaf}")
-
-        stack.stack(f"DELAY {to_eto + 0.5 * ttlg + 90} BANK {acid} 25")
-
-        # self.storeinstruction(acid, "hold")
-
-
-
-        self.aman.Flights.at[acid, 'count'] += 1
+    #
+    #
+    # @stack.command
+    # def holdingpattern(self, acid, direction="R"):
+    #     """
+    #     Holding pattern voor exact ttlg seconden op het opgegeven iaf-fix.
+    #     """
+    #     iaf =self.aman.Flights.loc[acid, 'IAF']
+    #
+    #     ttlg = self.aman.Flights.loc[acid, 'ttlg']
+    #     to_eto = self.aman.Flights.loc[acid, 'ETO IAF'] - sim.simt
+    #     acid = acid.upper()
+    #     iaf = iaf.upper()
+    #     ttlg = float(ttlg)
+    #     if to_eto:
+    #         to_eto = float(to_eto) - 30 # to be able to do the holding properly before reaching the IAF
+    #     else:
+    #         to_eto = 0.0
+    #     turn_time = 60.0
+    #     total_turn_time = 2 * turn_time
+    #
+    #     # Compute current selected heading and add 180° for relative turn
+    #     idx = traf.id2idx(acid)
+    #     current_hdg = traf.hdg[idx]
+    #     # Determine turn direction: right (R) or left (L)
+    #     turn_sign = 1 if direction.upper() == "R" else -1
+    #     turn_angle = 90.0 * turn_sign
+    #     # Initial 90° turn to start hold
+    #     first_hdg = (current_hdg + turn_angle) % 360.0
+    #
+    #     stack.stack(f"DELAY {to_eto} BANK {acid} 40")
+    #     stack.stack(f"DELAY {to_eto} HDG {acid} {first_hdg:.1f}")
+    #     # Complete racetrack: 180° back inbound
+    #     second_hdg = (first_hdg + turn_angle) % 360.0
+    #     stack.stack(f"DELAY {to_eto + 15} HDG {acid} {second_hdg:.1f}")
+    #     # Final 90° turn before direct to IAF
+    #     direct_turn_hdg = (second_hdg + turn_angle) % 360.0
+    #
+    #     stack.stack(f"DELAY {to_eto + 0.5 * ttlg} HDG {acid} {direct_turn_hdg:.1f}")
+    #     stack.stack(f"DELAY {to_eto + 0.5 * ttlg} DIRECT {acid} {iaf}")
+    #
+    #     stack.stack(f"DELAY {to_eto + 0.5 * ttlg + 90} BANK {acid} 25")
+    #
+    #     # self.storeinstruction(acid, "hold")
+    #
+    #
+    #
+    #     self.aman.Flights.at[acid, 'count'] += 1
 
 
     def add_instruction(self, acid, instruction, name):

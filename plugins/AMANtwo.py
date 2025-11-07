@@ -441,30 +441,6 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
     def startinstruct(self):
         self.instruct = True
 
-    @stack.command
-    def randomspeedinstruction(self, n, group='preplanned', seed=np.random.get_state()[1][0]):
-        """
-        Randomly selects 'n' aircraft from the specified 'group' (default 'preplanned')
-        and issues a random speed (between 150 and 350) instruction to each.
-        Uses a fixed random seed to ensure reproducibility.
-        """
-        # Set the seed for reproducible "random" results
-        random.seed(seed)
-
-        # Filter flights by planningstate (group), e.g. 'preplanned'
-        eligible_flights = self.Flights[self.Flights['planningstate'] == group].index.tolist()
-
-        # Clamp n if it’s greater than the number of eligible flights
-        n = min(int(n), len(eligible_flights))
-
-        # Randomly pick n flights
-        selected_flights = random.sample(eligible_flights, n)
-        print(selected_flights)
-
-        # For each flight, create a random speed between 150 and 350, then send it
-        for acid in selected_flights:
-            spd_cmd = random.randint(150, 350)
-            stack.stack(f"SPD {acid} {spd_cmd}")
 
 
         # #todo list
