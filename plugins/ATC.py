@@ -79,16 +79,55 @@ class ATC(core.Entity):
         self.aman.Flights['holding'] = None
         self.aman.Flights['earliest'] = False
         self.instructionlist = {}
-        self.instructions = []
-
-
-    def instruct(self, acid, ttlg):
+        columns = ['acid', 'speed', 'dogleg', 'holding', '']
+        self.instructions = pd.DataFrame()
 
 
 
+    @stack.command
+    def instruct_frozen(self):
+        frozen_flights = self.aman.Flights[self.aman.Flights['planningstate'] == 'frozen']
+        if self.aman.instruct:
+            self.instructions = []
+            if len(frozen_flights) > 0:
+                if sim.state != HOLD:
+                    self.rtf = sim.dtmult
+                    self.ff = sim.ffmode
+
+                sim.hold()
+                # while True:
+                self.aman.update_times()
+
+                delay = frozen_flights[frozen_flights['ttlg'] > self.aman.late_approach_margin]
+                shorten = frozen_flights[frozen_flights['ttlg'] < self.aman.early_approach_margin]
+                delay = delay.dropna(subset=['ttlg'])
+                shorten = shorten.dropna(subset=['ttlg'])
+
+                for acid, row in delay.iterrows():
+                    self.delay(acid, float(row['ttlg']))
+
+                for acid, row in shorten.iterrows():
+                    self.shorten(acid, float(row['ttlg']))
+
+                #TODO
+                # evt small instructions
+                # update TP
+
+    def delay(self, acid, ttlg):
         instructed = 'delay' + speed/dogleg/mach/holding
-        or = 'shorten' + direct/speed
+        self.aman.Flights.at[acid, state] = instructed
 
+    def shorten(self, acid, ttlg):
+
+        'shorten' + direct / speed
+        self.aman.Flights.at[acid, state] = instructed
 
     def on_prediction_received(self):
         if self.aman.Flights[acid, state] == instructed
+            process prediction
+            calculate ttlg
+            calculate effective delay/speed up
+            ttlg still too large? onto the next option
+            ttlg too small now? reduce last option
+
+    def further_instruction(self, acid, ttlg):
