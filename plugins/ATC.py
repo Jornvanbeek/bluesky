@@ -110,17 +110,17 @@ class ATC(core.Entity):
 
                     sim.hold()
 
-                for acid, row in instruct.iterrows():
-                    self.determine_scenario(acid, float(row['ttlg']))
+                    for acid, row in instruct.iterrows():
+                        self.determine_scenario(acid, float(row['ttlg']))
 
 
-                if len(self.active_instructions) == 0:
-                    if self.ff:
-                        sim.fastforward()
-                    elif self.rtf > 1.:
-                        sim.dtmult(self.rtf)
-                    elif not self.ff and self.rtf <= 1.:
-                        sim.op()
+                    if len(self.active_instructions) == 0:
+                        if self.ff:
+                            sim.fastforward()
+                        elif self.rtf > 1.:
+                            sim.dtmult(self.rtf)
+                        elif not self.ff and self.rtf <= 1.:
+                            sim.op()
 
                 #TODO
                 # evt small instructions
@@ -148,10 +148,12 @@ class ATC(core.Entity):
                 elif abs(maxspd - selspd) > 1:
                     self.speed(acid, ttlg)
                 else:
-                    self.aman.replan(acid)
+                    ETA = self.reset_ETA(acid)
+                    self.aman.replan_late(acid, ETA=ETA)
+                    print(f'replanning {acid}')
 
             #scenario 3: delay
-            elif self.aman.early_approach_margin:
+            elif ttlg > self.aman.early_approach_margin:
                 if abs(minspd - selspd) > 1:
                     self.speed(acid, ttlg)
                 elif to_iaf > self.aman.nearby_threshold: # and ttlg < max dogleg?
@@ -198,32 +200,35 @@ class ATC(core.Entity):
 
 
 
-
-
+    def reset_ETA(self, acid):
+        ETA_reset = self.aman.Flights.loc[acid, 'ETO_original'] + self.aman.Flights.loc[acid, 'TMA'] + self.aman.Flights.loc[acid, 'Time error']
+        # self.aman.FLights.at[acid, 'ETA_reset'] = ETA_reset
+        return ETA_reset
 
     @network.subscriber(topic='PREDICTION')  # , to_group=GROUPID_SIM)
     def on_prediction_received(self, acid, wpt, wptime, flighttime, wptpredutc, parent_id, type, origin, work):
         if acid in self.aman.Flights.index:
             idxac = traf.id2idx(acid)
-            wptime = traf.ap.route[idxac].createtime + flighttime
-            previous_wptime = self.aman.Flights.loc[acid]['TP IAF']
+            if idxac != -1 and acid in self.active_instructions:
+                wptime = traf.ap.route[idxac].createtime + flighttime
+                previous_wptime = self.aman.Flights.loc[acid]['TP IAF']
 
-            if wpt in self.aman.iafs:
+                if wpt in self.aman.iafs:
 
-                TMA = self.aman.Flights.loc[acid, 'TMA']
-                # 'TP ETA': wptime + TMA
-                data = {'TP IAF': wptime, 'IAF': wpt, 'TPstate': 'updated',
-                        'ttlg': self.aman.Flights.loc[acid, 'EAT'] - wptime, 'TP ETA': wptime + TMA}
+                    TMA = self.aman.Flights.loc[acid, 'TMA']
+                    # 'TP ETA': wptime + TMA
+                    data = {'TP IAF': wptime, 'IAF': wpt, 'TPstate': 'updated',
+                            'ttlg': self.aman.Flights.loc[acid, 'EAT'] - wptime, 'TP ETA': wptime + TMA}
 
-                for key, value in data.items():
-                    self.aman.Flights.at[acid, key] = value
+                    for key, value in data.items():
+                        self.aman.Flights.at[acid, key] = value
 
-                self.aman.update_times()
+                    self.aman.update_times()
 
-                ttlg = self.aman.Flights.loc[acid, 'ttlg']
-                # todo check if aircraft needs new instruction
-                self.check_tp_update(acid, ttlg)
-                print(f'received tp update{acid}')
+                    ttlg = self.aman.Flights.loc[acid, 'ttlg']
+                    # todo check if aircraft needs new instruction
+                    self.check_tp_update(acid, ttlg)
+                    print(f'received tp update{acid}')
 
 
     def check_tp_update(self, acid, ttlg):
@@ -239,7 +244,7 @@ class ATC(core.Entity):
                 self.dogleg(acid, ttlg)
             elif 'mach' in itype:
                 self.instruction_correct(acid)
-                self.scenario(acid, ttlg)
+                self.determine_scenario(acid, ttlg)
 
         elif 'short' in itype and ttlg > self.aman.instruction_margin: # short instructed, but too much. keep same type of instruction
             ttlg = 0.9 * ttlg # to make sure it converges
@@ -249,12 +254,12 @@ class ATC(core.Entity):
                 self.speed(acid, ttlg)
             elif 'mach' in itype:
                 self.instruction_correct(acid)
-                self.scenario(acid, ttlg)
+                self.determine_scenario(acid, ttlg)
 
         else:
             print(f'instruction correct {acid}')
             self.instruction_correct(acid)
-            self.scenario(acid, ttlg)
+            self.determine_scenario(acid, ttlg)
 
             print(f'completed {acid}')
 
@@ -287,7 +292,7 @@ class ATC(core.Entity):
         trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
 
         reqdist = self.reqdist(acid, ttlg, trackmiles)
-        if (direct_dist - reqdist) < 1:
+        if abs(direct_dist - reqdist) < 1:
             self.directiaf(acid)
         else:
             self.replacewaypoint(acid, direct_dist, reqdist, trackmiles, direct_qdr)
@@ -373,11 +378,8 @@ class ATC(core.Entity):
         reqdist = float(reqdist)
         trackmiles = float(trackmiles)
         direct_qdr = float(direct_qdr)
-
         acrte = Route._routes[acid]
-
         idx = traf.id2idx(acid)
-
         # iaf = self.findiaf(acid)
         iaf = self.aman.Flights.loc[acid, 'IAF']
 
@@ -385,7 +387,7 @@ class ATC(core.Entity):
         hypothenuse = (reqdist ** 2 + direct_dist ** 2) / (2 * reqdist)
         opposing = reqdist - hypothenuse
         if opposing < 0:
-            print('wrong replacewaypoint')
+            print(f'wrong replacewaypoint {acid}, {opposing}, {reqdist}, {direct_dist}, {trackmiles}')
             return
         alpha = math.degrees(math.atan2(opposing, direct_dist))
 
@@ -424,7 +426,7 @@ class ATC(core.Entity):
 
         disttonewwp = kwikdist(latac, lonac, lat, lon)
 
-        if abs(reqdist - (disttoiaf + disttonewwp)) > 1:
+        if abs(reqdist - (disttoiaf + disttonewwp)) > 5:
             print('replacewaypoint incorrect: ', reqdist, disttoiaf, disttonewwp, lat, lon)
 
 

@@ -32,11 +32,38 @@ class PredictionHandler:
                 takeoff, dep_route, enroute, fir = self.errorgenerator.return_sample(acid, origin, lookahead=lookahead)
                 if float(takeoff) != 0.0:
                     self.shiftflight.shift(acid, takeoff * 60)
+                    #POPUP CODE
+
+                    data = {'planningstate': 'ground', 'TP IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir, 'creation': sim.simt, 'lookahead':abslookahead}
+                    self.Flights.loc[acid] = data
+
+            elif acid in self.Flights.index:
+                if '/RW' in wpt:
+                    dest, runway = parse_destination(wpt)
+                    data = {'planningstate': 'ground', 'TP ETA': wptime, 'runway':runway, 'type': type, 'origin': '', 'LAf': '','count':0, 'Flighttime': flighttime, 'minwork':work}
+
+                elif self.firname in wpt:
+                    data = {'FIR entry': wptime}
+
+                elif 'ALTCROSS CLIMB' in wpt:
+                    data = {'SID': wptime}
+
+                elif 'ALTCROSS DESC' in wpt:
+                    data = {}
+
+                else:
+                    print('something wrong with waypoints and prediction in aman')
+
+
+                # Updates the existing row for acid
+                for key, value in data.items():
+                    self.Flights.at[acid, key] = value
+
+                takeoff, dep_route, enroute, fir, abslookahead = 0, 0, 0, 0, 0  # to be disregarded later
             else:
                 takeoff, dep_route, enroute, fir, abslookahead = 0,0,0,0,0# to be disregarded later
             self.not_spawned[acid].append((wpt, wptime,flighttime,estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead, work))
-            # dest, runway = parse_destination(wpt)
-            # self.Flights.loc[acid] = {'planningstate': 'ground', 'TP ETA': wptime, 'runway': runway, 'type': type}
+
             # the above is future code for popups?
 
         elif acid in self.Flights.index:
@@ -82,11 +109,11 @@ class PredictionHandler:
 
 
             if wpt in self.iafs:
-                data = {'planningstate': 'new', 'TP IAF': wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count': 0}
+                data = {'planningstate': 'new', 'TP IAF': wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count': 0, 'swaps':0}
 
             elif '/RW' in wpt:
                 dest, runway = parse_destination(wpt)
-                data = {'planningstate': 'new', 'TP ETA': wptime, 'runway': runway, 'type': type, 'origin': '', 'LAf': '', 'count': 0}
+                data = {'planningstate': 'new', 'TP ETA': wptime, 'runway': runway, 'type': type, 'origin': '', 'LAf': '', 'count': 0, 'swaps':0}
             # print(acid,wpt,wptime)
 
             elif self.firname in wpt:
@@ -115,6 +142,8 @@ class PredictionHandler:
         # Ensure this runs only in the main node.
         if traf.traf_parent_id and self.aman_parent_id is None:
             self.aman_parent_id = traf.traf_parent_id
+            return
+        if self.aman_parent_id:
             return
 
         for i in range(n):
@@ -155,7 +184,8 @@ class PredictionHandler:
                         # Updates the existing row for acid
                         for key, value in data.items():
                             self.Flights.at[acid, key] = value
-
+            else:
+                print('popup created, should manage dataframe entry')
 
     @stack.command
     def usecache_aman(self):

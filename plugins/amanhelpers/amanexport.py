@@ -34,7 +34,7 @@ class AmanExporter():
                 )
 
         # Transform specified columns to HH:MM:SS
-        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'EAT', 'slot', 'LAS', 'FIR entry',
+        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'EAT', 'slot','initialslot', 'LAS', 'FIR entry',
                                 'creation', 'SID', 'planning']
         for col in columns_to_transform:
             if col in Flights_hhmmss.columns:
