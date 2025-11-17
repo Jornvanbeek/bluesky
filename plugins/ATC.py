@@ -100,7 +100,11 @@ class ATC(core.Entity):
                 # instructie-criteria: delay OF shorten
                 delay = frozen_flights['ttlg'] > self.aman.early_approach_margin
                 shorten = frozen_flights['ttlg'] < -self.aman.late_approach_margin
-                instruct = frozen_flights[delay | shorten]
+
+                # exclude aircraft that already have an active instruction/prediction update pending
+                has_active_instr = frozen_flights.index.isin(self.active_instructions.keys())
+
+                instruct = frozen_flights[(delay | shorten) & ~has_active_instr]
 
                 if len(instruct) >0:
                     print('instruct: ', instruct)
@@ -136,9 +140,9 @@ class ATC(core.Entity):
         minspd = self.aman.Flights.loc[acid]['min_casdesc']
         alt = traf.alt[idx]/ft
         to_iaf = self.aman.Flights.loc[acid, 'ETO IAF'] - sim.simt
-
+        vs = traf.vs[idx]
         #standard scenarios
-        if alt < self.handover_alt:
+        if alt < self.handover_alt and vs < 0.5:
 
             # scenario 2: speedup
             if ttlg <= -self.aman.late_approach_margin:
@@ -292,7 +296,7 @@ class ATC(core.Entity):
         trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
 
         reqdist = self.reqdist(acid, ttlg, trackmiles)
-        if abs(direct_dist - reqdist) < 1:
+        if reqdist - direct_dist < 1:
             self.directiaf(acid)
         else:
             self.replacewaypoint(acid, direct_dist, reqdist, trackmiles, direct_qdr)
@@ -519,6 +523,16 @@ class ATC(core.Entity):
 
 
 
+    @stack.command
+    def set_speed(self, acid, mcruise=None, cascruise=None, mdescent=None, casdesc=None, mclimb=None, casclimb=None,
+                  max_casdesc=None):
 
+        if casdesc is None:
+            casdesc = 250. # clear basic number to figure out that this is standard
+        max_casdesc = round(float(casdesc) + self.aman.max_speedup)
+        min_casdesc = round(float(casdesc) - self.aman.max_slowdown)
+        self.aman.Flights.at[acid, 'casdesc'] = float(casdesc)
+        self.aman.Flights.at[acid, 'max_casdesc'] = max_casdesc
+        self.aman.Flights.at[acid, 'min_casdesc'] = min_casdesc
 
 

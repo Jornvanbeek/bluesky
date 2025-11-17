@@ -170,7 +170,7 @@ class Predictor(core.Entity):
         traf.traf_parent_id = None
         self.departure_route_alt = 'FL200'
         # self.incorrect_predictions = ['AIA6768', 'KLM76QSH', 'EZY91XM']
-        self.incorrect_predictions = []#['KLM1830', 'KAC127SH','THY8ZXSH']
+        self.incorrect_predictions = []#['KLM590SH', 'KLM950SH']
         # Change the route class implementation for the child node using PredictorNodeRoute class.
         stack.stack('IMPLEMENTATION Route Route')
 
@@ -507,6 +507,11 @@ class Predictor(core.Entity):
         for key,value in actwp_info.items():
             getattr(traf.actwp, key)[idxac] = value
 
+    @stack.command
+    def selspd(self,acid):
+        idxac = traf.id2idx(acid)
+        selspd = traf.selspd[idxac]/kts
+        print(selspd)
 
     # @predictor.subcommand
     # def update_throughstack(self,acid):
