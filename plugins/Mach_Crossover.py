@@ -109,7 +109,7 @@ class MachCrossoverPlugin(core.Entity):
         self.standard_max_casdesc = float(standard_max_casdesc) * kts
 
     @stack.command
-    def set_speed(self, acid, mcruise=None,cascruise=None, mdescent=None, casdesc=None, mclimb=None, casclimb=None, max_casdesc=None):
+    def flight_speeds(self, acid, mcruise=None,cascruise=None, mdescent=None, casdesc=None, mclimb=None, casclimb=None, max_casdesc=None):
 
         acid = acid.upper()
 
@@ -135,6 +135,7 @@ class MachCrossoverPlugin(core.Entity):
 
         if max_casdesc is not None:
             self.max_casdesc[idx] = float(max_casdesc)*kts
+
 
 
 

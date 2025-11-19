@@ -2,6 +2,8 @@
 from textwrap import shorten
 
 from PIL.ImageChops import difference
+from casadi.tools.structure3 import correct_vector_indexing
+from jedi.debug import speed
 from scipy.optimize import direct
 
 from bluesky import core, stack, traf, sim, HOLD, network
@@ -18,6 +20,7 @@ from bluesky.traffic.route import Route
 import math
 
 from plugins.amanhelpers.aman_settings import instruct
+# from plugins.scenario_generator import scenario
 
 
 def init_plugin():
@@ -38,12 +41,17 @@ class ATC(core.Entity):
         self.predictor = plugin.Plugin.plugins['NEWTP'].imp.predictor
         self.mach_threshold = 0
         self.handover_alt = 260.*100 # moet naar amansettings
+        self.max_dogleg_ratio = 1.8
         self.aman.Flights['instruction'] = None
         self.aman.Flights['TPstate'] = ' '
         self.aman.Flights['count'] = 0
         self.aman.Flights['count'] = self.aman.Flights['count'].astype(int)
+        self.aman.Flights['updates'] = 0
+        self.aman.Flights['updates'] = self.aman.Flights['updates'].astype(int)
         self.aman.Flights['instruction'] = self.aman.Flights['instruction'].astype(object)
         self.aman.Flights['TPstate'] = self.aman.Flights['TPstate'].astype(object)
+        self.aman.Flights['swaps'] = 0
+        self.aman.Flights['swaps'] = self.aman.Flights['swaps'].astype(int)
 
 
         self.aman.Flights['selspd'] = None
@@ -107,7 +115,7 @@ class ATC(core.Entity):
                 instruct = frozen_flights[(delay | shorten) & ~has_active_instr]
 
                 if len(instruct) >0:
-                    print('instruct: ', instruct)
+                    # print('instruct: ', instruct)
                     if sim.state != HOLD:
                         self.rtf = sim.dtmult
                         self.ff = sim.ffmode
@@ -165,7 +173,7 @@ class ATC(core.Entity):
                 # todo add holding
 
             #scenario 4: adjacent
-        elif ttlg > self.aman.early_adjacent_threshold:
+        elif ttlg > self.aman.early_adjacent_threshold: # delay
             if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
                 self.delay_mach(acid)
             else:
@@ -174,7 +182,7 @@ class ATC(core.Entity):
                 else: # and ttlg < max dogleg?
                     self.dogleg(acid, ttlg)
 
-        elif ttlg <= -self.aman.late_adjacent_threshold:
+        elif ttlg <= -self.aman.late_adjacent_threshold: # speed up
             if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
                 self.dogleg(acid, ttlg)
             else:
@@ -183,24 +191,10 @@ class ATC(core.Entity):
                 else: # and ttlg < max dogleg?
                     self.dogleg(acid, ttlg)
 
+        # else: no update needed
 
 
 
-
-
-
-
-
-    # todo functions:
-    #aman.replan
-    # holding
-
-    #todo functionality
-    # store delay
-    # count count
-    # store count
-    # instruct: with start update
-    # minor
 
 
 
@@ -240,33 +234,70 @@ class ATC(core.Entity):
 
         if 'delay' in itype and ttlg < -self.aman.instruction_margin: # essentially: delay instructed, but it was too much, so now a speed or dogleg must be given that is more correct
             ttlg = 0.9*ttlg # to make sure it converges
-            if 'speed' in itype:
-                # count += -1
+            self.reapply_instruction(self,acid, ttlg, itype)
+
+        elif 'short' in itype and ttlg > self.aman.instruction_margin:  # short instructed, but too much. keep same type of instruction
+            ttlg = 0.9 * ttlg  # to make sure it converges
+            self.reapply_instruction(self, acid, ttlg, itype)
+
+
+        elif 'delay' in itype and ttlg > self.aman.instruction_margin:  # delay given, but not sufficient
+            # try to increase the same type of instruction if there is still room
+            idx = traf.id2idx(acid)
+            selspd = traf.selspd[idx] / kts
+            minspd = self.aman.Flights.loc[acid]['min_casdesc']
+
+            trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
+            dogleg_max = self.max_dogleg_ratio * direct_dist
+
+            if 'speed' in itype and abs(minspd - selspd) > 1:
+                # more speed reduction possible
                 self.speed(acid, ttlg)
-            elif 'dogleg' in itype:
-                # count += -2
+            elif 'dogleg' in itype and trackmiles < dogleg_max:
+                # more dogleg possible within configured ratio
                 self.dogleg(acid, ttlg)
-            elif 'mach' in itype:
+            else:
+                # no additional delay possible with this type: close instruction and re-evaluate scenario
                 self.instruction_correct(acid)
                 self.determine_scenario(acid, ttlg)
 
-        elif 'short' in itype and ttlg > self.aman.instruction_margin: # short instructed, but too much. keep same type of instruction
-            ttlg = 0.9 * ttlg # to make sure it converges
-            if 'dogleg' in itype or 'direct' in itype:
+
+
+        elif 'short' in itype and ttlg < -self.aman.instruction_margin:  # speed-up not sufficient
+            idx = traf.id2idx(acid)
+            selspd = traf.selspd[idx] / kts
+            maxspd = self.aman.Flights.loc[acid]['max_casdesc']
+            trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
+
+            # try another instruction of the same type if possible
+            if 'dogleg' in itype and abs(trackmiles - direct_dist) > 1:
+                # still shortcut distance to gain
                 self.dogleg(acid, ttlg)
-            elif 'speed' in itype:
+            elif 'speed' in itype and abs(maxspd - selspd) > 1:
+                # still margin to increase speed
                 self.speed(acid, ttlg)
-            elif 'mach' in itype:
+            else:
+                # no more room with this type: close instruction and re-evaluate scenario
                 self.instruction_correct(acid)
                 self.determine_scenario(acid, ttlg)
+
+
 
         else:
             print(f'instruction correct {acid}')
             self.instruction_correct(acid)
             self.determine_scenario(acid, ttlg)
-
             print(f'completed {acid}')
 
+    def reapply_instruction(self,acid, ttlg, itype):
+        if 'dogleg' in itype or 'direct' in itype:
+            self.dogleg(acid, ttlg)
+        elif 'speed' in itype:
+            self.speed(acid, ttlg)
+        elif 'mach' in itype:
+            # mach wordt afgesloten en scenario opnieuw bepaald
+            self.instruction_correct(acid)
+            self.determine_scenario(acid, ttlg)
 
     def instruction_correct(self, acid):
         self.active_instructions.pop(acid)
@@ -289,6 +320,10 @@ class ATC(core.Entity):
         stack.forward(f'AT {acid} {iaf} DO DELAY 10 DEL {acid}', target_id=self.predictor.child_id)
         print(f'START UPDATE FOR {acid}')
         print(self.active_instructions)
+
+        if pd.isna(self.aman.Flights.at[acid, 'updates']):
+            self.aman.Flights.at[acid, 'updates'] = 0
+        self.aman.Flights.at[acid,'updates'] += 1
 
     def dogleg(self, acid, ttlg):
         ttlg = float(ttlg)*self.aman.dogleg_multiplyer # make sure it lowballs the instruction for some margin
@@ -395,8 +430,8 @@ class ATC(core.Entity):
             return
         alpha = math.degrees(math.atan2(opposing, direct_dist))
 
-        print(reqdist, direct_dist)
-        print(hypothenuse, opposing, alpha)
+        # print(reqdist, direct_dist)
+        # print(hypothenuse, opposing, alpha)
         lat, lon = qdrpos(traf.lat[idx], traf.lon[idx], direct_qdr + alpha, hypothenuse)
 
         try:
@@ -528,11 +563,11 @@ class ATC(core.Entity):
                   max_casdesc=None):
 
         if casdesc is None:
-            casdesc = 250. # clear basic number to figure out that this is standard
+            casdesc = 250.
         max_casdesc = round(float(casdesc) + self.aman.max_speedup)
         min_casdesc = round(float(casdesc) - self.aman.max_slowdown)
         self.aman.Flights.at[acid, 'casdesc'] = float(casdesc)
         self.aman.Flights.at[acid, 'max_casdesc'] = max_casdesc
         self.aman.Flights.at[acid, 'min_casdesc'] = min_casdesc
-
+        stack.stack(f'FLIGHT_SPEEDS {acid} {mcruise} {cascruise} {mdescent} {casdesc} {mclimb} {casclimb}')
 

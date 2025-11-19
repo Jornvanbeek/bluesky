@@ -68,7 +68,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 setattr(self, k, v)
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'creation', 'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps']
+        columns = ['ACID', 'planningstate', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'updates','Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'E_dep', 'E_enroute', 'E_fir', 'creation', 'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
         self.not_spawned = defaultdict(list)
@@ -78,9 +78,9 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         self.shiftflight = shiftflight()
         self.cntrlz = None          # planning times backup
         self.starttime = time.time()
-        self.Flights['swaps'] = 0
-        self.Flights['swaps'] = self.Flights['swaps'].astype(int)
 
+        # self.Flights['updates'] = 0
+        # self.Flights['updates'] = self.Flights['updates'].astype(int)
 
 
     # update of planningstates, core functionality
@@ -99,7 +99,6 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         # self.tma()
         self.update_times()
         stack.stack('instruct_frozen')
-
 
 
 
