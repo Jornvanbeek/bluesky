@@ -149,12 +149,13 @@ class ATC(core.Entity):
         alt = traf.alt[idx]/ft
         to_iaf = self.aman.Flights.loc[acid, 'ETO IAF'] - sim.simt
         vs = traf.vs[idx]
+        trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
         #standard scenarios
         if alt < self.handover_alt and vs < 0.5:
 
             # scenario 2: speedup
             if ttlg <= -self.aman.late_approach_margin:
-                trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
+
                 if abs(trackmiles - direct_dist) > 1: #essentially direct == False
                     self.dogleg(acid, ttlg)
                 elif abs(maxspd - selspd) > 1:
@@ -168,7 +169,7 @@ class ATC(core.Entity):
             elif ttlg > self.aman.early_approach_margin:
                 if abs(minspd - selspd) > 1:
                     self.speed(acid, ttlg)
-                elif to_iaf > self.aman.nearby_threshold: # and ttlg < max dogleg?
+                elif to_iaf > self.aman.nearby_threshold and direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
                     self.dogleg(acid, ttlg)
                 # todo add holding
 
@@ -179,7 +180,7 @@ class ATC(core.Entity):
             else:
                 if abs(minspd - selspd) > 1:
                     self.speed(acid, ttlg)
-                else: # and ttlg < max dogleg?
+                elif direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
                     self.dogleg(acid, ttlg)
 
         elif ttlg <= -self.aman.late_adjacent_threshold: # speed up
@@ -188,7 +189,7 @@ class ATC(core.Entity):
             else:
                 if abs(minspd - selspd) > 1:
                     self.speed(acid, ttlg)
-                else: # and ttlg < max dogleg?
+                elif direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
                     self.dogleg(acid, ttlg)
 
         # else: no update needed
@@ -248,12 +249,12 @@ class ATC(core.Entity):
             minspd = self.aman.Flights.loc[acid]['min_casdesc']
 
             trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
-            dogleg_max = self.max_dogleg_ratio * direct_dist
+
 
             if 'speed' in itype and abs(minspd - selspd) > 1:
                 # more speed reduction possible
                 self.speed(acid, ttlg)
-            elif 'dogleg' in itype and trackmiles < dogleg_max:
+            elif 'dogleg' in itype and direct_dist*self.max_dogleg_ratio > (trackmiles +1):
                 # more dogleg possible within configured ratio
                 self.dogleg(acid, ttlg)
             else:
@@ -334,8 +335,10 @@ class ATC(core.Entity):
         if reqdist - direct_dist < 1:
             self.directiaf(acid)
         else:
+            if direct_dist*self.max_dogleg_ratio < reqdist:
+                reqdist = direct_dist*self.max_dogleg_ratio
             self.replacewaypoint(acid, direct_dist, reqdist, trackmiles, direct_qdr)
-            self.aman.Flights.loc[acid, 'dogleg'] = True
+            self.aman.Flights.loc[acid, 'dogleg'] = round(reqdist/direct_dist,3)
 
         if ttlg > 0:
             instrtype = 'delay'

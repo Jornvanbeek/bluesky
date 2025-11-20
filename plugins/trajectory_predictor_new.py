@@ -614,6 +614,8 @@ class Predictor(core.Entity):
             stack.stack(f'PCALL {scenario}')
             stack.stack('USECACHE_AMAN')
             stack.stack('FF')
+            stack.forward('DT 3', target_id=self.child_id)
+            stack.forward('ff', target_id=self.child_id)
             self.complete()
 
     # @stack.command
