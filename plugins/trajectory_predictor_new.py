@@ -440,8 +440,15 @@ class Predictor(core.Entity):
             "flag_landed_runway", "wpdirfrom", "wpdirto", "wpdistto", "wpialt",
             "wptoalt", "wpxtoalt", "wptorta", "wpxtorta", 'wptpredutc']
 
-        include_traf = ['type', 'lat', 'lon', 'alt', 'hdg', 'trk', 'vs', 'selspd', 'swlnav',
-         'swvnav', 'swvnavspd', 'cas', 'selalt', 'selvs'] #optionally selspd selalt selvs
+        include_traf = [
+            'type', 'lat', 'lon', 'alt', 'hdg', 'trk', 'vs',
+            'selspd', 'swlnav', 'swvnav', 'swvnavspd',
+            'cas', 'selalt', 'selvs'
+        ]  # optionally selspd selalt selvs
+
+        # Neem user_spdcmd mee als deze bestaat op traf
+        if hasattr(traf, 'user_spdcmd') and 'user_spdcmd' not in include_traf:
+            include_traf.append('user_spdcmd')
 
         include_actwp = [
             "lat", "lon", "nextturnlat", "nextturnlon", "nextturnspd", "nextturnbank",
@@ -462,7 +469,6 @@ class Predictor(core.Entity):
 
         actwp_info = {}
         for name in include_actwp:
-
             arr = getattr(traf.actwp, name)
             item = arr[idxac]
             if isinstance(item, np.generic):
@@ -470,11 +476,12 @@ class Predictor(core.Entity):
             else:
                 actwp_info[name] = item
 
-
-
         # Traffic packing via inclusion list van per-aircraft arrays
         traf_info = {}
         for name in include_traf:
+            # Sla velden over die (nog) niet op traf bestaan
+            if not hasattr(traf, name):
+                continue
 
             arr = getattr(traf, name)
             item = arr[idxac]
@@ -495,16 +502,21 @@ class Predictor(core.Entity):
             stack.forward(f'PRINTPACKER {acid}', self.child_id)
 
 
-    def unpacker(self,info):
+    def unpacker(self, info):
         acid, route_info, actwp_info, traf_info = info
         idxac = traf.id2idx(acid)
         route_obj = traf.ap.route[idxac]
         unpack_attribs(route_obj, route_info)
 
-        for key,value in traf_info.items():
-            getattr(traf, key)[idxac] = value
+        for key, value in traf_info.items():
+            # Sla keys over die niet als attribuut op traf bestaan
+            if not hasattr(traf, key):
+                continue
 
-        for key,value in actwp_info.items():
+            arr = getattr(traf, key)
+            arr[idxac] = value
+
+        for key, value in actwp_info.items():
             getattr(traf.actwp, key)[idxac] = value
 
     @stack.command

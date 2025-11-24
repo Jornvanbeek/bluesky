@@ -137,7 +137,7 @@ class AmanExporter():
         if traf.traf_parent_id and self.aman_parent_id is None:
             self.aman_parent_id = traf.traf_parent_id
             return
-        self.printflights()
+        # self.printflights()
         self.pickleflights()
         self.Flights.to_csv('dataframe.txt', sep=',', index=True)
 

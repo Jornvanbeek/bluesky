@@ -22,7 +22,7 @@ max_speedup = 25  # knots
 max_slowdown = 50  # knots
 abs_minspd = 190  # knots outside of tma
 nearby_threshold = 120  # seconds before iaf, no more instructions possible
-dogleg_multiplyer = 0.9
+dogleg_multiplyer = 0.96
 descent_angle = 3.0  # degrees
 
 

@@ -82,6 +82,9 @@ class MachCrossoverPlugin(core.Entity):
             self.flight_phase = np.array([], dtype=str)
             self.user_spdcmd = np.array([], dtype=bool)
 
+        traf.user_spdcmd = self.user_spdcmd
+
+
         # stack.stack('IMPLEMENTATION POS POSM')
 
     @stack.command
@@ -194,9 +197,17 @@ class MachCrossoverPlugin(core.Entity):
         self.max_alt[-n:] = traf.alt[-n:]
         self.flight_phase[-n:] = 'new'
         self.user_spdcmd[-n:] = False
+        traf.user_spdcmd[-n:] = False
+        traf.user_spdcmd = self.user_spdcmd
         # print("[MachTraffic] create() called for", n, "new aircraft")
 
-
+    @stack.command
+    def printuserspd(self,acid):
+        idx = traf.id2idx(acid)
+        print(traf.user_spdcmd)
+        print(traf.user_spdcmd[idx])
+        traf.user_spd_cmd[idx] = True
+        print(traf.user_spdcmd[idx])
 
     @stack.command
     def printspds(self, acid):

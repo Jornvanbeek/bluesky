@@ -1,10 +1,5 @@
 # amanatc.py
-from textwrap import shorten
 
-from PIL.ImageChops import difference
-from casadi.tools.structure3 import correct_vector_indexing
-from jedi.debug import speed
-from scipy.optimize import direct
 
 from bluesky import core, stack, traf, sim, HOLD, network
 from bluesky import server
@@ -235,11 +230,11 @@ class ATC(core.Entity):
 
         if 'delay' in itype and ttlg < -self.aman.instruction_margin: # essentially: delay instructed, but it was too much, so now a speed or dogleg must be given that is more correct
             ttlg = 0.9*ttlg # to make sure it converges
-            self.reapply_instruction(self,acid, ttlg, itype)
+            self.reapply_instruction(acid, ttlg, itype)
 
         elif 'short' in itype and ttlg > self.aman.instruction_margin:  # short instructed, but too much. keep same type of instruction
             ttlg = 0.9 * ttlg  # to make sure it converges
-            self.reapply_instruction(self, acid, ttlg, itype)
+            self.reapply_instruction( acid, ttlg, itype)
 
 
         elif 'delay' in itype and ttlg > self.aman.instruction_margin:  # delay given, but not sufficient
@@ -326,6 +321,9 @@ class ATC(core.Entity):
             self.aman.Flights.at[acid, 'updates'] = 0
         self.aman.Flights.at[acid,'updates'] += 1
 
+        if self.aman.Flights.at[acid, 'updates'] > 10:
+            self.debug_updates(acid)
+
     def dogleg(self, acid, ttlg):
         ttlg = float(ttlg)*self.aman.dogleg_multiplyer # make sure it lowballs the instruction for some margin
 
@@ -410,7 +408,22 @@ class ATC(core.Entity):
         traf.ap.selspdcmd(idx, speed * kts)
         # self.instructions.append(f'SPEED {acid} {speed}')
 
+    @stack.command
+    def testselspd(self, acid, speed):
+        speed = float(speed)
+        idx = traf.id2idx(acid)
+        # print('sendspeed: ', speed)
+        traf.ap.selspdcmd(idx, speed * kts)
+        print(traf.selspd[idx])
+        # stack.stack(f"PRINTSELSPD {acid}")
 
+    @stack.command
+    def printselspd(self,acid):
+        idx = traf.id2idx(acid)
+        print(traf.user_spdcmd)
+        print(traf.user_spdcmd[idx])
+        traf.user_spdcmd[idx] = True
+        print(traf.user_spdcmd[idx])
 
     @stack.command
     def replacewaypoint(self, acid, direct_dist, reqdist, trackmiles, direct_qdr):
@@ -468,8 +481,8 @@ class ATC(core.Entity):
 
         disttonewwp = kwikdist(latac, lonac, lat, lon)
 
-        if abs(reqdist - (disttoiaf + disttonewwp)) > 5:
-            print('replacewaypoint incorrect: ', reqdist, disttoiaf, disttonewwp, lat, lon)
+        if abs(reqdist - (disttoiaf + disttonewwp)) > 1:
+            print('replacewaypoint incorrect: ',acid, reqdist, disttoiaf + disttonewwp, disttoiaf, disttonewwp, lat, lon)
 
 
         newwp_name = f'DOGLEG{acid}'
@@ -499,16 +512,100 @@ class ATC(core.Entity):
 # HELPER FUNCTIONS
 
 
+
+
     @stack.command
     def printroute(self, acid, attrib):
         acrte = Route._routes[acid]
         arr = getattr(acrte, attrib, None)
         if arr is None:
             stack.stack(f"ECHO Attribute {attrib} not found")
-
-
-
         stack.stack(f"ECHO {arr}")
+
+    @stack.command
+    def debug_updates(self, acid):
+        """Print detailed debug info when updates counter gets too high."""
+
+        try:
+            idx = traf.id2idx(acid)
+            if idx < 0:
+                print(f'[ATC DEBUG] {acid}: not in traf anymore')
+                return
+
+            # Basisdata uit AMAN
+            ttlg = self.aman.Flights.loc[acid, 'ttlg']
+            min_casdesc = self.aman.Flights.loc[acid, 'min_casdesc']
+            max_casdesc = self.aman.Flights.loc[acid, 'max_casdesc']
+            iaf = self.aman.Flights.loc[acid, 'IAF']
+
+            # Huidige snelheid in knopen
+            selspd_knots = float(traf.selspd[idx]) / kts
+
+            # Hoogtes in ft
+            alt_ft = float(traf.alt[idx]) / ft
+            selalt_ft = float(traf.selalt[idx]) / ft
+
+            # Route / waypoints
+            acrte = Route._routes[acid]
+            iactwp = acrte.iactwp
+            current_wp_name = acrte.wpname[iactwp] if 0 <= iactwp < len(acrte.wpname) else 'UNKNOWN'
+
+            # Trackmiles & direct distance
+            trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
+
+            # Route lengte opnieuw opbouwen met kwikdist
+            lat_ac = float(traf.lat[idx])
+            lon_ac = float(traf.lon[idx])
+            route_len_nm = 0.0
+
+            # AC -> huidige actieve wp
+            route_len_nm += kwikdist(lat_ac, lon_ac,
+                                     acrte.wplat[iactwp],
+                                     acrte.wplon[iactwp])
+
+            # Huidige wp -> IAF langs route
+            for i in range(iactwp, len(acrte.wpname) - 1):
+                route_len_nm += kwikdist(acrte.wplat[i], acrte.wplon[i],
+                                         acrte.wplat[i+1], acrte.wplon[i+1])
+                if acrte.wpname[i+1] == iaf:
+                    break
+
+            # Dogleg ratio (trackmiles / direct distance)
+            dogleg_ratio = None
+            if direct_dist and direct_dist > 0:
+                dogleg_ratio = trackmiles / direct_dist
+
+            # reqdist en reqspd voor huidige ttlg
+            reqdist = None
+            reqspd = None
+            if pd.notna(ttlg):
+                reqdist = self.reqdist(acid, float(ttlg), trackmiles)
+                reqspd = self.reqspd(acid, float(ttlg), idx)  # al in knopen
+
+            print('================ ATC DEBUG UPDATES =================')
+            print(f'ACID: {acid}')
+            print(f'updates: {self.aman.Flights.at[acid, "updates"]}')
+            print(f'ttlg: {ttlg}')
+            print(f'selspd (knots): {selspd_knots}')
+            print(f'min_casdesc / max_casdesc (knots): {min_casdesc} / {max_casdesc}')
+            print(f'altitude (ft): {alt_ft}')
+            print(f'selected altitude (ft): {selalt_ft}')
+            print(f'current wp index: {iactwp}')
+            print(f'current wp name: {current_wp_name}')
+            print(f'IAF: {iaf}')
+            print(f'direct_dist (nm): {direct_dist}')
+            print(f'trackmiles (nm): {trackmiles}')
+            print(f'route_len_nm (kwikdist AC->IAF): {route_len_nm}')
+            print(f'dogleg_ratio (trackmiles/direct_dist): {dogleg_ratio}')
+            print(f'reqdist (nm) for current ttlg: {reqdist}')
+            print(f'reqspd (knots) for current ttlg: {reqspd}')
+            print('====================================================')
+
+        except Exception as e:
+            print(f'[ATC DEBUG] Error while debugging {acid}: {e}')
+
+
+
 
     def findtrackmiles(self, acid):
         acrte = Route._routes[acid]
