@@ -173,7 +173,7 @@ class ATC(core.Entity):
             if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
                 self.delay_mach(acid)
             else:
-                if abs(minspd - selspd) > 1:
+                if selspd >4. and abs(minspd - selspd) > 1:
                     self.speed(acid, ttlg)
                 elif direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
                     self.dogleg(acid, ttlg)
@@ -182,10 +182,14 @@ class ATC(core.Entity):
             if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
                 self.dogleg(acid, ttlg)
             else:
-                if abs(minspd - selspd) > 1:
+                if selspd >4. and abs(maxspd - selspd) > 1:
                     self.speed(acid, ttlg)
-                elif direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
+                elif abs(trackmiles - direct_dist) > 1: # if not direct
                     self.dogleg(acid, ttlg)
+                elif selspd >4. and abs(maxspd - selspd) <= 1:
+                    ETA = self.reset_ETA(acid)
+                    self.aman.replan_late(acid, ETA=ETA)
+                    print(f'replanning {acid}')
 
         # else: no update needed
 
@@ -229,11 +233,11 @@ class ATC(core.Entity):
         itype = self.active_instructions[acid]
 
         if 'delay' in itype and ttlg < -self.aman.instruction_margin: # essentially: delay instructed, but it was too much, so now a speed or dogleg must be given that is more correct
-            ttlg = 0.9*ttlg # to make sure it converges
+            ttlg = 0.97*ttlg # to make sure it converges
             self.reapply_instruction(acid, ttlg, itype)
 
         elif 'short' in itype and ttlg > self.aman.instruction_margin:  # short instructed, but too much. keep same type of instruction
-            ttlg = 0.9 * ttlg  # to make sure it converges
+            ttlg = 0.97 * ttlg  # to make sure it converges
             self.reapply_instruction( acid, ttlg, itype)
 
 
@@ -407,6 +411,8 @@ class ATC(core.Entity):
         # print('sendspeed: ', speed)
         traf.ap.selspdcmd(idx, speed * kts)
         # self.instructions.append(f'SPEED {acid} {speed}')
+        if hasattr(traf, "user_spdcmd"):
+            traf.user_spdcmd[idx] = True
 
     @stack.command
     def testselspd(self, acid, speed):
@@ -483,6 +489,7 @@ class ATC(core.Entity):
 
         if abs(reqdist - (disttoiaf + disttonewwp)) > 1:
             print('replacewaypoint incorrect: ',acid, reqdist, disttoiaf + disttonewwp, disttoiaf, disttonewwp, lat, lon)
+
 
 
         newwp_name = f'DOGLEG{acid}'

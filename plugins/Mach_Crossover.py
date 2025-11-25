@@ -197,17 +197,24 @@ class MachCrossoverPlugin(core.Entity):
         self.max_alt[-n:] = traf.alt[-n:]
         self.flight_phase[-n:] = 'new'
         self.user_spdcmd[-n:] = False
-        traf.user_spdcmd[-n:] = False
+        # traf.user_spdcmd[-n:] = False
         traf.user_spdcmd = self.user_spdcmd
         # print("[MachTraffic] create() called for", n, "new aircraft")
+
+
 
     @stack.command
     def printuserspd(self,acid):
         idx = traf.id2idx(acid)
         print(traf.user_spdcmd)
         print(traf.user_spdcmd[idx])
-        traf.user_spd_cmd[idx] = True
+        traf.user_spdcmd[idx] = True
         print(traf.user_spdcmd[idx])
+
+    @stack.command
+    def check_user_spd_alias(self):
+        print("same object:", self.user_spdcmd is traf.user_spdcmd)
+        print("len self:", len(self.user_spdcmd), "len traf:", len(traf.user_spdcmd))
 
     @stack.command
     def printspds(self, acid):
