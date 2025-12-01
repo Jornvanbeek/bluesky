@@ -17,6 +17,7 @@ from collections import defaultdict
 from datetime import datetime
 import pickle
 import difflib
+import time
 
 import numpy as np
 
@@ -170,7 +171,7 @@ class Predictor(core.Entity):
         traf.traf_parent_id = None
         self.departure_route_alt = 'FL200'
         # self.incorrect_predictions = ['AIA6768', 'KLM76QSH', 'EZY91XM']
-        self.incorrect_predictions = []#['KLM590SH', 'KLM950SH']
+        self.incorrect_predictions = []#['EZY91XM', 'DAL72SH']
         # Change the route class implementation for the child node using PredictorNodeRoute class.
         stack.stack('IMPLEMENTATION Route Route')
 
@@ -417,9 +418,18 @@ class Predictor(core.Entity):
                 traf.cre(acid, actype, aclat, aclon, achdg, acalt, acspd)
             else:
                 traf.delete(idxac)
-                print(f'ACID {acid} has been deleted in update received function.')
+                print(f'new update requested for: {acid}')
+
+                idxac = traf.id2idx(acid)
+                attempts = 0
+                #trying to prevent spawning new aircraft when old one is not gone yet
+                while attempts < 20 and idxac >= 0:
+                    idxac = traf.id2idx(acid)
+                    attempts += 1
+                    time.sleep(0.2)
                 traf.cre(acid, actype, aclat, aclon, achdg, acalt, acspd)
 
+            idxac = traf.id2idx(acid)
             self.unpacker(info)
             traf.update()
             acrte = traf.ap.route[idxac]
@@ -448,7 +458,8 @@ class Predictor(core.Entity):
 
         # Neem user_spdcmd mee als deze bestaat op traf
         if hasattr(traf, 'user_spdcmd') and 'user_spdcmd' not in include_traf:
-            include_traf.append('user_spdcmd')
+            include_traf+=['user_spdcmd', 'mcruise', 'mdescent', 'mclimb',
+            'cascruise', 'casdesc', 'casclimb', 'max_casdesc']
 
         include_actwp = [
             "lat", "lon", "nextturnlat", "nextturnlon", "nextturnspd", "nextturnbank",

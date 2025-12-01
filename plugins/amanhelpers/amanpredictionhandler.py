@@ -74,9 +74,9 @@ class PredictionHandler:
 
                 TMA = self.Flights.loc[acid, 'TMA']
                 # 'TP ETA': wptime + TMA
-                data = {'TP IAF': wptime, 'IAF': wpt, 'TPstate': 'updated', 'ttlg': self.Flights.loc[acid, 'EAT'] - wptime, 'TP ETA': wptime + TMA}
+                # data = {'TP IAF': wptime, 'IAF': wpt, 'TPstate': 'updated', 'TP ETA': wptime + TMA}
 
-
+                data = {}
 
             elif '/RW' in wpt:
                 dest, runway = parse_destination(wpt)
@@ -100,8 +100,8 @@ class PredictionHandler:
             for key, value in data.items():
                 self.Flights.at[acid, key] = value
 
-            if '/RW' in wpt or ('TPstate' in data.keys() and data['TPstate'] == 'updated'):
-                stack.stack('instruct_frozen')
+            # if '/RW' in wpt or ('TPstate' in data.keys() and data['TPstate'] == 'updated'):
+            #     stack.stack('instruct_frozen')
 
         else:
             wptime = traf.ap.route[idxac].createtime + flighttime

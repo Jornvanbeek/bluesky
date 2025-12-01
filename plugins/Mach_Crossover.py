@@ -82,10 +82,25 @@ class MachCrossoverPlugin(core.Entity):
             self.flight_phase = np.array([], dtype=str)
             self.user_spdcmd = np.array([], dtype=bool)
 
-        traf.user_spdcmd = self.user_spdcmd
+
+        self.setattribs()
 
 
         # stack.stack('IMPLEMENTATION POS POSM')
+    def setattribs(self):
+        #functionality to store values in traf, for use in tp updates
+        traf.mcruise    = self.mcruise
+        traf.cascruise  = self.cascruise
+        traf.mdescent   = self.mdescent
+        traf.casdesc    = self.casdesc
+        traf.max_casdesc = self.max_casdesc
+        traf.spdtype    = self.spdtype
+        traf.max_alt    = self.max_alt
+        traf.mclimb     = self.mclimb
+        traf.casclimb   = self.casclimb
+        traf.flight_phase = self.flight_phase
+        traf.user_spdcmd = self.user_spdcmd
+
 
     @stack.command
     def standard_speeds(
@@ -142,8 +157,10 @@ class MachCrossoverPlugin(core.Entity):
 
 
 
+    def delete(self, idx):
+        super().delete(idx)
 
-
+        self.setattribs()
 
     def create(self, n=1):
         """
@@ -198,7 +215,7 @@ class MachCrossoverPlugin(core.Entity):
         self.flight_phase[-n:] = 'new'
         self.user_spdcmd[-n:] = False
         # traf.user_spdcmd[-n:] = False
-        traf.user_spdcmd = self.user_spdcmd
+        self.setattribs()
         # print("[MachTraffic] create() called for", n, "new aircraft")
 
 
@@ -212,7 +229,7 @@ class MachCrossoverPlugin(core.Entity):
         print(traf.user_spdcmd[idx])
 
     @stack.command
-    def check_user_spd_alias(self):
+    def userspd(self):
         print("same object:", self.user_spdcmd is traf.user_spdcmd)
         print("len self:", len(self.user_spdcmd), "len traf:", len(traf.user_spdcmd))
 
@@ -435,7 +452,31 @@ class MachCrossoverPlugin(core.Entity):
         print(idx)
         print(traf.id)
 
+    @stack.command
+    def traffrommach(self):
+        print(traf.mcruise is self.mcruise)
+        print(traf.cascruise is self.cascruise)
+        print(traf.mdescent is self.mdescent)
+        print(traf.casdesc is self.casdesc)
+        print(traf.max_casdesc is self.max_casdesc)
+        print(traf.spdtype is self.spdtype)
+        print(traf.max_alt is self.max_alt)
+        print(traf.mclimb is self.mclimb)
+        print(traf.casclimb is self.casclimb)
+        print(traf.flight_phase is self.flight_phase)
+        print(traf.user_spdcmd is self.user_spdcmd)
 
+        print(traf.mcruise)
+        print(traf.cascruise)
+        print(traf.mdescent)
+        print(traf.casdesc)
+        print(traf.max_casdesc)
+        print(traf.spdtype)
+        print(traf.max_alt)
+        print(traf.mclimb)
+        print(traf.casclimb)
+        print(traf.flight_phase)
+        print(traf.user_spdcmd)
 
 
 

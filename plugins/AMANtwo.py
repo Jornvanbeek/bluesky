@@ -486,6 +486,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 else:
                     separation = self.separation
 
+                #to be clear, this is planning the slot of a flight that will have an earlier slot than the replanned flight
 
                 # slot is based on either previous slot or ETA, whichever is lower and thus achievable, or the previous slot plus separation
                 slot = max(last_assigned_slot + separation, min(row['ETA'], row['slot']))
@@ -497,7 +498,22 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 last_assigned_slot,
                 last_assigned_flight,
             ]
+
+            if 'swaps' not in self.Flights.columns:
+                self.Flights['swaps'] = 0
+
+            self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
+            self.Flights.at[flight, 'swaps'] += 1
+
             last_assigned_slot, last_assigned_flight, last_assigned_type = slot, flight, row['type']
+
+
+        #na de for loop de hoeveelheid swaps voor de vlucht die replanned werd opslaan
+        if 'swaps' not in self.Flights.columns:
+            self.Flights['swaps'] = 0
+
+        self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
+        self.Flights.at[acid, 'swaps'] += int(swaps)
 
 
     # def replan_late(self,acid, ETA = None):

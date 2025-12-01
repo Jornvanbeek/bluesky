@@ -1,7 +1,7 @@
 # amanatc.py
 
 
-from bluesky import core, stack, traf, sim, HOLD, network
+from bluesky import core, stack, traf, sim, HOLD, network, net
 from bluesky import server
 # from plugins.AMANtwo import AMAN  # Import the global reference from AMANtwo
 from bluesky.core import plugin
@@ -49,12 +49,16 @@ class ATC(core.Entity):
         self.aman.Flights['swaps'] = self.aman.Flights['swaps'].astype(int)
 
 
+
+
         self.aman.Flights['selspd'] = None
         self.aman.Flights['dogleg'] = None
         self.aman.Flights['dogleg'] = self.aman.Flights['dogleg'].astype(bool)
         self.aman.Flights['direct'] = None
         self.aman.Flights['holding'] = None
         self.aman.Flights['earliest'] = False
+
+
         self.instructionlist = {}
         self.instructions = []
         self.active_instructions = {} # acid: delay/short + dogleg/speed/mach
@@ -145,12 +149,19 @@ class ATC(core.Entity):
         to_iaf = self.aman.Flights.loc[acid, 'ETO IAF'] - sim.simt
         vs = traf.vs[idx]
         trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
+        if abs(ttlg) <= self.aman.instruction_margin:
+            print('ttlg within instruction margin')
+            return
+        if acid in self.active_instructions.keys():
+            print('acid in active_instructions ', acid)
+            return
         #standard scenarios
         if alt < self.handover_alt and vs < 0.5:
 
             # scenario 2: speedup
             if ttlg <= -self.aman.late_approach_margin:
 
+                print(f'{acid} needs speed up {ttlg}')
                 if abs(trackmiles - direct_dist) > 1: #essentially direct == False
                     self.dogleg(acid, ttlg)
                 elif abs(maxspd - selspd) > 1:
@@ -178,19 +189,25 @@ class ATC(core.Entity):
                 elif direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
                     self.dogleg(acid, ttlg)
 
+
         elif ttlg <= -self.aman.late_adjacent_threshold: # speed up
-            if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
+            if selspd < 4. and abs(trackmiles - direct_dist) > 1: # if not direct
                 self.dogleg(acid, ttlg)
+                print('adjacent speed up dogleg', ttlg)
             else:
                 if selspd >4. and abs(maxspd - selspd) > 1:
                     self.speed(acid, ttlg)
                 elif abs(trackmiles - direct_dist) > 1: # if not direct
                     self.dogleg(acid, ttlg)
+                    print('adjacent speed up dogleg in mach', ttlg)
                 elif selspd >4. and abs(maxspd - selspd) <= 1:
                     ETA = self.reset_ETA(acid)
                     self.aman.replan_late(acid, ETA=ETA)
                     print(f'replanning {acid}')
-
+                elif selspd <4. and abs(trackmiles - direct_dist) > 1:
+                    ETA = self.reset_ETA(acid)
+                    self.aman.replan_late(acid, ETA=ETA)
+                    print(f'replanning {acid}')
         # else: no update needed
 
 
@@ -209,36 +226,81 @@ class ATC(core.Entity):
             idxac = traf.id2idx(acid)
             if idxac != -1 and acid in self.active_instructions:
                 wptime = traf.ap.route[idxac].createtime + flighttime
-                previous_wptime = self.aman.Flights.loc[acid]['TP IAF']
+                previous_iaftime = self.aman.Flights.loc[acid]['TP IAF']
 
                 if wpt in self.aman.iafs:
 
                     TMA = self.aman.Flights.loc[acid, 'TMA']
                     # 'TP ETA': wptime + TMA
-                    data = {'TP IAF': wptime, 'IAF': wpt, 'TPstate': 'updated',
-                            'ttlg': self.aman.Flights.loc[acid, 'EAT'] - wptime, 'TP ETA': wptime + TMA}
+                    data = {'TP IAF': wptime, 'IAF': wpt, 'TPstate': 'updated', 'TP ETA': wptime + TMA}
 
                     for key, value in data.items():
                         self.aman.Flights.at[acid, key] = value
 
+                    ttlg = self.aman.Flights.loc[acid, 'ttlg']
+                    print('ttlg updated? previous: ',acid, ttlg)
                     self.aman.update_times()
 
                     ttlg = self.aman.Flights.loc[acid, 'ttlg']
-                    # todo check if aircraft needs new instruction
+                    print('updated ttlg: ',acid, ttlg)
+
+
+
+                    delay = data['TP IAF'] - previous_iaftime
+                    self.store_delay(acid, delay)
+
+
                     self.check_tp_update(acid, ttlg)
-                    print(f'received tp update{acid}')
+                    # print(f'received tp update{acid}')
+
+
+    def store_delay(self, acid, delay):
+        delaytype = self.active_instructions[acid]
+
+        # Accumulate delay per instruction type (e.g. 'delay speed', 'delay dogleg', 'short speed', ...)
+        if delaytype not in self.aman.Flights.columns:
+            self.aman.Flights[delaytype] = 0.0
+        if pd.isna(self.aman.Flights.at[acid, delaytype]):
+            self.aman.Flights.at[acid, delaytype] = 0.0
+        self.aman.Flights.at[acid, delaytype] += delay
+
+        # Ensure totaldelay and totalspeedup exist and are floats
+        if 'totaldelay' not in self.aman.Flights.columns:
+            self.aman.Flights['totaldelay'] = 0.0
+        if 'totalspeedup' not in self.aman.Flights.columns:
+            self.aman.Flights['totalspeedup'] = 0.0
+        if pd.isna(self.aman.Flights.at[acid, 'totaldelay']):
+            self.aman.Flights.at[acid, 'totaldelay'] = 0.0
+        if pd.isna(self.aman.Flights.at[acid, 'totalspeedup']):
+            self.aman.Flights.at[acid, 'totalspeedup'] = 0.0
+
+        # Positive delay is added to totaldelay, negative to totalspeedup
+        if delay > 0:
+            self.aman.Flights.at[acid, 'totaldelay'] += delay
+        if delay <= 0:
+            self.aman.Flights.at[acid, 'totalspeedup'] += delay
+
 
 
     def check_tp_update(self, acid, ttlg):
         itype = self.active_instructions[acid]
+        if abs(ttlg) <= self.aman.instruction_margin:
+            self.instruction_correct(acid)
+            return
+        if 'mach' in itype:
+            self.instruction_correct(acid)
+            return
 
         if 'delay' in itype and ttlg < -self.aman.instruction_margin: # essentially: delay instructed, but it was too much, so now a speed or dogleg must be given that is more correct
             ttlg = 0.97*ttlg # to make sure it converges
+            print(f're-applying delay instruction {acid} {ttlg} {self.active_instructions}')
             self.reapply_instruction(acid, ttlg, itype)
 
         elif 'short' in itype and ttlg > self.aman.instruction_margin:  # short instructed, but too much. keep same type of instruction
             ttlg = 0.97 * ttlg  # to make sure it converges
+            print(f're-applying short instruction {acid} {ttlg} {self.active_instructions}')
             self.reapply_instruction( acid, ttlg, itype)
+
 
 
         elif 'delay' in itype and ttlg > self.aman.instruction_margin:  # delay given, but not sufficient
@@ -256,6 +318,7 @@ class ATC(core.Entity):
             elif 'dogleg' in itype and direct_dist*self.max_dogleg_ratio > (trackmiles +1):
                 # more dogleg possible within configured ratio
                 self.dogleg(acid, ttlg)
+                print('more dogleg from tp update')
             else:
                 # no additional delay possible with this type: close instruction and re-evaluate scenario
                 self.instruction_correct(acid)
@@ -273,6 +336,7 @@ class ATC(core.Entity):
             if 'dogleg' in itype and abs(trackmiles - direct_dist) > 1:
                 # still shortcut distance to gain
                 self.dogleg(acid, ttlg)
+                print('more dogleg from tp update number two')
             elif 'speed' in itype and abs(maxspd - selspd) > 1:
                 # still margin to increase speed
                 self.speed(acid, ttlg)
@@ -286,12 +350,13 @@ class ATC(core.Entity):
         else:
             print(f'instruction correct {acid}')
             self.instruction_correct(acid)
-            self.determine_scenario(acid, ttlg)
+            # self.determine_scenario(acid, ttlg)
             print(f'completed {acid}')
 
     def reapply_instruction(self,acid, ttlg, itype):
         if 'dogleg' in itype or 'direct' in itype:
             self.dogleg(acid, ttlg)
+            print('reapply dogleg')
         elif 'speed' in itype:
             self.speed(acid, ttlg)
         elif 'mach' in itype:
@@ -329,6 +394,7 @@ class ATC(core.Entity):
             self.debug_updates(acid)
 
     def dogleg(self, acid, ttlg):
+        print('ttlg in dogleg: ', ttlg)
         ttlg = float(ttlg)*self.aman.dogleg_multiplyer # make sure it lowballs the instruction for some margin
 
         trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
@@ -357,11 +423,15 @@ class ATC(core.Entity):
         maxspd = self.aman.Flights.loc[acid, 'max_casdesc']
 
         if ttlg > 0:
+            if reqspd > selspd:
+                print(f'ERROR IN SPEED CALCULATION {acid} {ttlg} {selspd} {reqspd}')
             if reqspd < minspd:
                 instruct = minspd
             else:
                 instruct = reqspd
         elif ttlg <0:
+            if reqspd < selspd:
+                print(f'ERROR IN SPEED CALCULATION {acid} {ttlg} {selspd} {reqspd}')
             if reqspd > maxspd:
                 instruct = maxspd
             else:
@@ -380,16 +450,16 @@ class ATC(core.Entity):
 
     def delay_mach(self,acid):
         mach = self.aman.mach_reduction
-        self.instructions.append(f'REDUCE_MACH {acid} {mach}')
-
+        # self.instructions.append(f'REDUCE_MACH {acid} {mach}')
+        idx = traf.id2idx(acid)
         self.aman.Flights.at[acid, 'selspd'] = mach
-
+        # traf.selspd[idx] += -mach
+        traf.mcruise[idx] = traf.mcruise[idx] - float(mach)
+        traf.mdescent[idx] = traf.mdescent[idx] - float(mach)
+        traf.selspd[idx] = traf.selspd[idx] - float(mach)
 
         self.active_instructions[acid]= 'delay'+' mach'
         self.start_update(acid)
-
-
-
 
 
 
@@ -426,10 +496,12 @@ class ATC(core.Entity):
     @stack.command
     def printselspd(self,acid):
         idx = traf.id2idx(acid)
-        print(traf.user_spdcmd)
+        print("same object:", self.user_spdcmd is traf.user_spdcmd)
+        print("len self:", len(self.user_spdcmd), "len traf:", len(traf.user_spdcmd))
+        # print(traf.user_spdcmd)
         print(traf.user_spdcmd[idx])
-        traf.user_spdcmd[idx] = True
-        print(traf.user_spdcmd[idx])
+        # traf.user_spdcmd[idx] = True
+        # print(traf.user_spdcmd[idx])
 
     @stack.command
     def replacewaypoint(self, acid, direct_dist, reqdist, trackmiles, direct_qdr):
@@ -443,54 +515,37 @@ class ATC(core.Entity):
         idx = traf.id2idx(acid)
         # iaf = self.findiaf(acid)
         iaf = self.aman.Flights.loc[acid, 'IAF']
-
-
-        hypothenuse = (reqdist ** 2 + direct_dist ** 2) / (2 * reqdist)
-        opposing = reqdist - hypothenuse
-        if opposing < 0:
-            print(f'wrong replacewaypoint {acid}, {opposing}, {reqdist}, {direct_dist}, {trackmiles}')
-            return
-        alpha = math.degrees(math.atan2(opposing, direct_dist))
-
-        # print(reqdist, direct_dist)
-        # print(hypothenuse, opposing, alpha)
-        lat, lon = qdrpos(traf.lat[idx], traf.lon[idx], direct_qdr + alpha, hypothenuse)
-
-        try:
-            iaf_index = acrte.wpname.index(iaf)
-        except ValueError:
-            print(iaf, acid)
-            iaf_index = acrte.wpname.index(iaf)
+        latac = traf.lat[idx]
+        lonac = traf.lon[idx]
+        iaf_index = acrte.wpname.index(iaf)
         alt = traf.alt[idx]
         iaf_alt = acrte.wpalt[iaf_index]
 
-        qdrcheck, distcheck = kwikqdrdist(acrte.wplat[iaf_index], acrte.wplon[iaf_index], lat, lon)
+        lat, lon, alpha, hypothenuse, opposing = self.determine_wpt(acid, reqdist, direct_dist, trackmiles, direct_qdr, acrte, iaf_index)
 
-        qdrcheck_next, distcheck_next = kwikqdrdist(acrte.wplat[iaf_index], acrte.wplon[iaf_index],
-                                                    acrte.wplat[iaf_index + 1], acrte.wplon[iaf_index + 1])
-
-        if abs(qdrcheck - qdrcheck_next) < 90 or abs(qdrcheck - qdrcheck_next) > 270:
-            alpha = -alpha
-            lat, lon = qdrpos(traf.lat[idx], traf.lon[idx], direct_qdr + alpha, hypothenuse)
-
-        wpt_alt = math.tan(math.radians(self.aman.descent_angle)) * opposing * nm
-
-        wpt_alt = wpt_alt + iaf_alt
-        wpt_alt = min(wpt_alt, alt)  # make sure that new wp alt is not above current altitude
-        wpt_alt = round(wpt_alt, 0)
-
-        idx = traf.id2idx(acid)
-        latac = traf.lat[idx]
-        lonac = traf.lon[idx]
-        iafindex = acrte.wpname.index(iaf)
-        disttoiaf = kwikdist(lat, lon, acrte.wplat[iafindex], acrte.wplon[iafindex])
-
+        disttoiaf = kwikdist(lat, lon, acrte.wplat[iaf_index], acrte.wplon[iaf_index])
         disttonewwp = kwikdist(latac, lonac, lat, lon)
 
         if abs(reqdist - (disttoiaf + disttonewwp)) > 1:
             print('replacewaypoint incorrect: ',acid, reqdist, disttoiaf + disttonewwp, disttoiaf, disttonewwp, lat, lon)
+            print('correcting new waypoint')
+            error = reqdist - (disttoiaf + disttonewwp)
+            corrected_reqdist = reqdist + error
+            lat, lon, alpha, hypothenuse, opposing = self.determine_wpt(acid, corrected_reqdist, direct_dist, trackmiles,
+                                                                        direct_qdr, acrte, iaf_index)
+
+            disttoiaf = kwikdist(lat, lon, acrte.wplat[iaf_index], acrte.wplon[iaf_index])
+            disttonewwp = kwikdist(latac, lonac, lat, lon)
+            if abs(reqdist - (disttoiaf + disttonewwp)) > 1:
+                print('replacewaypoint STILL incorrect: ', acid, corrected_reqdist, disttoiaf + disttonewwp, disttoiaf, disttonewwp,
+                      lat, lon)
 
 
+
+        wpt_alt = math.tan(math.radians(self.aman.descent_angle)) * opposing * nm
+        wpt_alt = wpt_alt + iaf_alt
+        wpt_alt = min(wpt_alt, alt)  # make sure that new wp alt is not above current altitude
+        wpt_alt = round(wpt_alt, 0)
 
         newwp_name = f'DOGLEG{acid}'
         if newwp_name in acrte.wpname:
@@ -501,7 +556,28 @@ class ATC(core.Entity):
         Route.direct(idx, newwp_name)
 
 
+    def determine_wpt(self,acid, reqdist, direct_dist, trackmiles, direct_qdr, acrte, iaf_index):
+        idx = traf.id2idx(acid)
+        hypothenuse = (reqdist ** 2 + direct_dist ** 2) / (2 * reqdist)
+        opposing = reqdist - hypothenuse
+        if opposing < 0:
+            print(f'wrong replacewaypoint {acid}, {opposing}, {reqdist}, {direct_dist}, {trackmiles}')
+            return
+        alpha = math.degrees(math.atan2(opposing, direct_dist))
 
+        lat, lon = qdrpos(traf.lat[idx], traf.lon[idx], direct_qdr + alpha, hypothenuse)
+
+
+        qdrcheck, distcheck = kwikqdrdist(acrte.wplat[iaf_index], acrte.wplon[iaf_index], lat, lon)
+
+        qdrcheck_next, distcheck_next = kwikqdrdist(acrte.wplat[iaf_index], acrte.wplon[iaf_index],
+                                                    acrte.wplat[iaf_index + 1], acrte.wplon[iaf_index + 1])
+
+        if abs(qdrcheck - qdrcheck_next) < 90 or abs(qdrcheck - qdrcheck_next) > 270:
+            alpha = -alpha
+            lat, lon = qdrpos(traf.lat[idx], traf.lon[idx], direct_qdr + alpha, hypothenuse)
+
+        return lat, lon, alpha, hypothenuse, opposing
 
     def reqspd(self,acid, ttlg, idx):
         aim_ttlg = ttlg + self.aman.approach_aim
@@ -677,4 +753,5 @@ class ATC(core.Entity):
         self.aman.Flights.at[acid, 'max_casdesc'] = max_casdesc
         self.aman.Flights.at[acid, 'min_casdesc'] = min_casdesc
         stack.stack(f'FLIGHT_SPEEDS {acid} {mcruise} {cascruise} {mdescent} {casdesc} {mclimb} {casclimb}')
+
 
