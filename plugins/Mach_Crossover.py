@@ -237,9 +237,12 @@ class MachCrossoverPlugin(core.Entity):
     def printspds(self, acid):
         idx = traf.id2idx(acid)
         print(self.mcruise[idx])
-        print(self.mdescent[idx])
-        print(self.casdesc[idx])
+        print(self.mdescent[idx], 'mdesc')
+        print(self.casdesc[idx], 'casdesc')
         print(self.max_casdesc[idx])
+        print(self.casclimb[idx], 'casclimb')
+        print(self.mclimb[idx], 'mclimb')
+        print(self.flight_phase[idx], 'flight_phase')
         print(traf.selspd[idx])
         print(traf.M[idx])
         print(traf.cas[idx])
@@ -326,7 +329,7 @@ class MachCrossoverPlugin(core.Entity):
         selspd[cond_c2] = Mclimb[cond_c2]
 
         # "if selspd < machthreshold and selspd > climbcas => selspd= climbcas"
-        cond_c3 = climb_mask2 & (selspd < machthreshold) & (selspd > climbcas)
+        cond_c3 = climb_mask2 & (this_mach < machthreshold) & (this_cas > climbcas)
         selspd[cond_c3] = climbcas[cond_c3]
 
         # -----------------------------

@@ -58,3 +58,4 @@ class shiftflight(core.Entity):
     def printstackbase(self):
         print(stack.stackbase.Stack.scencmd)
         print(stack.stackbase.Stack.scentime)
+

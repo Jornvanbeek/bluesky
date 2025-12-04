@@ -133,10 +133,6 @@ class ATC(core.Entity):
                         elif not self.ff and self.rtf <= 1.:
                             sim.op()
 
-                #TODO
-                # evt small instructions
-                # update TP
-
 
 
 
@@ -367,7 +363,7 @@ class ATC(core.Entity):
     def instruction_correct(self, acid):
         self.active_instructions.pop(acid)
         self.aman.Flights.at[acid,'count'] += 1
-        # todo store delay type (calc in pred received)
+
 
         if len(self.active_instructions) == 0:
             if self.ff:
