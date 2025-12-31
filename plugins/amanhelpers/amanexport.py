@@ -21,7 +21,11 @@ class AmanExporter():
         Flights_hhmmss.rename(columns={'runway': 'rwy'}, inplace=True)
         # Flights_hhmmss.rename(columns={'TMA flighttime': 'TMA'}, inplace=True)
         if 'rwy' in Flights_hhmmss.columns:
-            Flights_hhmmss['rwy'] = Flights_hhmmss['rwy'].str[3:]  # Remove first 3 characters
+
+            s = Flights_hhmmss['rwy'].astype('string')
+            s = s.str.strip()
+            s = s.str.replace(r'^RWY', '', regex=True)
+            Flights_hhmmss['rwy'] = s
 
         # Convert specified columns to integers
         columns_to_convert = ['ttlg', 'to eto', 'TMA', 'manualslot']
