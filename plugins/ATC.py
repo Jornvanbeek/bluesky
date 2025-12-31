@@ -7,7 +7,7 @@ from bluesky import server
 from bluesky.core import plugin
 from bluesky.plugins.sectorcount import update
 from bluesky.test.tcp.test_simple import test_pos
-from bluesky.tools.aero import kts, ft, nm
+from bluesky.tools.aero import kts, ft, nm, crossoveralt
 import pandas as pd
 from bluesky.tools.geo import kwikpos, qdrpos, kwikdist, qdrdist
 from bluesky.tools.geo import kwikqdrdist
@@ -177,13 +177,17 @@ class ATC(core.Entity):
 
             #scenario 4: adjacent
         elif ttlg > self.aman.early_adjacent_threshold: # delay
-            if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
-                self.delay_mach(acid)
-            else:
-                if selspd >4. and abs(minspd - selspd) > 1:
-                    self.speed(acid, ttlg)
-                elif direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
-                    self.dogleg(acid, ttlg)
+            if self.aman.Flights.loc[acid]['selspd'] > minspd:
+                self.crossoverspd(acid, minspd, ttlg)
+
+
+            # if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
+            #     self.delay_mach(acid)
+            # else:
+            #     if selspd >4. and abs(minspd - selspd) > 1:
+            #         self.speed(acid, ttlg)
+            #     elif direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
+            #         self.dogleg(acid, ttlg)
 
 
         elif ttlg <= -self.aman.late_adjacent_threshold: # speed up
@@ -341,7 +345,7 @@ class ATC(core.Entity):
                 self.instruction_correct(acid)
                 self.determine_scenario(acid, ttlg)
 
-
+        if 'adjacent' in itype: and ttlg 
 
         else:
             print(f'instruction correct {acid}')
@@ -457,9 +461,20 @@ class ATC(core.Entity):
         self.active_instructions[acid]= 'delay'+' mach'
         self.start_update(acid)
 
+    def crossoverspd(self, acid, spd, ttlg):
+        idx = traf.id2idx(acid)
+        selspd = traf.selspd[idx] / kts
 
+        self.aman.Flights.loc[acid, 'selspd'] = spd
+        stack.stack(f'{acid} ATALT {self.handover_alt} DO {acid} SPD {spd}')
 
-
+        # if ttlg > 0:
+        #     instrtype = 'delay'
+        # else:
+        #     instrtype = 'short'
+        #deze dingen werken niet vanwege hoe check tp update is
+        self.active_instructions[acid]= 'adjacent'
+        self.start_update(acid)
 
 
     def directiaf(self, acid):
