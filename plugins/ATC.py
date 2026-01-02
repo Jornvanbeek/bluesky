@@ -176,18 +176,42 @@ class ATC(core.Entity):
                 # todo add holding
 
             #scenario 4: adjacent
-        elif ttlg > self.aman.early_adjacent_threshold: # delay
-            if self.aman.Flights.loc[acid]['selspd'] > minspd:
-                self.crossoverspd(acid, minspd, ttlg)
+        # elif ttlg > self.aman.early_adjacent_threshold: # delay
+        #     if self.aman.Flights.loc[acid]['selspd'] > minspd:
+        #         self.speed_at_entry(acid, minspd, ttlg)
+        #         sim.hold()
+        #         print('holding because of early', acid)
+        #     elif self.aman.Flights.loc[acid]['selspd'] > 4 and abs(self.Flights.loc[acid]['selspd'] - minspd) < 1:
+        #         self.delay_mach(acid)
+        #
+        # elif ttlg < - self.aman.late_adjacent_threshold:
+        #     if self.aman.Flights.loc[acid]['selspd'] < maxspd:
+        #         if abs(trackmiles - direct_dist) > 1:  # if not direct
+        #             self.speed_at_entry(acid, maxspd, ttlg, direct = True)
+        #         else:
+        #             self.speed_at_entry(acid, maxspd, ttlg)
+        #         sim.hold()
+        #         print('holding because of late', acid)
+        #     elif abs(trackmiles - direct_dist) > 1:  # if not direct
+        #         self.dogleg(acid, ttlg)
+        #     elif selspd >4. and abs(maxspd - selspd) > 1:
+        #         self.speed(acid, ttlg)
+        #         #add removal of conditional at FL260?
+        #     elif abs(trackmiles - direct_dist) < 1 and selspd >4. and abs(maxspd - selspd) < 1:
+        #         ETA = self.reset_ETA(acid)
+        #         self.aman.replan_late(acid, ETA=ETA)
+        #         print(f'replanning {acid}')
+        #         #remove conditionals
 
 
-            # if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
-            #     self.delay_mach(acid)
-            # else:
-            #     if selspd >4. and abs(minspd - selspd) > 1:
-            #         self.speed(acid, ttlg)
-            #     elif direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
-            #         self.dogleg(acid, ttlg)
+        elif ttlg > self.aman.early_adjacent_threshold:  # delay
+            if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
+                self.delay_mach(acid)
+            else:
+                if selspd >4. and abs(minspd - selspd) > 1:
+                    self.speed(acid, ttlg)
+                elif direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
+                    self.dogleg(acid, ttlg)
 
 
         elif ttlg <= -self.aman.late_adjacent_threshold: # speed up
@@ -208,7 +232,7 @@ class ATC(core.Entity):
                     ETA = self.reset_ETA(acid)
                     self.aman.replan_late(acid, ETA=ETA)
                     print(f'replanning {acid}')
-        # else: no update needed
+        #else: no update needed
 
 
 
@@ -345,8 +369,11 @@ class ATC(core.Entity):
                 self.instruction_correct(acid)
                 self.determine_scenario(acid, ttlg)
 
-        if 'adjacent' in itype: and ttlg 
+        elif 'adjacent' in itype:
+            self.instruction_correct(acid)
+            sim.hold()
 
+            print('received update of adjacent ', acid, ttlg)
         else:
             print(f'instruction correct {acid}')
             self.instruction_correct(acid)
@@ -461,12 +488,15 @@ class ATC(core.Entity):
         self.active_instructions[acid]= 'delay'+' mach'
         self.start_update(acid)
 
-    def crossoverspd(self, acid, spd, ttlg):
+    def speed_at_entry(self, acid, spd, ttlg, direct = False):
         idx = traf.id2idx(acid)
         selspd = traf.selspd[idx] / kts
 
         self.aman.Flights.loc[acid, 'selspd'] = spd
         stack.stack(f'{acid} ATALT {self.handover_alt} DO {acid} SPD {spd}')
+        if direct:
+            iaf = self.aman.Flights.loc[acid, 'IAF']
+            stack.stack(f'{acid} ATALT {self.handover_alt} DO {acid} DIRECT {iaf}')
 
         # if ttlg > 0:
         #     instrtype = 'delay'
