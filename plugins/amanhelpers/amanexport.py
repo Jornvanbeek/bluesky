@@ -38,21 +38,31 @@ class AmanExporter():
                 )
 
         # Transform specified columns to HH:MM:SS
-        columns_to_transform = ['ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'EAT', 'slot','initialslot', 'LAS', 'FIR entry',
-                                'creation', 'SID', 'planning']
+        columns_to_transform = ['ETA','delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'EAT', 'slot','initialslot', 'LAS', 'FIR entry',
+                                'creation', 'SID', 'planning', 'ETD']
         for col in columns_to_transform:
             if col in Flights_hhmmss.columns:
                 Flights_hhmmss[col] = Flights_hhmmss[col].apply(
                     lambda x: None if pd.isna(x) else f"{int(x // 3600):02}:{int((x % 3600) // 60):02}:{int(x % 60):02}"
                 )
 
-        # Split data into RWY27 and RWY18C
-        Flights_RWY27 = Flights_hhmmss[Flights_hhmmss['rwy'] == '27']
-        Flights_RWY18C = Flights_hhmmss[Flights_hhmmss['rwy'] == '18C']
+        # Split data into one table per runway (dynamic)
+        runways = (
+            Flights_hhmmss['rwy'].dropna().astype('string').str.strip().unique().tolist()
+            if 'rwy' in Flights_hhmmss.columns else []
+        )
+        # Keep a stable order for readability
+        runways = sorted([r for r in runways if r and r.lower() != 'nan'])
 
-        # Generate HTML tables for each runway
-        html_RWY27 = Flights_RWY27.to_html(classes='table table-bordered', index=True)
-        html_RWY18C = Flights_RWY18C.to_html(classes='table table-bordered', index=True)
+        runway_tables = []
+        for rwy in runways:
+            df_rwy = Flights_hhmmss[Flights_hhmmss['rwy'] == rwy]
+            html_rwy = df_rwy.to_html(classes='table table-bordered', index=True)
+            runway_tables.append((rwy, html_rwy))
+
+        # Fallback if runway column missing or empty
+        if not runway_tables:
+            runway_tables = [("ALL", Flights_hhmmss.to_html(classes='table table-bordered', index=True))]
 
         # After creating html_RWY27 / html_RWY18C
         sim_sec = int(sim.simt)
@@ -92,14 +102,15 @@ class AmanExporter():
             </head>
             <body>
             <div class="container">
-                <div class="table-container">
-                    <h3>Runway RWY27  simtime: {sim_hhmmss}, elapsedtime: {timedelta(seconds=int(time.time() - self.starttime))}</h3>
-                    {html_RWY27}
-                </div>
-                <div class="table-container">
-                    <h3>Runway RWY18C</h3>
-                    {html_RWY18C}
-                </div>
+                {''.join([
+                    f"""
+                    <div class=\"table-container\">
+                        <h3>Runway RWY{rwy}  simtime: {sim_hhmmss}, elapsedtime: {timedelta(seconds=int(time.time() - self.starttime))}</h3>
+                        {html}
+                    </div>
+                    """
+                    for rwy, html in runway_tables
+                ])}
             </div>
             </body>
             </html>

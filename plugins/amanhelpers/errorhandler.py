@@ -3,6 +3,8 @@ import numpy as np
 import pickle
 from bluesky import core, stack, traf, network, sim
 from collections import defaultdict
+from plugins.amanhelpers.aman_settings import expected_delay_percentile
+from plugins.amanhelpers.amanpredictionhandler import parse_destination
 
 
 class ErrorHandler:
@@ -22,7 +24,13 @@ class ErrorHandler:
             # - self.Flights['E_TO'].fillna(0) * 60
         )
         self.Flights['ETO IAF'] = self.Flights['TP IAF'] + self.Flights['Time error']
+
+
         self.Flights['ETA'] = self.Flights['ETO IAF'] + self.Flights['TMA']
+
+        # Apply percentile_time offset (minutes -> seconds), NaN treated as 0
+        pt = self.Flights['percentile_time'].fillna(0.0)
+        self.Flights['delayed ETA'] = self.Flights['ETA'] + pt * 60.0
 
         # tdep = self.Flights['']
         #
@@ -48,10 +56,17 @@ class ErrorHandler:
                         lookahead = 0
 
                     # always regenerate fresh errors
-                    new_takeoff, new_dep_route, new_enroute, new_fir = \
-                        self.errorgenerator.return_sample(acid, origin, lookahead=lookahead)
+                    new_takeoff, new_dep_route, new_enroute, new_fir, percentile_time = \
+                        self.errorgenerator.return_sample(acid, origin, expected_delay_percentile, lookahead=lookahead)
                     if float(new_takeoff) != 0.0:
-                        self.shiftflight.shift(acid, new_takeoff * 60)
+                        #get create time of flight here
+                        scheduledtime = self.shiftflight.shift(acid, new_takeoff * 60)
+                        self.preplan_popup_handler(acid, wpt,flighttime, type, origin, work, new_takeoff, new_dep_route, new_enroute, new_fir, abslookahead, percentile_time, scheduledtime)
+                        #already adding popup flights that are still on ground to aman planning
+
+                elif acid in self.Flights.index:
+                    self.preplan_popup_handler(acid, wpt,flighttime, type, origin, work, 0, 0, 0, 0, 0, 0)
+
                 else:
                     new_takeoff, new_dep_route, new_enroute, new_fir, abslookahead = 0 ,0 ,0 ,0 ,0
                 updated_not_spawned[acid].append(
@@ -85,8 +100,42 @@ class ErrorHandler:
 
 
 
+    def preplan_popup_handler(self, acid, wpt,flighttime, type, origin, work, takeoff, dep_route, enroute, fir, abslookahead, percentile_time, scheduledtime = None):
+        idxac = traf.id2idx(acid)
+         #scheduled time is time of creation of aircraft in bluesky
+        if idxac == -1:
+            if wpt in self.iafs:
+                wptime = flighttime + scheduledtime
+                # determining errors at iaf
+
+                data = {'planningstate': 'ground', 'TP IAF': wptime, 'ETO_original': wptime, 'IAF': wpt,
+                        'type': type, 'origin': origin, 'LAf': '', 'count': 0, 'Flighttime': flighttime,
+                        'E_TO': takeoff, 'E_dep': dep_route, 'E_enroute': enroute, 'E_fir': fir,
+                        'lookahead': abslookahead, 'percentile_time': percentile_time, 'creation': scheduledtime, 'ETD':scheduledtime}
+                self.Flights.loc[acid] = data
+
+            elif acid in self.Flights.index:
+                wptime = flighttime + self.Flights.loc[acid]['creation']
+                if '/RW' in wpt:
+                    dest, runway = parse_destination(wpt)
+                    data = {'planningstate': 'ground', 'TP ETA': wptime, 'runway': runway, 'type': type,
+                            'LAf': '', 'count': 0, 'Flighttime': flighttime, 'minwork': work}
+
+                elif self.firname in wpt:
+                    data = {'FIR entry': wptime}
+
+                elif 'ALTCROSS CLIMB' in wpt:
+                    data = {'SID': wptime}
+
+                elif 'ALTCROSS DESC' in wpt:
+                    data = {}
+
+                else:
+                    print('something wrong with waypoints and prediction in aman')
 
 
+                for key, value in data.items():
+                    self.Flights.at[acid, key] = value
 
 
 # from bluesky import traf, sim

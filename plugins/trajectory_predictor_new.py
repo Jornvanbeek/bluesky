@@ -399,11 +399,11 @@ class Predictor(core.Entity):
                 stack.forward('HOLD', target_id=self.child_id)
 
     @network.subscriber(topic='UPDATE_PREDICTOR')
-    def update_requested(self, acid, route_info, actwp_info, traf_info):
+    def update_requested(self, acid, route_info, actwp_info, traf_info, cond_info):
         if self.parent_id:
 
             # print('received INFO: ', acid, route_info, actwp_info, traf_info)
-            info = (acid, route_info, actwp_info, traf_info)
+            info = (acid, route_info, actwp_info, traf_info, cond_info)
 
             actype = traf_info['type']
             aclat = traf_info['lat']
@@ -441,7 +441,7 @@ class Predictor(core.Entity):
     @stack.command
     def packer(self, acid):
         # todo exclude ipv include
-        # todo wind
+
         include_route = [
             "acid", "nwp", "wpname", "wptype", "wplat", "wplon", "wpalt", "wpspd",
             "wprta", "wpflyby", "wpstack", "wpflyturn", "wpturnbank", "wpturnrad",
@@ -501,9 +501,17 @@ class Predictor(core.Entity):
             else:
                 traf_info[name] = item
 
-        #todo: conditionals ook packen
+        cond = traf.cond
+        idxs = [i for i, cid in enumerate(cond.id) if str(cid).upper() == acid]
+        cond_info = {
+            "condtype": cond.condtype[idxs].astype(int).tolist() if idxs else [],
+            "target": cond.target[idxs].astype(float).tolist() if idxs else [],
+            "lastdif": cond.lastdif[idxs].astype(float).tolist() if idxs else [],
+            "posdata": [cond.posdata[i] for i in idxs] if idxs else [],
+            "cmd": [cond.cmd[i] for i in idxs] if idxs else [],
+        }
 
-        return (acid, route_info, actwp_info, traf_info)
+        return (acid, route_info, actwp_info, traf_info, cond_info)
 
     @stack.command
     def printpacker(self,acid):
@@ -514,7 +522,7 @@ class Predictor(core.Entity):
 
 
     def unpacker(self, info):
-        acid, route_info, actwp_info, traf_info = info
+        acid, route_info, actwp_info, traf_info, cond_info = info
         idxac = traf.id2idx(acid)
         route_obj = traf.ap.route[idxac]
         unpack_attribs(route_obj, route_info)
@@ -529,6 +537,29 @@ class Predictor(core.Entity):
 
         for key, value in actwp_info.items():
             getattr(traf.actwp, key)[idxac] = value
+
+        # Restore conditionals voor deze ACID (simpel: eerst oude verwijderen, dan append)
+        cond = traf.cond
+        idxs = [i for i, cid in enumerate(cond.id) if str(cid).upper() == str(acid).upper()]
+        for i in idxs[::-1]:
+            del cond.id[i]
+            cond.condtype = np.delete(cond.condtype, i)
+            cond.target = np.delete(cond.target, i)
+            cond.lastdif = np.delete(cond.lastdif, i)
+            del cond.posdata[i]
+            del cond.cmd[i]
+
+        nnew = len(cond_info.get("cmd", []))
+        for k in range(nnew):
+            cond.id.append(str(acid).upper())
+            cond.condtype = np.append(cond.condtype, int(cond_info["condtype"][k]))
+            cond.target = np.append(cond.target, float(cond_info["target"][k]))
+            cond.lastdif = np.append(cond.lastdif, float(cond_info["lastdif"][k]))
+            cond.posdata.append(cond_info["posdata"][k])
+            cond.cmd.append(cond_info["cmd"][k])
+
+        cond.ncond = len(cond.id)
+
 
     @stack.command
     def selspd(self,acid):
@@ -1018,6 +1049,47 @@ class Predictor(core.Entity):
 
             stack.stack(f"ECHO {arr}")
             print(arr)
+
+
+
+    @stack.command
+    def printconditionals(self, acid: str = None):
+        """Print all conditionals in this node. Optional filter by ACID."""
+        cond = traf.cond
+
+        if getattr(cond, "ncond", 0) == 0 or len(getattr(cond, "id", [])) == 0:
+            print("[TP] No conditionals in this node")
+            return
+
+        acid_f = acid.upper() if isinstance(acid, str) and acid.strip() else None
+
+        if acid_f is None:
+            idxs = list(range(len(cond.id)))
+        else:
+            idxs = [i for i, cid in enumerate(cond.id) if str(cid).upper() == acid_f]
+
+        if not idxs:
+            print(f"[TP] No conditionals for {acid_f} in this node")
+            return
+
+        print("=============== TP CONDITIONALSES ===============")
+        print(f"ncond: {cond.ncond} | printing: {len(idxs)}")
+        if acid_f:
+            print(f"filter: {acid_f}")
+        print("idx | id | type | target | lastdif | posdata | cmd")
+
+        for i in idxs:
+            cid = cond.id[i]
+            ctype = int(cond.condtype[i])
+            targ = float(cond.target[i])
+            ldif = float(cond.lastdif[i])
+            pos = cond.posdata[i]
+            cmd = cond.cmd[i]
+            print(f"{i:4d} | {cid} | {ctype} | {targ} | {ldif} | {pos} | {cmd}")
+
+        print("===============================================")
+
+
 
 
 

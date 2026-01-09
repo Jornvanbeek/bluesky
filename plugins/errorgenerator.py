@@ -7,6 +7,8 @@ import pickle
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from plugins.amanhelpers import aman_settings
+
 
 class ErrorGenerator:
     def __init__(self):
@@ -17,10 +19,19 @@ class ErrorGenerator:
         self.dep_route = None
         # self.departure
         self.stats = None
-        self.departure_route_title = 'SID_rel'
-        self.stddev_withinfir = 1.5 # %
-        self.cop_pdf = (-0.1840341263226265, 1.3898584120283286, -0.22623562655786733, 9.968335882486613)
-        self.PDF_file = 'plugins/PDF.pkl'
+        # Configurable via plugins/amanhelpers/aman_settings.py
+
+        self.departure_route_title = aman_settings.departure_route_title
+        self.stddev_withinfir = aman_settings.stddev_withinfir  # %
+        self.cop_pdf = aman_settings.cop_pdf
+        self.PDF_file = aman_settings.PDF_file
+
+        # error multiplicators (takeoff, dep_route, enroute, fir)
+        self.takeoff_multiplicator = float(aman_settings.error_multiplicator[0])
+        self.dep_route_multiplicator = float(aman_settings.error_multiplicator[1])
+        self.enroute_multiplicator = float(aman_settings.error_multiplicator[2])
+        self.fir_multiplicator = float(aman_settings.error_multiplicator[3])
+
         self.load_distributions(self.PDF_file)
 
         self.seed = np.random.get_state()[1][0]
@@ -88,20 +99,22 @@ class ErrorGenerator:
         return dist.rvs(random_state=rng )
 
 
-    def return_sample(self,acid, airport, lookahead = 0):
+    def return_sample(self,acid, airport, percentile, lookahead = 0):
         self.seed = np.random.get_state()[1][0]
         rng = self._rng(acid) #rng is the same for each sample of the flight, should only change between different global seeds
 
         if lookahead >0:
             try:
                 takeoffdist = self.stats.loc[(airport,lookahead),'distribution']
+                percentile_takeoff = takeoffdist.ppf(percentile/100)
                 takeoff = self.sample(rng,takeoffdist )
             except KeyError:
-                print(airport, lookahead, 'Not in error database, takeoff error set to 0')
-                takeoff = 0
-
+                print(airport, lookahead, 'Not in error database, takeoff error set to 0.9999')
+                takeoff = 0.9999
+                percentile_takeoff = 0.9999
         else:
             takeoff = 0
+            percentile_takeoff = 0
 
         #dep_route
 
@@ -115,8 +128,12 @@ class ErrorGenerator:
         enroute = self.sample(rng, self.outside_fir)
         fir = self.sample(rng, self.inside_fir)
 
-
-        return takeoff, dep_route, enroute, fir
+        takeoff *= self.takeoff_multiplicator
+        dep_route *= self.dep_route_multiplicator
+        enroute *= self.enroute_multiplicator
+        fir *= self.fir_multiplicator
+        percentile_takeoff *= self.takeoff_multiplicator
+        return takeoff, dep_route, enroute, fir, percentile_takeoff
         # time, %,%,%
         # approx enroute/fir at handover alt
 

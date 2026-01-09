@@ -5,6 +5,7 @@ import pickle
 import pandas as pd
 from bluesky import network, stack, traf, sim
 
+from plugins.amanhelpers.aman_settings import expected_delay_percentile
 
 class PredictionHandler:
 
@@ -29,15 +30,16 @@ class PredictionHandler:
                 if lookahead < 0:
                     lookahead = 0
                 # print(acid, 'error should be generated')
-                takeoff, dep_route, enroute, fir = self.errorgenerator.return_sample(acid, origin, lookahead=lookahead)
+                takeoff, dep_route, enroute, fir, percentile_time = self.errorgenerator.return_sample(acid, origin, expected_delay_percentile, lookahead=lookahead)
                 if float(takeoff) != 0.0:
-                    self.shiftflight.shift(acid, takeoff * 60)
+                    scheduledtime = self.shiftflight.shift(acid, takeoff * 60)
                     #POPUP CODE
-
-                    data = {'planningstate': 'ground', 'TP IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir, 'creation': sim.simt, 'lookahead':abslookahead}
+                    wptime = flighttime + scheduledtime
+                    data = {'planningstate': 'ground', 'TP IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': origin, 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir, 'creation': scheduledtime, 'ETD': scheduledtime, 'lookahead':abslookahead, 'percentile_time':percentile_time}
                     self.Flights.loc[acid] = data
 
             elif acid in self.Flights.index:
+                wptime = flighttime + self.Flights.loc[acid]['creation']
                 if '/RW' in wpt:
                     dest, runway = parse_destination(wpt)
                     data = {'planningstate': 'ground', 'TP ETA': wptime, 'runway':runway, 'type': type, 'origin': '', 'LAf': '','count':0, 'Flighttime': flighttime, 'minwork':work}
@@ -153,7 +155,6 @@ class PredictionHandler:
                 for prediction in self.not_spawned[acid]:
                     wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead, work = prediction
                     wptime = sim.simt + flighttime
-
                     if wpt in self.iafs:
                         data = {'planningstate': 'new', 'TP IAF': wptime, 'ETO_original':wptime, 'IAF': wpt, 'type': type, 'origin': '', 'LAf': '', 'count':0, 'Flighttime': flighttime, 'E_TO': takeoff, 'E_dep':dep_route, 'E_enroute':enroute, 'E_fir':fir, 'creation': sim.simt, 'lookahead':abslookahead}
 
@@ -182,6 +183,13 @@ class PredictionHandler:
 
                     else:
                         # Updates the existing row for acid
+                        if self.Flights.loc[acid, 'planningstate'] == 'ground':
+                            data['planningstate'] = 'ground'
+
+
+                            # sim.hold()
+                            # print('popup created ground planningstate', acid)
+
                         for key, value in data.items():
                             self.Flights.at[acid, key] = value
             else:

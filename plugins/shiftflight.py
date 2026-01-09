@@ -32,15 +32,13 @@ class shiftflight(core.Entity):
         cmds = stack.stackbase.Stack.scencmd
         times = stack.stackbase.Stack.scentime
 
-        # count = 0
-        # for i, cmd in enumerate(cmds):
-        #     if acid in cmd:
-        #         times[i] += error
-        #         count += 1
+        spawntime = 999999999.
 
         for i, cmd in enumerate(cmds):
             if acid in cmd:
                 times[i] = max(0.0, times[i] + error)
+                if times[i] < spawntime:
+                    spawntime = times[i]
 
         # sort back in time order
         pairs = sorted(zip(times, cmds), key=lambda x: x[0])
@@ -49,9 +47,10 @@ class shiftflight(core.Entity):
 
 
 
+        return spawntime - error
         # ensure the mutated list/array is stored back
         # stack.stackbase.Stack.scentime = times
-        print(stack.stackbase.Stack.scentime)
+        # print(stack.stackbase.Stack.scentime)
         # todo schedule gebruiken ipv shift?
 
     @stack.command

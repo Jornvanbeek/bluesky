@@ -191,13 +191,17 @@ class monte_carlo(core.Entity):
             running = df['status'].eq('running')
             df.loc[running, 'elapsed'] = (now - df.loc[running, 'starttime'])
 
-        num = df.apply(lambda c: pd.to_numeric(c, errors='coerce'))
+        # Coerce everything to numeric; non-numeric becomes NaN. Force float to avoid bool dtype warnings.
+        num = df.apply(lambda c: pd.to_numeric(c, errors="coerce")).astype("float64")
 
-        summary = pd.DataFrame(index=['min', 'mean', 'max'], columns=df.columns, dtype='float64')
+        summary = pd.DataFrame(index=["min", "mean", "max"], columns=df.columns, dtype="float64")
         if not num.empty:
-            summary.loc['min', num.columns] = num.min(skipna=True)
-            summary.loc['mean', num.columns] = num.mean(skipna=True)
-            summary.loc['max', num.columns] = num.max(skipna=True)
+            # Only fill columns that actually have at least one numeric value
+            num_cols = [c for c in num.columns if num[c].notna().any()]
+            if num_cols:
+                summary.loc["min", num_cols] = num[num_cols].min(skipna=True)
+                summary.loc["mean", num_cols] = num[num_cols].mean(skipna=True)
+                summary.loc["max", num_cols] = num[num_cols].max(skipna=True)
 
         return pd.concat([df, summary], axis=0)
 
@@ -213,11 +217,18 @@ class monte_carlo(core.Entity):
     def storedf(self, path = "Montecarlo/montecarlo_batch.pkl"):
         self.batch.to_pickle(path)
 
+    @core.timed_function(dt= 5)
+    def autohtml(self):
+        if self.parent:
+            return
+        self.df_to_html()
 
     @stack.command
     def df_to_html(self, path: str = "Montecarlo/montecarlo.html"):
         """Exporteer de batch-DataFrame naar een nette HTML-tabel."""
-        df = self.batch.copy()
+        if self.parent:
+            return
+        df = self.summary().copy()
 
         # Datetimes naar string
         for col in ("starttime", "endtime"):

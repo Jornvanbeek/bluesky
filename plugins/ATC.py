@@ -14,7 +14,7 @@ from bluesky.tools.geo import kwikqdrdist
 from bluesky.traffic.route import Route
 import math
 
-from plugins.amanhelpers.aman_settings import instruct
+from plugins.amanhelpers.aman_settings import instruct, mach_threshold, handover_alt, max_dogleg_ratio
 # from plugins.scenario_generator import scenario
 
 
@@ -34,9 +34,9 @@ class ATC(core.Entity):
         # plugin.Plugin.plugins['MACH_CROSSOVER'].imp.CROSSOVER
         self.aman = plugin.Plugin.plugins['AMANTWO'].imp.AMAN
         self.predictor = plugin.Plugin.plugins['NEWTP'].imp.predictor
-        self.mach_threshold = 0
-        self.handover_alt = 260.*100 # moet naar amansettings
-        self.max_dogleg_ratio = 1.8
+        self.mach_threshold = mach_threshold
+        self.handover_alt = handover_alt
+        self.max_dogleg_ratio = max_dogleg_ratio
         self.aman.Flights['instruction'] = None
         self.aman.Flights['TPstate'] = ' '
         self.aman.Flights['count'] = 0
@@ -72,8 +72,7 @@ class ATC(core.Entity):
         # plugin.Plugin.plugins['MACH_CROSSOVER'].imp.CROSSOVER
         self.aman = plugin.Plugin.plugins['AMANTWO'].imp.AMAN
         self.predictor = plugin.Plugin.plugins['NEWTP'].imp.predictor
-        self.mach_threshold = 0
-        self.handover_alt = 260.*100
+
         self.aman.Flights['instruction'] = None
         self.aman.Flights['TPstate'] = ' '
         self.aman.Flights['count'] = 0
@@ -176,63 +175,72 @@ class ATC(core.Entity):
                 # todo add holding
 
             #scenario 4: adjacent
-        # elif ttlg > self.aman.early_adjacent_threshold: # delay
-        #     if self.aman.Flights.loc[acid]['selspd'] > minspd:
-        #         self.speed_at_entry(acid, minspd, ttlg)
-        #         sim.hold()
-        #         print('holding because of early', acid)
-        #     elif self.aman.Flights.loc[acid]['selspd'] > 4 and abs(self.Flights.loc[acid]['selspd'] - minspd) < 1:
-        #         self.delay_mach(acid)
-        #
-        # elif ttlg < - self.aman.late_adjacent_threshold:
-        #     if self.aman.Flights.loc[acid]['selspd'] < maxspd:
-        #         if abs(trackmiles - direct_dist) > 1:  # if not direct
-        #             self.speed_at_entry(acid, maxspd, ttlg, direct = True)
-        #         else:
-        #             self.speed_at_entry(acid, maxspd, ttlg)
-        #         sim.hold()
-        #         print('holding because of late', acid)
-        #     elif abs(trackmiles - direct_dist) > 1:  # if not direct
-        #         self.dogleg(acid, ttlg)
-        #     elif selspd >4. and abs(maxspd - selspd) > 1:
-        #         self.speed(acid, ttlg)
-        #         #add removal of conditional at FL260?
-        #     elif abs(trackmiles - direct_dist) < 1 and selspd >4. and abs(maxspd - selspd) < 1:
-        #         ETA = self.reset_ETA(acid)
-        #         self.aman.replan_late(acid, ETA=ETA)
-        #         print(f'replanning {acid}')
-        #         #remove conditionals
-
-
-        elif ttlg > self.aman.early_adjacent_threshold:  # delay
-            if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
+        elif ttlg > self.aman.early_adjacent_threshold and alt > self.handover_alt: # delay
+            instrspd = self.aman.Flights.loc[acid]['selspd']
+            if instrspd > minspd or pd.isna(instrspd):
+                self.speed_at_entry(acid, minspd, ttlg)
+                # sim.hold()
+                # stack.forward('HOLD', target_id=self.predictor.child_id)
+                # print('holding because of early', acid)
+            elif selspd < 4. and abs(instrspd - minspd) < 1:
                 self.delay_mach(acid)
-            else:
-                if selspd >4. and abs(minspd - selspd) > 1:
-                    self.speed(acid, ttlg)
-                elif direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
-                    self.dogleg(acid, ttlg)
+                # sim.hold()
+                # stack.forward('HOLD', target_id=self.predictor.child_id)
+                # print('holding because of mach', acid)
+            elif selspd > 4. and abs(instrspd - minspd) < 1:
+                self.speed(acid, ttlg)
 
-
-        elif ttlg <= -self.aman.late_adjacent_threshold: # speed up
-            if selspd < 4. and abs(trackmiles - direct_dist) > 1: # if not direct
+        elif ttlg < - self.aman.late_adjacent_threshold and alt > self.handover_alt:
+            instrspd = self.aman.Flights.loc[acid]['selspd']
+            if instrspd < maxspd or pd.isna(instrspd):
+                if abs(trackmiles - direct_dist) > 1:  # if not direct
+                    self.speed_at_entry(acid, maxspd, ttlg, direct = True)
+                else:
+                    self.speed_at_entry(acid, maxspd, ttlg)
+                # sim.hold()
+                # stack.forward('HOLD', target_id=self.predictor.child_id)
+                # print('holding because of late', acid)
+            elif abs(trackmiles - direct_dist) > 1:  # if not direct
                 self.dogleg(acid, ttlg)
-                print('adjacent speed up dogleg', ttlg)
-            else:
-                if selspd >4. and abs(maxspd - selspd) > 1:
-                    self.speed(acid, ttlg)
-                elif abs(trackmiles - direct_dist) > 1: # if not direct
-                    self.dogleg(acid, ttlg)
-                    print('adjacent speed up dogleg in mach', ttlg)
-                elif selspd >4. and abs(maxspd - selspd) <= 1:
-                    ETA = self.reset_ETA(acid)
-                    self.aman.replan_late(acid, ETA=ETA)
-                    print(f'replanning {acid}')
-                elif selspd <4. and abs(trackmiles - direct_dist) > 1:
-                    ETA = self.reset_ETA(acid)
-                    self.aman.replan_late(acid, ETA=ETA)
-                    print(f'replanning {acid}')
-        #else: no update needed
+            elif selspd >4. and abs(maxspd - selspd) > 1:
+                self.speed(acid, ttlg)
+                #add removal of conditional at FL260?
+            elif abs(trackmiles - direct_dist) < 1 and selspd >4. and abs(maxspd - selspd) < 1:
+                ETA = self.reset_ETA(acid)
+                self.aman.replan_late(acid, ETA=ETA)
+                print(f'replanning {acid}')
+                #remove conditionals
+
+
+        # elif ttlg > self.aman.early_adjacent_threshold:  # delay
+        #     if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
+        #         self.delay_mach(acid)
+        #     else:
+        #         if selspd >4. and abs(minspd - selspd) > 1:
+        #             self.speed(acid, ttlg)
+        #         elif direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
+        #             self.dogleg(acid, ttlg)
+        #
+        #
+        # elif ttlg <= -self.aman.late_adjacent_threshold: # speed up
+        #     if selspd < 4. and abs(trackmiles - direct_dist) > 1: # if not direct
+        #         self.dogleg(acid, ttlg)
+        #         print('adjacent speed up dogleg', ttlg)
+        #     else:
+        #         if selspd >4. and abs(maxspd - selspd) > 1:
+        #             self.speed(acid, ttlg)
+        #         elif abs(trackmiles - direct_dist) > 1: # if not direct
+        #             self.dogleg(acid, ttlg)
+        #             print('adjacent speed up dogleg in mach', ttlg)
+        #         elif selspd >4. and abs(maxspd - selspd) <= 1:
+        #             ETA = self.reset_ETA(acid)
+        #             self.aman.replan_late(acid, ETA=ETA)
+        #             print(f'replanning {acid}')
+        #         elif selspd <4. and abs(trackmiles - direct_dist) > 1:
+        #             ETA = self.reset_ETA(acid)
+        #             self.aman.replan_late(acid, ETA=ETA)
+        #             print(f'replanning {acid}')
+        # #else: no update needed
 
 
 
@@ -371,9 +379,10 @@ class ATC(core.Entity):
 
         elif 'adjacent' in itype:
             self.instruction_correct(acid)
-            sim.hold()
-
-            print('received update of adjacent ', acid, ttlg)
+            # sim.hold()
+            # stack.forward('HOLD', target_id=self.predictor.child_id)
+            #
+            # print('received update of adjacent ', acid, ttlg)
         else:
             print(f'instruction correct {acid}')
             self.instruction_correct(acid)
@@ -493,10 +502,16 @@ class ATC(core.Entity):
         selspd = traf.selspd[idx] / kts
 
         self.aman.Flights.loc[acid, 'selspd'] = spd
-        stack.stack(f'{acid} ATALT {self.handover_alt} DO {acid} SPD {spd}')
+        targalt = self.handover_alt * ft
+        cmdtext = f"SENDSPEEDCMD {acid} {spd}"
+        traf.cond.ataltcmd(idx, targalt, cmdtext)
+
         if direct:
+            # stack.stack(f'{acid} ATALT {self.handover_alt} DIRECTIAF {acid}')
             iaf = self.aman.Flights.loc[acid, 'IAF']
-            stack.stack(f'{acid} ATALT {self.handover_alt} DO {acid} DIRECT {iaf}')
+            cmdtext = f"DIRECT {acid} {iaf}"
+            traf.cond.ataltcmd(idx, targalt, cmdtext)
+            self.aman.Flights.loc[acid, 'direct'] = True
 
         # if ttlg > 0:
         #     instrtype = 'delay'
@@ -506,7 +521,7 @@ class ATC(core.Entity):
         self.active_instructions[acid]= 'adjacent'
         self.start_update(acid)
 
-
+    @stack.command
     def directiaf(self, acid):
         idxac = traf.id2idx(acid)
         iaf = self.aman.Flights.loc[acid, 'IAF']
@@ -515,6 +530,7 @@ class ATC(core.Entity):
         traf.ap.route[idxac].direct(idxac,iaf)
         self.aman.Flights.loc[acid, 'direct'] = True
 
+    @stack.command
     def sendspeedcmd(self, acid, speed):
         #speed in knots
         speed = float(speed)
