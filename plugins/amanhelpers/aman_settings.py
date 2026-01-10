@@ -19,12 +19,12 @@ instruction_margin = 20 # allowed error by ATC from expected eat
 approach_aim = 0  # 90 seconds before eat if an instruction is given is the aim (make negative)
 late_adjacent_threshold = 2 * 60  # if an aircraft is late then this is the threshold before communicating to an adjacent center
 early_adjacent_threshold = 2 * 60  # if an aircraft is early, then this is the ttlg threshold before communicating to an adjacent center, make negative?
-instruct = False # easy setting to disable all instructions to frozen aircraft
+instruct = True # easy setting to disable all instructions to frozen aircraft
 mach_reduction = 0.04
 max_speedup = 25  # knots
 max_slowdown = 50  # knots
 abs_minspd = 190  # knots outside of tma
-nearby_threshold = 120  # seconds before iaf, no more instructions possible
+nearby_threshold = 180  # seconds before iaf, no more instructions possible
 dogleg_multiplyer = 0.99
 descent_angle = 3.0  # degrees
 popup_planner ='FCFS'
@@ -41,7 +41,7 @@ TP_DT = 3.0 #s
 
 
 dynamic_LIV = False
-capacity = 30#34 #aircraft per hour, if no LIV
+capacity = 25#34 #aircraft per hour, if no LIV
 separation = round(60*60/capacity,0)
 
 # error multiplicator for different error types: departure time, departure route, enroute, within fir

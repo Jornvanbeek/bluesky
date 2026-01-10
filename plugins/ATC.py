@@ -13,6 +13,8 @@ from bluesky.tools.geo import kwikpos, qdrpos, kwikdist, qdrdist
 from bluesky.tools.geo import kwikqdrdist
 from bluesky.traffic.route import Route
 import math
+import time
+from collections import defaultdict
 
 from plugins.amanhelpers.aman_settings import instruct, mach_threshold, handover_alt, max_dogleg_ratio
 # from plugins.scenario_generator import scenario
@@ -64,8 +66,6 @@ class ATC(core.Entity):
         self.active_instructions = {} # acid: delay/short + dogleg/speed/mach
 
 
-
-
     def reset(self):
         super().reset()
         self.crossover = None#this gives some errors with initialization
@@ -90,7 +90,6 @@ class ATC(core.Entity):
         self.instructions = pd.DataFrame()
 
 
-
     @stack.command
     def instruct_frozen(self):
         frozen_flights = self.aman.Flights[self.aman.Flights['planningstate'] == 'frozen']
@@ -98,22 +97,19 @@ class ATC(core.Entity):
             self.instructions = []
             if len(frozen_flights) > 0:
 
-                # while True:
+
                 self.aman.update_times()
 
                 frozen_flights = frozen_flights.dropna(subset=['ttlg'])
 
-                # instructie-criteria: delay OF shorten
+
                 delay = frozen_flights['ttlg'] > self.aman.early_approach_margin
                 shorten = frozen_flights['ttlg'] < -self.aman.late_approach_margin
-
-                # exclude aircraft that already have an active instruction/prediction update pending
                 has_active_instr = frozen_flights.index.isin(self.active_instructions.keys())
-
                 instruct = frozen_flights[(delay | shorten) & ~has_active_instr]
 
-                if len(instruct) >0:
-                    # print('instruct: ', instruct)
+
+                if len(instruct) > 0:
                     if sim.state != HOLD:
                         self.rtf = sim.dtmult
                         self.ff = sim.ffmode
@@ -122,7 +118,6 @@ class ATC(core.Entity):
 
                     for acid, row in instruct.iterrows():
                         self.determine_scenario(acid, float(row['ttlg']))
-
 
                     if len(self.active_instructions) == 0:
                         if self.ff:
@@ -134,9 +129,10 @@ class ATC(core.Entity):
 
 
 
-
     def determine_scenario(self, acid, ttlg):
         idx = traf.id2idx(acid)
+        if idx == -1:
+            return
         selspd = traf.selspd[idx] / kts
         maxspd = self.aman.Flights.loc[acid]['max_casdesc']
         minspd = self.aman.Flights.loc[acid]['min_casdesc']
@@ -172,7 +168,18 @@ class ATC(core.Entity):
                     self.speed(acid, ttlg)
                 elif to_iaf > self.aman.nearby_threshold and direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
                     self.dogleg(acid, ttlg)
-                # todo add holding
+                elif to_iaf < self.aman.nearby_threshold and ttlg < (self.aman.early_approach_margin + 20):
+                    self.dogleg(acid, ttlg)
+                elif to_iaf < self.aman.nearby_threshold and ttlg >= (self.aman.early_approach_margin + 20):
+                    iaf = self.aman.Flights.loc[acid, 'IAF']
+                    line = f'HOLDING AT {acid} {iaf} {ttlg}'
+                    stack.stack(line)
+                    self.start_update(acid)
+                    # stack.forward(line, target_id=self.predictor.child_id)
+                    sim.hold()
+                    print(f'HOLDING AT {acid} {iaf} {ttlg}')
+
+
 
             #scenario 4: adjacent
         elif ttlg > self.aman.early_adjacent_threshold and alt > self.handover_alt: # delay
@@ -187,8 +194,8 @@ class ATC(core.Entity):
                 # sim.hold()
                 # stack.forward('HOLD', target_id=self.predictor.child_id)
                 # print('holding because of mach', acid)
-            elif selspd > 4. and abs(instrspd - minspd) < 1:
-                self.speed(acid, ttlg)
+            elif selspd > 4. and abs(instrspd - minspd) < 1 and vs < 0.0:
+                self.minspeed(acid, minspd)
 
         elif ttlg < - self.aman.late_adjacent_threshold and alt > self.handover_alt:
             instrspd = self.aman.Flights.loc[acid]['selspd']
@@ -210,8 +217,6 @@ class ATC(core.Entity):
                 self.aman.replan_late(acid, ETA=ETA)
                 print(f'replanning {acid}')
                 #remove conditionals
-
-
         # elif ttlg > self.aman.early_adjacent_threshold:  # delay
         #     if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
         #         self.delay_mach(acid)
@@ -243,10 +248,6 @@ class ATC(core.Entity):
         # #else: no update needed
 
 
-
-
-
-
     def reset_ETA(self, acid):
         ETA_reset = self.aman.Flights.loc[acid, 'ETO_original'] + self.aman.Flights.loc[acid, 'TMA'] + self.aman.Flights.loc[acid, 'Time error']
         # self.aman.FLights.at[acid, 'ETA_reset'] = ETA_reset
@@ -257,32 +258,30 @@ class ATC(core.Entity):
         if acid in self.aman.Flights.index:
             idxac = traf.id2idx(acid)
             if idxac != -1 and acid in self.active_instructions:
+
                 wptime = traf.ap.route[idxac].createtime + flighttime
+
                 previous_iaftime = self.aman.Flights.loc[acid]['TP IAF']
 
                 if wpt in self.aman.iafs:
-
                     TMA = self.aman.Flights.loc[acid, 'TMA']
                     # 'TP ETA': wptime + TMA
                     data = {'TP IAF': wptime, 'IAF': wpt, 'TPstate': 'updated', 'TP ETA': wptime + TMA}
-
                     for key, value in data.items():
                         self.aman.Flights.at[acid, key] = value
-
                     ttlg = self.aman.Flights.loc[acid, 'ttlg']
                     print('ttlg updated? previous: ',acid, ttlg)
+
                     self.aman.update_times()
+
 
                     ttlg = self.aman.Flights.loc[acid, 'ttlg']
                     print('updated ttlg: ',acid, ttlg)
 
-
-
                     delay = data['TP IAF'] - previous_iaftime
                     self.store_delay(acid, delay)
-
-
                     self.check_tp_update(acid, ttlg)
+
                     # print(f'received tp update{acid}')
 
 
@@ -315,6 +314,7 @@ class ATC(core.Entity):
 
 
     def check_tp_update(self, acid, ttlg):
+
         itype = self.active_instructions[acid]
         if abs(ttlg) <= self.aman.instruction_margin:
             self.instruction_correct(acid)
@@ -333,8 +333,6 @@ class ATC(core.Entity):
             print(f're-applying short instruction {acid} {ttlg} {self.active_instructions}')
             self.reapply_instruction( acid, ttlg, itype)
 
-
-
         elif 'delay' in itype and ttlg > self.aman.instruction_margin:  # delay given, but not sufficient
             # try to increase the same type of instruction if there is still room
             idx = traf.id2idx(acid)
@@ -342,7 +340,6 @@ class ATC(core.Entity):
             minspd = self.aman.Flights.loc[acid]['min_casdesc']
 
             trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
-
 
             if 'speed' in itype and abs(minspd - selspd) > 1:
                 # more speed reduction possible
@@ -355,8 +352,6 @@ class ATC(core.Entity):
                 # no additional delay possible with this type: close instruction and re-evaluate scenario
                 self.instruction_correct(acid)
                 self.determine_scenario(acid, ttlg)
-
-
 
         elif 'short' in itype and ttlg < -self.aman.instruction_margin:  # speed-up not sufficient
             idx = traf.id2idx(acid)
@@ -389,6 +384,7 @@ class ATC(core.Entity):
             # self.determine_scenario(acid, ttlg)
             print(f'completed {acid}')
 
+
     def reapply_instruction(self,acid, ttlg, itype):
         if 'dogleg' in itype or 'direct' in itype:
             self.dogleg(acid, ttlg)
@@ -416,7 +412,9 @@ class ATC(core.Entity):
 
 
     def start_update(self,acid):
+
         self.predictor.update(acid)
+
         iaf = self.aman.Flights.loc[acid, 'IAF']
         stack.forward(f'AT {acid} {iaf} DO DELAY 10 DEL {acid}', target_id=self.predictor.child_id)
         print(f'START UPDATE FOR {acid}')
@@ -428,6 +426,7 @@ class ATC(core.Entity):
 
         if self.aman.Flights.at[acid, 'updates'] > 10:
             self.debug_updates(acid)
+
 
     def dogleg(self, acid, ttlg):
         print('ttlg in dogleg: ', ttlg)
@@ -450,6 +449,7 @@ class ATC(core.Entity):
             instrtype = 'short'
         self.active_instructions[acid]= instrtype+' dogleg'  # acid: delay/short + dogleg/speed/mach
         self.start_update(acid)
+
 
     def speed(self,acid, ttlg):
         idx = traf.id2idx(acid)
@@ -519,6 +519,15 @@ class ATC(core.Entity):
         #     instrtype = 'short'
         #deze dingen werken niet vanwege hoe check tp update is
         self.active_instructions[acid]= 'adjacent'
+        self.start_update(acid)
+
+    def minspeed(self, acid, spd):
+        idx = traf.id2idx(acid)
+
+        self.aman.Flights.loc[acid, 'selspd'] = spd
+        self.sendspeedcmd(acid, spd)
+
+        self.active_instructions[acid] = 'delay speed'
         self.start_update(acid)
 
     @stack.command
@@ -633,7 +642,6 @@ class ATC(core.Entity):
         if abs(qdrcheck - qdrcheck_next) < 90 or abs(qdrcheck - qdrcheck_next) > 270:
             alpha = -alpha
             lat, lon = qdrpos(traf.lat[idx], traf.lon[idx], direct_qdr + alpha, hypothenuse)
-
         return lat, lon, alpha, hypothenuse, opposing
 
     def reqspd(self,acid, ttlg, idx):
@@ -648,6 +656,10 @@ class ATC(core.Entity):
         to_eto = self.aman.Flights.loc[acid, 'ETO IAF'] - sim.simt
         dist = planned_dist + planned_dist*(aim_ttlg/to_eto)  #aim ttlg will be negative if speed up required
         return dist
+
+
+    def holding(self, acid, ttlg):
+        idx = traf.id2idx(acid)
 
 # HELPER FUNCTIONS
 
@@ -801,7 +813,6 @@ class ATC(core.Entity):
     @stack.command
     def set_speed(self, acid, mcruise=None, cascruise=None, mdescent=None, casdesc=None, mclimb=None, casclimb=None,
                   max_casdesc=None):
-
         if casdesc is None:
             casdesc = 250.
         max_casdesc = round(float(casdesc) + self.aman.max_speedup)
@@ -810,5 +821,3 @@ class ATC(core.Entity):
         self.aman.Flights.at[acid, 'max_casdesc'] = max_casdesc
         self.aman.Flights.at[acid, 'min_casdesc'] = min_casdesc
         stack.stack(f'FLIGHT_SPEEDS {acid} {mcruise} {cascruise} {mdescent} {casdesc} {mclimb} {casclimb}')
-
-

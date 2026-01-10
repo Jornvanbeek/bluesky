@@ -1,6 +1,7 @@
 
 from collections import defaultdict
 import pickle
+import time
 
 import pandas as pd
 from bluesky import network, stack, traf, sim
@@ -58,13 +59,17 @@ class PredictionHandler:
 
 
                 # Updates the existing row for acid
+
                 for key, value in data.items():
                     self.Flights.at[acid, key] = value
+
 
                 takeoff, dep_route, enroute, fir, abslookahead = 0, 0, 0, 0, 0  # to be disregarded later
             else:
                 takeoff, dep_route, enroute, fir, abslookahead = 0,0,0,0,0# to be disregarded later
+
             self.not_spawned[acid].append((wpt, wptime,flighttime,estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead, work))
+
 
             # the above is future code for popups?
 
@@ -95,10 +100,7 @@ class PredictionHandler:
 
             else:
                 data = {}
-
-
             # Updates the existing row for acid
-
             for key, value in data.items():
                 self.Flights.at[acid, key] = value
 
@@ -136,9 +138,11 @@ class PredictionHandler:
                     self.Flights.at[acid, key] = value
 
 
+
     # new aircraft spawned
     def create(self, n=1):
         """ Gets triggered everytime n number of new aircraft are created. """
+
         super().create(n)
 
         # Ensure this runs only in the main node.
@@ -151,6 +155,7 @@ class PredictionHandler:
         for i in range(n):
             acid = traf.id[-1 - i]
             id = len(traf.id) - i
+
             if acid in self.not_spawned.keys():
                 for prediction in self.not_spawned[acid]:
                     wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead, work = prediction
