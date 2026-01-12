@@ -174,7 +174,7 @@ class Predictor(core.Entity):
         self.incorrect_predictions = []#['EZY91XM', 'DAL72SH']
         # Change the route class implementation for the child node using PredictorNodeRoute class.
         stack.stack('IMPLEMENTATION Route Route')
-
+        self._t0_by_acid = {}
 
     @stack.command
     def printattrib(self, attrib):
@@ -387,21 +387,26 @@ class Predictor(core.Entity):
         print('My parent is', self.parent_id)
 
     @predictor.subcommand
-    def update(self, acid):
+    def update(self, acid, t0 = None):
+        if t0 is None:
+            t0 = time.perf_counter()
         acid = acid.upper()
         if self.child_id:
             idxac = traf.id2idx(acid)
             traf.ap.route[idxac].createtime = sim.simt
-            info = self.packer(acid)
+            info = self.packer(acid, t0)
+            print("packer ", acid, (time.time_ns() - t0)/1e6, "ms")
             net.send('UPDATE_PREDICTOR', info, self.child_id)
+            print("sent ", acid, (time.time_ns() - t0)/1e6, "ms")
             if acid in self.incorrect_predictions:
                 stack.stack('hold')
                 stack.forward('HOLD', target_id=self.child_id)
 
     @network.subscriber(topic='UPDATE_PREDICTOR')
-    def update_requested(self, acid, route_info, actwp_info, traf_info, cond_info):
+    def update_requested(self, acid, route_info, actwp_info, traf_info, cond_info, t0):
         if self.parent_id:
-
+            print("received ", acid, (time.time_ns() - t0)/1e6, "ms")
+            self._t0_by_acid[acid] = t0
             # print('received INFO: ', acid, route_info, actwp_info, traf_info)
             info = (acid, route_info, actwp_info, traf_info, cond_info)
 
@@ -428,18 +433,21 @@ class Predictor(core.Entity):
                     attempts += 1
                     time.sleep(0.2)
                 traf.cre(acid, actype, aclat, aclon, achdg, acalt, acspd)
-
+            print("created ", acid, (time.time_ns() - t0)/1e6, "ms")
             idxac = traf.id2idx(acid)
             self.unpacker(info)
+            print("unpacked ", acid, (time.time_ns() - t0)/1e6, "ms")
             traf.update()
             acrte = traf.ap.route[idxac]
             acrte.calcfp()
             iactwp = acrte.iactwp
             traf.ap.ComputeVNAV(idxac, acrte.wptoalt[iactwp], acrte.wpxtoalt[iactwp], acrte.wptorta[iactwp],acrte.wpxtorta[iactwp])
-
+            print("completed ", acid, (time.time_ns() - t0)/1e6, "ms")
+            print('-------------------------------')
+            print()
 
     @stack.command
-    def packer(self, acid):
+    def packer(self, acid, t0):
         # todo exclude ipv include
 
         include_route = [
@@ -511,7 +519,7 @@ class Predictor(core.Entity):
             "cmd": [cond.cmd[i] for i in idxs] if idxs else [],
         }
 
-        return (acid, route_info, actwp_info, traf_info, cond_info)
+        return (acid, route_info, actwp_info, traf_info, cond_info, t0)
 
     @stack.command
     def printpacker(self,acid):
@@ -829,13 +837,34 @@ class Predictor(core.Entity):
 
         if self.parent_id and (val != sim.utc.timestamp()):
 
-            net.send('PREDICTION', (acid, wpt, sim.simt, sim.simt - createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac], traf.ap.orig[idxac], traf.work[idxac]), self.parent_id)
+
+            t0_pred = self._t0_by_acid.get(acid, None)
+
+            net.send('PREDICTION', (acid, wpt, sim.simt, sim.simt - createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac], traf.ap.orig[idxac], traf.work[idxac], t0_pred), self.parent_id)
             self.predictions +=1
             self.iscomplete()
+            if t0_pred:
+                print("prediction sent ", acid, (time.time_ns() - t0_pred) / 1e6, "ms")
 
 
 
+    @stack.command
+    def speedtest(self):
+        t = time.time()
+        if self.parent_id:
+            id = self.parent_id
+        else:
+            id = self.child_id
+        net.send('SPEEDTEST',t, id)
+        stack.forward(f'STCKSPEEDTEST {t}', id)
 
+    @network.subscriber(topic='SPEEDTEST')
+    def speedtest_subscriber(self, t):
+        print('net.send  PING: -----', (time.time() - t))
+
+    @stack.command
+    def STCKSPEEDTEST(self, t):
+        print('STACK PING: -----', (time.time - t))
 
     @timed_function(dt=10)
     def _check_fir_entry(self, areaname='FIRNL'):
@@ -864,7 +893,7 @@ class Predictor(core.Entity):
                                              sim.utc.timestamp(),
                                              self.parent_id,
                                              traf.type[i],
-                                             traf.ap.orig[i], traf.work[i]),
+                                             traf.ap.orig[i], traf.work[i], None),
                              self.parent_id)
                 self._fir_inside[acid] = inside
 
@@ -885,7 +914,7 @@ class Predictor(core.Entity):
                                     sim.utc.timestamp(),
                                     self.parent_id,
                                     traf.type[idx],
-                                    traf.ap.orig[idx], traf.work[idx]),
+                                    traf.ap.orig[idx], traf.work[idx], None),
                      self.parent_id)
 
     # @predictor.subcommand
@@ -903,7 +932,7 @@ class Predictor(core.Entity):
 
 
     @network.subscriber(topic='PREDICTION')#, to_group=GROUPID_SIM)
-    def on_prediction_received(self, acid, wpt, wptime, flighttime, wptpredutc, parent_id, type, origin, work):
+    def on_prediction_received(self, acid, wpt, wptime, flighttime, wptpredutc, parent_id, type, origin, work, t0):
         """ Displays the prediction results received from the child process. """
 
         if self.parent_id:

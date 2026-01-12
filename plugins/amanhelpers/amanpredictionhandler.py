@@ -12,7 +12,7 @@ class PredictionHandler:
 
 
     @network.subscriber(topic='PREDICTION')
-    def on_prediction_received(self, acid, wpt, wptime,flighttime, wptpredutc, parent_id, type, origin, work):
+    def on_prediction_received(self, acid, wpt, wptime,flighttime, wptpredutc, parent_id, type, origin, work, t0):
         """
         Each acid getting a new ETA will be added to aircraft needing to get a slot.
         """

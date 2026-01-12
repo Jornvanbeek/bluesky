@@ -254,7 +254,7 @@ class ATC(core.Entity):
         return ETA_reset
 
     @network.subscriber(topic='PREDICTION')  # , to_group=GROUPID_SIM)
-    def on_prediction_received(self, acid, wpt, wptime, flighttime, wptpredutc, parent_id, type, origin, work):
+    def on_prediction_received(self, acid, wpt, wptime, flighttime, wptpredutc, parent_id, type, origin, work, t0):
         if acid in self.aman.Flights.index:
             idxac = traf.id2idx(acid)
             if idxac != -1 and acid in self.active_instructions:
@@ -264,22 +264,24 @@ class ATC(core.Entity):
                 previous_iaftime = self.aman.Flights.loc[acid]['TP IAF']
 
                 if wpt in self.aman.iafs:
+                    print("prediction received", acid, (time.time_ns() - t0) / 1e6, "ms")
                     TMA = self.aman.Flights.loc[acid, 'TMA']
                     # 'TP ETA': wptime + TMA
                     data = {'TP IAF': wptime, 'IAF': wpt, 'TPstate': 'updated', 'TP ETA': wptime + TMA}
                     for key, value in data.items():
                         self.aman.Flights.at[acid, key] = value
                     ttlg = self.aman.Flights.loc[acid, 'ttlg']
-                    print('ttlg updated? previous: ',acid, ttlg)
+                    # print('ttlg updated? previous: ',acid, ttlg)
 
                     self.aman.update_times()
 
 
                     ttlg = self.aman.Flights.loc[acid, 'ttlg']
-                    print('updated ttlg: ',acid, ttlg)
+                    # print('updated ttlg: ',acid, ttlg)
 
                     delay = data['TP IAF'] - previous_iaftime
                     self.store_delay(acid, delay)
+                    print("prediction received and stored ", acid, (time.time_ns() - t0) / 1e6, "ms")
                     self.check_tp_update(acid, ttlg)
 
                     # print(f'received tp update{acid}')
@@ -412,8 +414,8 @@ class ATC(core.Entity):
 
 
     def start_update(self,acid):
-
-        self.predictor.update(acid)
+        t0 = time.time_ns()
+        self.predictor.update(acid, t0)
 
         iaf = self.aman.Flights.loc[acid, 'IAF']
         stack.forward(f'AT {acid} {iaf} DO DELAY 10 DEL {acid}', target_id=self.predictor.child_id)
