@@ -88,159 +88,159 @@ class Node(Entity):
 
         self.receive()
 
-    # def receive(self, timeout=0):
-    #     ''' Poll for incoming data from Server, and receive if available.
-    #         Arguments:
-    #         timeout: The polling timeout in milliseconds. '''
-    #     try:
-    #         events = dict(self.poller.poll(timeout))
-    #         # The socket with incoming data
-    #         for sock, event in events.items():
-    #             if event != zmq.POLLIN:
-    #                 # The event does not refer to incoming data: skip for now
-    #                 continue
-    #
-    #             # Receive the message
-    #             ctx.msg = sock.recv_multipart()
-    #             if not ctx.msg:
-    #                 # In the rare case that a message is empty, skip remaning processing
-    #                 continue
-    #
-    #             # Regular incoming data
-    #             if sock == self.sock_recv:
-    #                 ctx.topic = ctx.msg[0][IDLEN:-IDLEN].decode()
-    #                 ctx.sender_id = ctx.msg[0][-IDLEN:]
-    #                 pydata = msgpack.unpackb(ctx.msg[1], object_hook=decode_ndarray, raw=False)
-    #                 sub = Subscription.subscriptions.get(ctx.topic, None) #or Subscription(ctx.topic, directedonly=True)
-    #                 if sub is None:
-    #                     print('No subscription known for', ctx.topic, 'on', self.node_id)
-    #                     print('ctx msg: ', ctx.msg)
-    #                     print('pydata: ' ,pydata)
-    #                     print('ctx.msg: ', ctx.msg)
-    #                     print('ctx.senderid: ',ctx.sender_id)
-    #                     continue
-    #
-    #                 # Unpack dict or list, skip empty string
-    #                 if pydata == '':
-    #                     sub.emit()
-    #                 elif isinstance(pydata, dict):
-    #                     sub.emit(**pydata)
-    #                 elif isinstance(pydata, (list, tuple)):
-    #                     sub.emit(*pydata)
-    #                 else:
-    #                     sub.emit(pydata)
-    #                 ctx.msg = ctx.topic = ctx.sender_id = None
-    #
-    #             elif sock == self.sock_send:
-    #                 # This is an (un)subscribe message. If it's an id-only subscription
-    #                 # this is also a registration message
-    #                 if len(ctx.msg[0]) == IDLEN + 1:
-    #                     sender_id = ctx.msg[0][1:]
-    #                     sequence_idx = seqid2idx(sender_id[-1])
-    #                     if sender_id[0] in (GROUPID_SIM, GROUPID_NOGROUP):
-    #                         # This is an initial simulation node subscription
-    #                         if ctx.msg[0][0] == MSG_SUBSCRIBE:
-    #                             if sequence_idx > 0:
-    #                                 self.nodes.add(sender_id)
-    #                                 if sender_id != self.node_id:
-    #                                     self.node_added.emit(sender_id)
-    #                                 continue
-    #                             elif sequence_idx == 0:
-    #                                 self.servers.add(sender_id)
-    #                                 self.server_added.emit(sender_id)
-    #
-    #                         elif ctx.msg[0][0] == MSG_UNSUBSCRIBE:
-    #                             if sequence_idx > 0:
-    #                                 self.nodes.discard(sender_id)
-    #                                 self.node_removed.emit(sender_id)
-    #                             elif sequence_idx == 0:
-    #                                 self.servers.discard(sender_id)
-    #                                 self.server_removed.emit(sender_id)
-    #
-    #     except zmq.ZMQError:
-    #         return False
-
-    def receive(self, timeout=0, max_msgs_per_sock=100):
-        """Poll sockets and drain all queued messages.
-        max_msgs_per_sock is a safety cap to avoid infinite loops on message storms.
-        """
+    def receive(self, timeout=0):
+        ''' Poll for incoming data from Server, and receive if available.
+            Arguments:
+            timeout: The polling timeout in milliseconds. '''
         try:
             events = dict(self.poller.poll(timeout))
-
+            # The socket with incoming data
             for sock, event in events.items():
                 if event != zmq.POLLIN:
+                    # The event does not refer to incoming data: skip for now
                     continue
 
-                n = 0
-                while n < max_msgs_per_sock:
-                    try:
-                        msg = sock.recv_multipart(flags=zmq.DONTWAIT)
-                    except zmq.Again:
-                        break  # queue drained
+                # Receive the message
+                ctx.msg = sock.recv_multipart()
+                if not ctx.msg:
+                    # In the rare case that a message is empty, skip remaning processing
+                    continue
 
-                    if not msg:
+                # Regular incoming data
+                if sock == self.sock_recv:
+                    ctx.topic = ctx.msg[0][IDLEN:-IDLEN].decode()
+                    ctx.sender_id = ctx.msg[0][-IDLEN:]
+                    pydata = msgpack.unpackb(ctx.msg[1], object_hook=decode_ndarray, raw=False)
+                    sub = Subscription.subscriptions.get(ctx.topic, None) #or Subscription(ctx.topic, directedonly=True)
+                    if sub is None:
+                        print('No subscription known for', ctx.topic, 'on', self.node_id)
+                        print('ctx msg: ', ctx.msg)
+                        print('pydata: ' ,pydata)
+                        print('ctx.msg: ', ctx.msg)
+                        print('ctx.senderid: ',ctx.sender_id)
                         continue
 
-                    # Regular incoming data
-                    if sock == self.sock_recv:
-                        # Preserve ctx fields for callbacks that rely on ctx.topic/ctx.sender_id
-                        ctx.msg = msg
-                        ctx.topic = msg[0][IDLEN:-IDLEN].decode()
-                        ctx.sender_id = msg[0][-IDLEN:]
+                    # Unpack dict or list, skip empty string
+                    if pydata == '':
+                        sub.emit()
+                    elif isinstance(pydata, dict):
+                        sub.emit(**pydata)
+                    elif isinstance(pydata, (list, tuple)):
+                        sub.emit(*pydata)
+                    else:
+                        sub.emit(pydata)
+                    ctx.msg = ctx.topic = ctx.sender_id = None
 
-                        pydata = msgpack.unpackb(msg[1], object_hook=decode_ndarray, raw=False)
+                elif sock == self.sock_send:
+                    # This is an (un)subscribe message. If it's an id-only subscription
+                    # this is also a registration message
+                    if len(ctx.msg[0]) == IDLEN + 1:
+                        sender_id = ctx.msg[0][1:]
+                        sequence_idx = seqid2idx(sender_id[-1])
+                        if sender_id[0] in (GROUPID_SIM, GROUPID_NOGROUP):
+                            # This is an initial simulation node subscription
+                            if ctx.msg[0][0] == MSG_SUBSCRIBE:
+                                if sequence_idx > 0:
+                                    self.nodes.add(sender_id)
+                                    if sender_id != self.node_id:
+                                        self.node_added.emit(sender_id)
+                                    continue
+                                elif sequence_idx == 0:
+                                    self.servers.add(sender_id)
+                                    self.server_added.emit(sender_id)
 
-                        sub = Subscription.subscriptions.get(ctx.topic, None)
-                        if sub is None:
-                            print('No subscription known for', ctx.topic, 'on', self.node_id)
-                            # Keep ctx consistent even on early-exit
-                            ctx.msg = ctx.topic = ctx.sender_id = None
-                            n += 1
-                            continue
+                            elif ctx.msg[0][0] == MSG_UNSUBSCRIBE:
+                                if sequence_idx > 0:
+                                    self.nodes.discard(sender_id)
+                                    self.node_removed.emit(sender_id)
+                                elif sequence_idx == 0:
+                                    self.servers.discard(sender_id)
+                                    self.server_removed.emit(sender_id)
 
-                        try:
-                            if pydata == '':
-                                sub.emit()
-                            elif isinstance(pydata, dict):
-                                sub.emit(**pydata)
-                            elif isinstance(pydata, (list, tuple)):
-                                sub.emit(*pydata)
-                            else:
-                                sub.emit(pydata)
-                        finally:
-                            # Clear after callbacks
-                            ctx.msg = ctx.topic = ctx.sender_id = None
-
-                    # XPUB (un)subscribe messages
-                    elif sock == self.sock_send:
-                        # XPUB control frames are typically 1 frame.
-                        # Your existing logic expects ctx.msg[0] style.
-                        frame0 = msg[0]
-                        if len(frame0) == IDLEN + 1:
-                            sender_id = frame0[1:]
-                            sequence_idx = seqid2idx(sender_id[-1])
-                            if sender_id[0] in (GROUPID_SIM, GROUPID_NOGROUP):
-                                if frame0[0] == MSG_SUBSCRIBE:
-                                    if sequence_idx > 0:
-                                        self.nodes.add(sender_id)
-                                        if sender_id != self.node_id:
-                                            self.node_added.emit(sender_id)
-                                    elif sequence_idx == 0:
-                                        self.servers.add(sender_id)
-                                        self.server_added.emit(sender_id)
-                                elif frame0[0] == MSG_UNSUBSCRIBE:
-                                    if sequence_idx > 0:
-                                        self.nodes.discard(sender_id)
-                                        self.node_removed.emit(sender_id)
-                                    elif sequence_idx == 0:
-                                        self.servers.discard(sender_id)
-                                        self.server_removed.emit(sender_id)
-
-                    n += 1
-
-            return True
         except zmq.ZMQError:
             return False
+
+    # def receive(self, timeout=0, max_msgs_per_sock=100):
+    #     """Poll sockets and drain all queued messages.
+    #     max_msgs_per_sock is a safety cap to avoid infinite loops on message storms.
+    #     """
+    #     try:
+    #         events = dict(self.poller.poll(timeout))
+    #
+    #         for sock, event in events.items():
+    #             if event != zmq.POLLIN:
+    #                 continue
+    #
+    #             n = 0
+    #             while n < max_msgs_per_sock:
+    #                 try:
+    #                     msg = sock.recv_multipart(flags=zmq.DONTWAIT)
+    #                 except zmq.Again:
+    #                     break  # queue drained
+    #
+    #                 if not msg:
+    #                     continue
+    #
+    #                 # Regular incoming data
+    #                 if sock == self.sock_recv:
+    #                     # Preserve ctx fields for callbacks that rely on ctx.topic/ctx.sender_id
+    #                     ctx.msg = msg
+    #                     ctx.topic = msg[0][IDLEN:-IDLEN].decode()
+    #                     ctx.sender_id = msg[0][-IDLEN:]
+    #
+    #                     pydata = msgpack.unpackb(msg[1], object_hook=decode_ndarray, raw=False)
+    #
+    #                     sub = Subscription.subscriptions.get(ctx.topic, None)
+    #                     if sub is None:
+    #                         print('No subscription known for', ctx.topic, 'on', self.node_id)
+    #                         # Keep ctx consistent even on early-exit
+    #                         ctx.msg = ctx.topic = ctx.sender_id = None
+    #                         n += 1
+    #                         continue
+    #
+    #                     try:
+    #                         if pydata == '':
+    #                             sub.emit()
+    #                         elif isinstance(pydata, dict):
+    #                             sub.emit(**pydata)
+    #                         elif isinstance(pydata, (list, tuple)):
+    #                             sub.emit(*pydata)
+    #                         else:
+    #                             sub.emit(pydata)
+    #                     finally:
+    #                         # Clear after callbacks
+    #                         ctx.msg = ctx.topic = ctx.sender_id = None
+    #
+    #                 # XPUB (un)subscribe messages
+    #                 elif sock == self.sock_send:
+    #                     # XPUB control frames are typically 1 frame.
+    #                     # Your existing logic expects ctx.msg[0] style.
+    #                     frame0 = msg[0]
+    #                     if len(frame0) == IDLEN + 1:
+    #                         sender_id = frame0[1:]
+    #                         sequence_idx = seqid2idx(sender_id[-1])
+    #                         if sender_id[0] in (GROUPID_SIM, GROUPID_NOGROUP):
+    #                             if frame0[0] == MSG_SUBSCRIBE:
+    #                                 if sequence_idx > 0:
+    #                                     self.nodes.add(sender_id)
+    #                                     if sender_id != self.node_id:
+    #                                         self.node_added.emit(sender_id)
+    #                                 elif sequence_idx == 0:
+    #                                     self.servers.add(sender_id)
+    #                                     self.server_added.emit(sender_id)
+    #                             elif frame0[0] == MSG_UNSUBSCRIBE:
+    #                                 if sequence_idx > 0:
+    #                                     self.nodes.discard(sender_id)
+    #                                     self.node_removed.emit(sender_id)
+    #                                 elif sequence_idx == 0:
+    #                                     self.servers.discard(sender_id)
+    #                                     self.server_removed.emit(sender_id)
+    #
+    #                 n += 1
+    #
+    #         return True
+    #     except zmq.ZMQError:
+    #         return False
 
     def send(self, topic: str, data: str|Collection='', to_group: int|str|bytes=''):
         # btopic = asbytestr(topic)
