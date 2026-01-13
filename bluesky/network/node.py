@@ -85,8 +85,32 @@ class Node(Entity):
         self._last_update_t = now
         if dt > 0.35:
             print(f"[NET] Node.update gap {dt * 1000:.1f}ms")
-
+        # for i in range(100):
         self.receive()
+
+    def receive_drain(self, max_loops=20):
+        """
+        Call receive() repeatedly ONLY while sockets report queued data.
+        Stops on first ZMQ error. Prevents reset-time CPU storms.
+        """
+        loops = 0
+        while loops < max_loops:
+            try:
+                events = dict(self.poller.poll(0))
+            except zmq.ZMQError:
+                return False
+
+            if not events:
+                return True
+
+            ok = self.receive(timeout=0)
+            if ok is False:
+                return False
+
+            loops += 1
+
+        return True
+
 
     def receive(self, timeout=0):
         ''' Poll for incoming data from Server, and receive if available.
@@ -160,119 +184,46 @@ class Node(Entity):
         except zmq.ZMQError:
             return False
 
-    # def receive(self, timeout=0, max_msgs_per_sock=100):
-    #     """Poll sockets and drain all queued messages.
-    #     max_msgs_per_sock is a safety cap to avoid infinite loops on message storms.
-    #     """
+    # def send(self, topic: str, data: str|Collection='', to_group: int|str|bytes=''):
+    #     # btopic = asbytestr(topic)
+    #     # bto_group = asbytestr(to_group or stack.sender() or '')
+    #     # self.sock_send.send_multipart(
+    #     #     [
+    #     #         bto_group.ljust(IDLEN, b'*') + btopic + self.node_id,
+    #     #         msgpack.packb(data, default=encode_ndarray, use_bin_type=True)
+    #     #     ]
+    #     # )
+    #
+    #     btopic = asbytestr(topic)
+    #     bto_group = asbytestr(to_group or stack.sender() or '')
+    #     header = bto_group.ljust(IDLEN, b'*') + btopic + self.node_id
+    #
+    #     payload = msgpack.packb(data, default=encode_ndarray, use_bin_type=True)
+    #
+    #     t_send0 = time.perf_counter_ns()
     #     try:
-    #         events = dict(self.poller.poll(timeout))
+    #         # eerst non-blocking proberen
+    #         self.sock_send.send_multipart([header, payload], flags=zmq.DONTWAIT)
+    #         would_block = False
+    #     except zmq.Again:
+    #         would_block = True
+    #         # nu blocking versturen (zoals nu)
+    #         self.sock_send.send_multipart([header, payload])
+    #     t_send1 = time.perf_counter_ns()
     #
-    #         for sock, event in events.items():
-    #             if event != zmq.POLLIN:
-    #                 continue
-    #
-    #             n = 0
-    #             while n < max_msgs_per_sock:
-    #                 try:
-    #                     msg = sock.recv_multipart(flags=zmq.DONTWAIT)
-    #                 except zmq.Again:
-    #                     break  # queue drained
-    #
-    #                 if not msg:
-    #                     continue
-    #
-    #                 # Regular incoming data
-    #                 if sock == self.sock_recv:
-    #                     # Preserve ctx fields for callbacks that rely on ctx.topic/ctx.sender_id
-    #                     ctx.msg = msg
-    #                     ctx.topic = msg[0][IDLEN:-IDLEN].decode()
-    #                     ctx.sender_id = msg[0][-IDLEN:]
-    #
-    #                     pydata = msgpack.unpackb(msg[1], object_hook=decode_ndarray, raw=False)
-    #
-    #                     sub = Subscription.subscriptions.get(ctx.topic, None)
-    #                     if sub is None:
-    #                         print('No subscription known for', ctx.topic, 'on', self.node_id)
-    #                         # Keep ctx consistent even on early-exit
-    #                         ctx.msg = ctx.topic = ctx.sender_id = None
-    #                         n += 1
-    #                         continue
-    #
-    #                     try:
-    #                         if pydata == '':
-    #                             sub.emit()
-    #                         elif isinstance(pydata, dict):
-    #                             sub.emit(**pydata)
-    #                         elif isinstance(pydata, (list, tuple)):
-    #                             sub.emit(*pydata)
-    #                         else:
-    #                             sub.emit(pydata)
-    #                     finally:
-    #                         # Clear after callbacks
-    #                         ctx.msg = ctx.topic = ctx.sender_id = None
-    #
-    #                 # XPUB (un)subscribe messages
-    #                 elif sock == self.sock_send:
-    #                     # XPUB control frames are typically 1 frame.
-    #                     # Your existing logic expects ctx.msg[0] style.
-    #                     frame0 = msg[0]
-    #                     if len(frame0) == IDLEN + 1:
-    #                         sender_id = frame0[1:]
-    #                         sequence_idx = seqid2idx(sender_id[-1])
-    #                         if sender_id[0] in (GROUPID_SIM, GROUPID_NOGROUP):
-    #                             if frame0[0] == MSG_SUBSCRIBE:
-    #                                 if sequence_idx > 0:
-    #                                     self.nodes.add(sender_id)
-    #                                     if sender_id != self.node_id:
-    #                                         self.node_added.emit(sender_id)
-    #                                 elif sequence_idx == 0:
-    #                                     self.servers.add(sender_id)
-    #                                     self.server_added.emit(sender_id)
-    #                             elif frame0[0] == MSG_UNSUBSCRIBE:
-    #                                 if sequence_idx > 0:
-    #                                     self.nodes.discard(sender_id)
-    #                                     self.node_removed.emit(sender_id)
-    #                                 elif sequence_idx == 0:
-    #                                     self.servers.discard(sender_id)
-    #                                     self.server_removed.emit(sender_id)
-    #
-    #                 n += 1
-    #
-    #         return True
-    #     except zmq.ZMQError:
-    #         return False
+    #     dt_send = (t_send1 - t_send0) / 1e6
+    #     if dt_send > 5 or would_block:
+    #         print(f"[NET.SEND] topic={topic} send={dt_send:.1f}ms would_block={would_block} size={len(payload)}B")
 
-    def send(self, topic: str, data: str|Collection='', to_group: int|str|bytes=''):
-        # btopic = asbytestr(topic)
-        # bto_group = asbytestr(to_group or stack.sender() or '')
-        # self.sock_send.send_multipart(
-        #     [
-        #         bto_group.ljust(IDLEN, b'*') + btopic + self.node_id,
-        #         msgpack.packb(data, default=encode_ndarray, use_bin_type=True)
-        #     ]
-        # )
-
+    def send(self, topic: str, data: str | Collection = '', to_group: int | str | bytes = b''):
         btopic = asbytestr(topic)
-        bto_group = asbytestr(to_group or stack.sender() or '')
+
+        # Default: broadcast. Alleen targetten als caller expliciet to_group meegeeft.
+        bto_group = asbytestr(to_group or b'')
         header = bto_group.ljust(IDLEN, b'*') + btopic + self.node_id
 
         payload = msgpack.packb(data, default=encode_ndarray, use_bin_type=True)
-
-        t_send0 = time.perf_counter_ns()
-        try:
-            # eerst non-blocking proberen
-            self.sock_send.send_multipart([header, payload], flags=zmq.DONTWAIT)
-            would_block = False
-        except zmq.Again:
-            would_block = True
-            # nu blocking versturen (zoals nu)
-            self.sock_send.send_multipart([header, payload])
-        t_send1 = time.perf_counter_ns()
-
-        dt_send = (t_send1 - t_send0) / 1e6
-        if dt_send > 5 or would_block:
-            print(f"[NET.SEND] topic={topic} send={dt_send:.1f}ms would_block={would_block} size={len(payload)}B")
-
+        self.sock_send.send_multipart([header, payload])
 
 
     def subscribe(self, topic, from_group: int|str|bytes=GROUPID_DEFAULT, to_group: int|str|bytes='', actonly=False):

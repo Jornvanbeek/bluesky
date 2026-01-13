@@ -668,16 +668,20 @@ class Predictor(core.Entity):
 
     @stack.command
     def usecache(self, scenario = 'scenariotest'):
+        print('usecache called')
         if not self.parent_id:
+            stack.stack('ECHO is cache used for predictions??')
+            print('i have no parent id in usecache')
             cache = self.open_cache()
             self.predicted_ac_not_spawned = cache
             self.predictions_cache = cache
             self.use_cache = True
+            stack.stack('ECHO cache is used for predictions??')
             stack.stack(f'PCALL {scenario}')
             stack.stack('USECACHE_AMAN')
             stack.stack('FF')
             stack.forward('DT 3', target_id=self.child_id)
-            stack.forward('ff', target_id=self.child_id)
+            stack.forward('FF', target_id=self.child_id)
             self.complete()
 
     # @stack.command
