@@ -626,9 +626,9 @@ class ATC(core.Entity):
 
             disttoiaf = kwikdist(lat, lon, acrte.wplat[iaf_index], acrte.wplon[iaf_index])
             disttonewwp = kwikdist(latac, lonac, lat, lon)
-            if abs(reqdist - (disttoiaf + disttonewwp)) > 1:
+            # if abs(reqdist - (disttoiaf + disttonewwp)) > 1:
                 # print('replacewaypoint STILL incorrect: ', acid, corrected_reqdist, disttoiaf + disttonewwp, disttoiaf, disttonewwp,
-                      lat, lon)
+                #       lat, lon)
 
 
 
@@ -813,7 +813,7 @@ class ATC(core.Entity):
             try:
                 return trackmiles, direct_qdr, direct_dist
             except:
-                # print('findtrackmiles atc: ',acid, acrte.wpname, trackmiles )
+                print('findtrackmiles atc: ',acid, acrte.wpname, trackmiles )
 
         # Route.before(acid, iaf, 'ADDWPT', )
 

@@ -397,9 +397,9 @@ class Predictor(core.Entity):
             idxac = traf.id2idx(acid)
             traf.ap.route[idxac].createtime = sim.simt
             info = self.packer(acid, t0)
-            print("packer ", acid, (time.time_ns() - t0)/1e6, "ms")
+            # print("packer ", acid, (time.time_ns() - t0)/1e6, "ms")
             net.send('UPDATE_PREDICTOR', info, self.child_id)
-            print("sent ", acid, (time.time_ns() - t0)/1e6, "ms")
+            # print("sent ", acid, (time.time_ns() - t0)/1e6, "ms")
             if acid in self.incorrect_predictions:
                 stack.stack('hold')
                 stack.forward('HOLD', target_id=self.child_id)
@@ -407,7 +407,7 @@ class Predictor(core.Entity):
     @network.subscriber(topic='UPDATE_PREDICTOR')
     def update_requested(self, acid, route_info, actwp_info, traf_info, cond_info, t0):
         if self.parent_id:
-            print("received ", acid, (time.time_ns() - t0)/1e6, "ms")
+            # print("received ", acid, (time.time_ns() - t0)/1e6, "ms")
             self._t0_by_acid[acid] = t0
             # print('received INFO: ', acid, route_info, actwp_info, traf_info)
             info = (acid, route_info, actwp_info, traf_info, cond_info)
@@ -425,7 +425,7 @@ class Predictor(core.Entity):
                 traf.cre(acid, actype, aclat, aclon, achdg, acalt, acspd)
             else:
                 traf.delete(idxac)
-                print(f'new update requested for: {acid}')
+                # print(f'new update requested for: {acid}')
 
                 idxac = traf.id2idx(acid)
                 attempts = 0
@@ -435,19 +435,19 @@ class Predictor(core.Entity):
                     attempts += 1
                     time.sleep(0.2)
                 traf.cre(acid, actype, aclat, aclon, achdg, acalt, acspd)
-            print("created ", acid, (time.time_ns() - t0)/1e6, "ms")
+            # print("created ", acid, (time.time_ns() - t0)/1e6, "ms")
             idxac = traf.id2idx(acid)
             self.unpacker(info)
-            print("unpacked ", acid, (time.time_ns() - t0)/1e6, "ms")
+#             print("unpacked ", acid, (time.time_ns() - t0)/1e6, "ms")
             traf.update()
             acrte = traf.ap.route[idxac]
             acrte.calcfp()
             iactwp = acrte.iactwp
             traf.ap.ComputeVNAV(idxac, acrte.wptoalt[iactwp], acrte.wpxtoalt[iactwp], acrte.wptorta[iactwp],acrte.wpxtorta[iactwp])
             self.acids_to_update.add(acid)
-            print("completed data transfer to tp", acid, (time.time_ns() - t0)/1e6, "ms")
-            print('-------------------------------')
-            print()
+#             print("completed data transfer to tp", acid, (time.time_ns() - t0)/1e6, "ms")
+#             print('-------------------------------')
+#             print()
 
     @stack.command
     def packer(self, acid, t0):
@@ -651,7 +651,7 @@ class Predictor(core.Entity):
                     if cache_cmds_check(cmd):
                         # Add the commands in commands_to_schedule to schedule them in the predictor node.
                         cmds_to_forward.append(cmd.upper())
-                print(cmds_to_forward)
+                # print(cmds_to_forward)
                 stack.forward(*cmds_to_forward, target_id=self.child_id)
                 stack.forward(f'DT {self.tp_dt}', target_id=self.child_id)
                 stack.forward('ff', target_id=self.child_id)
@@ -671,15 +671,15 @@ class Predictor(core.Entity):
 
     @stack.command
     def usecache(self, scenario = 'scenariotest'):
-        print('usecache called')
+        # print('usecache called')
         if not self.parent_id:
-            stack.stack('ECHO is cache used for predictions??')
-            print('i have no parent id in usecache')
+            # stack.stack('ECHO is cache used for predictions??')
+            # print('i have no parent id in usecache')
             cache = self.open_cache()
             self.predicted_ac_not_spawned = cache
             self.predictions_cache = cache
             self.use_cache = True
-            stack.stack('ECHO cache is used for predictions??')
+            # stack.stack('ECHO cache is used for predictions??')
             stack.stack(f'PCALL {scenario}')
             stack.stack('USECACHE_AMAN')
             stack.stack('FF')
@@ -827,7 +827,7 @@ class Predictor(core.Entity):
         if wpt in ['EHAM/RWY01', 'EHAM/RWY101'] and self.parent_id:
             # stack.stack('HOLD')
             stack.forward('HOLD',target_id=self.parent_id )
-            print(acid, wpt, idxwp)
+            # print(acid, wpt, idxwp)
 
         # If the prediction time changes, forward the new waypoint crossing times
         # If operating within the child node, forward the waypoint crossing event to the parent process.
@@ -850,14 +850,14 @@ class Predictor(core.Entity):
             net.send('PREDICTION', (acid, wpt, sim.simt, sim.simt - createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac], traf.ap.orig[idxac], traf.work[idxac], t0_pred), self.parent_id)
             self.predictions +=1
             self.iscomplete()
-            if t0_pred:
-                print("prediction sent ", acid, (time.time_ns() - t0_pred) / 1e6, "ms")
+            # if t0_pred:
+                # print("prediction sent ", acid, (time.time_ns() - t0_pred) / 1e6, "ms")
 
             if acid in self.acids_to_update:
                 idxac = traf.id2idx(acid)
                 traf.delete(idxac)
                 self.acids_to_update.remove(acid)
-                print('removed acid: ', acid)
+                # print('removed acid: ', acid)
 
     @stack.command
     def speedtest(self):
