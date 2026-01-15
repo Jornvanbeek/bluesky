@@ -148,10 +148,10 @@ class ATC(core.Entity):
         vs = traf.vs[idx]
         trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
         if abs(ttlg) <= self.aman.instruction_margin:
-            print('ttlg within instruction margin')
+            # print('ttlg within instruction margin')
             return
         if acid in self.active_instructions.keys():
-            print('acid in active_instructions ', acid)
+            # print('acid in active_instructions ', acid)
             return
 
         #standard scenarios
@@ -160,7 +160,7 @@ class ATC(core.Entity):
             # scenario 2: speedup
             if ttlg <= -self.aman.late_approach_margin:
 
-                print(f'{acid} needs speed up {ttlg}')
+                # print(f'{acid} needs speed up {ttlg}')
                 if abs(trackmiles - direct_dist) > 1: #essentially direct == False
                     self.dogleg(acid, ttlg)
                 elif abs(maxspd - selspd) > 1:
@@ -168,7 +168,7 @@ class ATC(core.Entity):
                 else:
                     ETA = self.reset_ETA(acid)
                     self.aman.replan_late(acid, ETA=ETA)
-                    print(f'replanning {acid}')
+                    # print(f'replanning {acid}')
 
             #scenario 3: delay
             elif ttlg > self.aman.early_approach_margin:
@@ -187,7 +187,7 @@ class ATC(core.Entity):
                     # self.start_update(acid)
                     # stack.forward(line, target_id=self.predictor.child_id)
 
-                    print(f'HOLDING AT {acid} {iaf} {ttlg}')
+                    # print(f'HOLDING AT {acid} {iaf} {ttlg}')
                     stack.stack(f'ECHO HOLDING {acid} at {iaf}')
                     self.aman.Flights.at[acid, 'holding'] = True
 
@@ -227,7 +227,7 @@ class ATC(core.Entity):
             elif abs(trackmiles - direct_dist) < 1 and selspd >4. and abs(maxspd - selspd) < 1:
                 ETA = self.reset_ETA(acid)
                 self.aman.replan_late(acid, ETA=ETA)
-                print(f'replanning {acid}')
+                # print(f'replanning {acid}')
                 #remove conditionals
         # elif ttlg > self.aman.early_adjacent_threshold:  # delay
         #     if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
@@ -276,7 +276,7 @@ class ATC(core.Entity):
                 previous_iaftime = self.aman.Flights.loc[acid]['TP IAF']
 
                 if wpt in self.aman.iafs:
-                    print("prediction received", acid, (time.time_ns() - t0) / 1e6, "ms")
+                    # print("prediction received", acid, (time.time_ns() - t0) / 1e6, "ms")
                     TMA = self.aman.Flights.loc[acid, 'TMA']
                     # 'TP ETA': wptime + TMA
                     data = {'TP IAF': wptime, 'IAF': wpt, 'TPstate': 'updated', 'TP ETA': wptime + TMA}
@@ -293,7 +293,7 @@ class ATC(core.Entity):
 
                     delay = data['TP IAF'] - previous_iaftime
                     self.store_delay(acid, delay)
-                    print("prediction received and stored ", acid, (time.time_ns() - t0) / 1e6, "ms")
+                    # print("prediction received and stored ", acid, (time.time_ns() - t0) / 1e6, "ms")
                     self.check_tp_update(acid, ttlg)
 
                     # print(f'received tp update{acid}')
@@ -344,12 +344,12 @@ class ATC(core.Entity):
 
         if 'delay' in itype and ttlg < -instruction_margin: # essentially: delay instructed, but it was too much, so now a speed or dogleg must be given that is more correct
             ttlg = 0.97*ttlg # to make sure it converges
-            print(f're-applying delay instruction {acid} {ttlg} {self.active_instructions}')
+            # print(f're-applying delay instruction {acid} {ttlg} {self.active_instructions}')
             self.reapply_instruction(acid, ttlg, itype)
 
         elif 'short' in itype and ttlg > instruction_margin:  # short instructed, but too much. keep same type of instruction
             ttlg = 0.97 * ttlg  # to make sure it converges
-            print(f're-applying short instruction {acid} {ttlg} {self.active_instructions}')
+            # print(f're-applying short instruction {acid} {ttlg} {self.active_instructions}')
             self.reapply_instruction( acid, ttlg, itype)
 
         elif 'delay' in itype and ttlg > instruction_margin:  # delay given, but not sufficient
@@ -366,7 +366,7 @@ class ATC(core.Entity):
             elif 'dogleg' in itype and direct_dist*self.max_dogleg_ratio > (trackmiles +1):
                 # more dogleg possible within configured ratio
                 self.dogleg(acid, ttlg)
-                print('more dogleg from tp update')
+                # print('more dogleg from tp update')
             else:
                 # no additional delay possible with this type: close instruction and re-evaluate scenario
                 self.instruction_correct(acid)
@@ -382,7 +382,7 @@ class ATC(core.Entity):
             if 'dogleg' in itype and abs(trackmiles - direct_dist) > 1:
                 # still shortcut distance to gain
                 self.dogleg(acid, ttlg)
-                print('more dogleg from tp update number two')
+                # print('more dogleg from tp update number two')
             elif 'speed' in itype and abs(maxspd - selspd) > 1:
                 # still margin to increase speed
                 self.speed(acid, ttlg)
@@ -398,16 +398,16 @@ class ATC(core.Entity):
             #
             # print('received update of adjacent ', acid, ttlg)
         else:
-            print(f'instruction correct {acid}')
+            # print(f'instruction correct {acid}')
             self.instruction_correct(acid)
             # self.determine_scenario(acid, ttlg)
-            print(f'completed {acid}')
+            # print(f'completed {acid}')
 
 
     def reapply_instruction(self,acid, ttlg, itype):
         if 'dogleg' in itype or 'direct' in itype:
             self.dogleg(acid, ttlg)
-            print('reapply dogleg')
+            # print('reapply dogleg')
         elif 'speed' in itype:
             self.speed(acid, ttlg)
         elif 'mach' in itype:
@@ -437,19 +437,19 @@ class ATC(core.Entity):
 
         iaf = self.aman.Flights.loc[acid, 'IAF']
         # stack.forward(f'AT {acid} {iaf} DO DELAY 20 DEL {acid}', target_id=self.predictor.child_id)
-        print(f'START UPDATE FOR {acid}')
-        print(self.active_instructions)
+        # print(f'START UPDATE FOR {acid}')
+        # print(self.active_instructions)
 
         if pd.isna(self.aman.Flights.at[acid, 'updates']):
             self.aman.Flights.at[acid, 'updates'] = 0
         self.aman.Flights.at[acid,'updates'] += 1
 
-        if self.aman.Flights.at[acid, 'updates'] > 10:
+        if self.aman.Flights.at[acid, 'updates'] > 50:
             self.debug_updates(acid)
 
 
     def dogleg(self, acid, ttlg):
-        print('ttlg in dogleg: ', ttlg)
+        # print('ttlg in dogleg: ', ttlg)
         ttlg = float(ttlg)*self.aman.dogleg_multiplyer # make sure it lowballs the instruction for some margin
 
         trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
@@ -617,8 +617,8 @@ class ATC(core.Entity):
         disttonewwp = kwikdist(latac, lonac, lat, lon)
 
         if abs(reqdist - (disttoiaf + disttonewwp)) > 1:
-            print('replacewaypoint incorrect: ',acid, reqdist, disttoiaf + disttonewwp, disttoiaf, disttonewwp, lat, lon)
-            print('correcting new waypoint')
+            # print('replacewaypoint incorrect: ',acid, reqdist, disttoiaf + disttonewwp, disttoiaf, disttonewwp, lat, lon)
+            # print('correcting new waypoint')
             error = reqdist - (disttoiaf + disttonewwp)
             corrected_reqdist = reqdist + error
             lat, lon, alpha, hypothenuse, opposing = self.determine_wpt(acid, corrected_reqdist, direct_dist, trackmiles,
@@ -627,7 +627,7 @@ class ATC(core.Entity):
             disttoiaf = kwikdist(lat, lon, acrte.wplat[iaf_index], acrte.wplon[iaf_index])
             disttonewwp = kwikdist(latac, lonac, lat, lon)
             if abs(reqdist - (disttoiaf + disttonewwp)) > 1:
-                print('replacewaypoint STILL incorrect: ', acid, corrected_reqdist, disttoiaf + disttonewwp, disttoiaf, disttonewwp,
+                # print('replacewaypoint STILL incorrect: ', acid, corrected_reqdist, disttoiaf + disttonewwp, disttoiaf, disttonewwp,
                       lat, lon)
 
 
@@ -651,7 +651,7 @@ class ATC(core.Entity):
         hypothenuse = (reqdist ** 2 + direct_dist ** 2) / (2 * reqdist)
         opposing = reqdist - hypothenuse
         if opposing < 0:
-            print(f'wrong replacewaypoint {acid}, {opposing}, {reqdist}, {direct_dist}, {trackmiles}')
+            # print(f'wrong replacewaypoint {acid}, {opposing}, {reqdist}, {direct_dist}, {trackmiles}')
             return
         alpha = math.degrees(math.atan2(opposing, direct_dist))
 
@@ -813,7 +813,7 @@ class ATC(core.Entity):
             try:
                 return trackmiles, direct_qdr, direct_dist
             except:
-                print('findtrackmiles atc: ',acid, acrte.wpname, trackmiles )
+                # print('findtrackmiles atc: ',acid, acrte.wpname, trackmiles )
 
         # Route.before(acid, iaf, 'ADDWPT', )
 
