@@ -116,6 +116,9 @@ class ATC(core.Entity):
 
                     sim.hold()
 
+                    sim.simdt = 0.05
+
+
                     for acid, row in instruct.iterrows():
                         self.determine_scenario(acid, float(row['ttlg']))
 
@@ -126,7 +129,7 @@ class ATC(core.Entity):
                             sim.dtmult(self.rtf)
                         elif not self.ff and self.rtf <= 1.:
                             sim.op()
-
+                        sim.simdt = 1.0
 
 
     def determine_scenario(self, acid, ttlg):
@@ -317,25 +320,30 @@ class ATC(core.Entity):
 
     def check_tp_update(self, acid, ttlg):
 
+        instruction_margin = self.aman.instruction_margin
+        # if self.aman.Flights.at[acid, 'updates'] - self.aman.Flights.at[acid, 'count'] > self.aman.max_updates:
+        #     instruction_margin = min(self.aman.instruction_margin * 2, self.aman.early_approach_margin)
+        # elif self.aman.Flights.at[acid, 'updates'] - self.aman.Flights.at[acid, 'count'] > 2*self.aman.max_updates:
+        #     instruction_margin = min(self.aman.instruction_margin * 3, self.aman.early_approach_margin)
         itype = self.active_instructions[acid]
-        if abs(ttlg) <= self.aman.instruction_margin:
+        if abs(ttlg) <= instruction_margin:
             self.instruction_correct(acid)
             return
         if 'mach' in itype:
             self.instruction_correct(acid)
             return
 
-        if 'delay' in itype and ttlg < -self.aman.instruction_margin: # essentially: delay instructed, but it was too much, so now a speed or dogleg must be given that is more correct
+        if 'delay' in itype and ttlg < -instruction_margin: # essentially: delay instructed, but it was too much, so now a speed or dogleg must be given that is more correct
             ttlg = 0.97*ttlg # to make sure it converges
             print(f're-applying delay instruction {acid} {ttlg} {self.active_instructions}')
             self.reapply_instruction(acid, ttlg, itype)
 
-        elif 'short' in itype and ttlg > self.aman.instruction_margin:  # short instructed, but too much. keep same type of instruction
+        elif 'short' in itype and ttlg > instruction_margin:  # short instructed, but too much. keep same type of instruction
             ttlg = 0.97 * ttlg  # to make sure it converges
             print(f're-applying short instruction {acid} {ttlg} {self.active_instructions}')
             self.reapply_instruction( acid, ttlg, itype)
 
-        elif 'delay' in itype and ttlg > self.aman.instruction_margin:  # delay given, but not sufficient
+        elif 'delay' in itype and ttlg > instruction_margin:  # delay given, but not sufficient
             # try to increase the same type of instruction if there is still room
             idx = traf.id2idx(acid)
             selspd = traf.selspd[idx] / kts
@@ -355,7 +363,7 @@ class ATC(core.Entity):
                 self.instruction_correct(acid)
                 self.determine_scenario(acid, ttlg)
 
-        elif 'short' in itype and ttlg < -self.aman.instruction_margin:  # speed-up not sufficient
+        elif 'short' in itype and ttlg < -instruction_margin:  # speed-up not sufficient
             idx = traf.id2idx(acid)
             selspd = traf.selspd[idx] / kts
             maxspd = self.aman.Flights.loc[acid]['max_casdesc']
@@ -410,9 +418,10 @@ class ATC(core.Entity):
                 sim.dtmult(self.rtf)
             elif not self.ff and self.rtf <= 1.:
                 sim.op()
+            sim.simdt = 1.0
 
 
-
+    @stack.command
     def start_update(self,acid):
         t0 = time.time_ns()
         self.predictor.update(acid, t0)
@@ -570,6 +579,10 @@ class ATC(core.Entity):
         print(traf.user_spdcmd[idx])
         # traf.user_spdcmd[idx] = True
         # print(traf.user_spdcmd[idx])
+
+    @stack.command
+    def printactive(self):
+        print(self.active_instructions)
 
     @stack.command
     def replacewaypoint(self, acid, direct_dist, reqdist, trackmiles, direct_qdr):

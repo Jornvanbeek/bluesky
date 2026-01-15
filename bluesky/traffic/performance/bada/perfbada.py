@@ -185,7 +185,7 @@ class BADA(PerfBase):
 
             if not settings.verbose:
                 if not self.warned:
-                    print("Aircraft is using default B747-400 performance.")
+                    print(f"Aircraft is using default B747-400 performance instead of {actype}.")
                     self.warned = True
             else:
                 print("Flight " + bs.traf.id[-n:] + " has an unknown aircraft type, " + actype + ", BlueSky then uses default B747-400 performance.")
