@@ -73,52 +73,21 @@ class Node(Entity):
 
 
     def update(self):
-        ''' Node periodic update function.
 
-            Periodically call this function to allow this node to receive
-            and process data.
-        '''
-        # Check for incoming data
-        # ergens in Node.update()
-        now = time.perf_counter()
-        dt = now - getattr(self, "_last_update_t", now)
-        self._last_update_t = now
-        if dt > 0.35:
-            print(f"[NET] Node.update gap {dt * 1000:.1f}ms")
-        # for i in range(100):
-        self.receive()
-
-    def receive_drain(self, max_loops=20):
-        """
-        Call receive() repeatedly ONLY while sockets report queued data.
-        Stops on first ZMQ error. Prevents reset-time CPU storms.
-        """
-        loops = 0
-        while loops < max_loops:
-            try:
-                events = dict(self.poller.poll(0))
-            except zmq.ZMQError:
-                return False
-
-            if not events:
-                return True
-
-            ok = self.receive(timeout=0)
-            if ok is False:
-                return False
-
-            loops += 1
-
-        return True
+        self.receive(show=False)
 
 
-    def receive(self, timeout=0):
+
+
+    def receive(self, timeout=0, show=False):
         ''' Poll for incoming data from Server, and receive if available.
             Arguments:
             timeout: The polling timeout in milliseconds. '''
         try:
             events = dict(self.poller.poll(timeout))
             # The socket with incoming data
+            # if len(events) > 0:
+            #     print('events: ', events)
             for sock, event in events.items():
                 if event != zmq.POLLIN:
                     # The event does not refer to incoming data: skip for now
@@ -143,7 +112,15 @@ class Node(Entity):
                         print('ctx.msg: ', ctx.msg)
                         print('ctx.senderid: ',ctx.sender_id)
                         continue
-
+                    # if show and ctx.topic not in ['ACDATA', 'PREDICTION', 'SIMINFO', 'ECHO', 'POLY', 'TRAILS', 'DEFWPT', 'SIMSETTINGS', 'STACKCMDS']:
+                    #     print()
+                    #     print('self: ', self.node_id)
+                    #     print('show: ', show)
+                    #     print('received')
+                    #     print('topic: ', ctx.topic)
+                    #     print('pydata: ' ,pydata)
+                    #     print('ctx.msg: ', ctx.msg)
+                    #     print('ctx.senderid: ',ctx.sender_id)
                     # Unpack dict or list, skip empty string
                     if pydata == '':
                         sub.emit()
@@ -184,36 +161,6 @@ class Node(Entity):
         except zmq.ZMQError:
             return False
 
-    # def send(self, topic: str, data: str|Collection='', to_group: int|str|bytes=''):
-    #     # btopic = asbytestr(topic)
-    #     # bto_group = asbytestr(to_group or stack.sender() or '')
-    #     # self.sock_send.send_multipart(
-    #     #     [
-    #     #         bto_group.ljust(IDLEN, b'*') + btopic + self.node_id,
-    #     #         msgpack.packb(data, default=encode_ndarray, use_bin_type=True)
-    #     #     ]
-    #     # )
-    #
-    #     btopic = asbytestr(topic)
-    #     bto_group = asbytestr(to_group or stack.sender() or '')
-    #     header = bto_group.ljust(IDLEN, b'*') + btopic + self.node_id
-    #
-    #     payload = msgpack.packb(data, default=encode_ndarray, use_bin_type=True)
-    #
-    #     t_send0 = time.perf_counter_ns()
-    #     try:
-    #         # eerst non-blocking proberen
-    #         self.sock_send.send_multipart([header, payload], flags=zmq.DONTWAIT)
-    #         would_block = False
-    #     except zmq.Again:
-    #         would_block = True
-    #         # nu blocking versturen (zoals nu)
-    #         self.sock_send.send_multipart([header, payload])
-    #     t_send1 = time.perf_counter_ns()
-    #
-    #     dt_send = (t_send1 - t_send0) / 1e6
-    #     if dt_send > 5 or would_block:
-    #         print(f"[NET.SEND] topic={topic} send={dt_send:.1f}ms would_block={would_block} size={len(payload)}B")
 
     def send(self, topic: str, data: str | Collection = '', to_group: int | str | bytes = b''):
         btopic = asbytestr(topic)
