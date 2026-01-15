@@ -116,7 +116,7 @@ class ATC(core.Entity):
 
                     sim.hold()
 
-                    sim.simdt = 0.05
+                    sim.simdt = 0.02
 
 
                     for acid, row in instruct.iterrows():
@@ -133,8 +133,12 @@ class ATC(core.Entity):
 
 
     def determine_scenario(self, acid, ttlg):
+        if self.predictor.parent_id:
+            return
         idx = traf.id2idx(acid)
         if idx == -1:
+            return
+        if self.aman.Flights.loc[acid]['holding'] == True:
             return
         selspd = traf.selspd[idx] / kts
         maxspd = self.aman.Flights.loc[acid]['max_casdesc']
@@ -149,6 +153,7 @@ class ATC(core.Entity):
         if acid in self.active_instructions.keys():
             print('acid in active_instructions ', acid)
             return
+
         #standard scenarios
         if alt < self.handover_alt and vs < 0.5:
 
@@ -173,14 +178,18 @@ class ATC(core.Entity):
                     self.dogleg(acid, ttlg)
                 elif to_iaf < self.aman.nearby_threshold and ttlg < (self.aman.early_approach_margin + 20):
                     self.dogleg(acid, ttlg)
-                elif to_iaf < self.aman.nearby_threshold and ttlg >= (self.aman.early_approach_margin + 20):
+                elif to_iaf < self.aman.nearby_threshold and ttlg >= (self.aman.early_approach_margin + 20) and self.aman.Flights.loc[acid]['holding'] != True:
+
                     iaf = self.aman.Flights.loc[acid, 'IAF']
                     line = f'HOLDING AT {acid} {iaf} {ttlg}'
                     stack.stack(line)
-                    self.start_update(acid)
+                    # stack.stack(f'START_UPDATE {acid}')
+                    # self.start_update(acid)
                     # stack.forward(line, target_id=self.predictor.child_id)
-                    sim.hold()
+
                     print(f'HOLDING AT {acid} {iaf} {ttlg}')
+                    stack.stack(f'ECHO HOLDING {acid} at {iaf}')
+                    self.aman.Flights.at[acid, 'holding'] = True
 
 
 
@@ -197,7 +206,7 @@ class ATC(core.Entity):
                 # sim.hold()
                 # stack.forward('HOLD', target_id=self.predictor.child_id)
                 # print('holding because of mach', acid)
-            elif selspd > 4. and abs(instrspd - minspd) < 1 and vs < 0.0:
+            elif selspd > 4. and abs(instrspd - minspd) > 1 and vs < 0.0:
                 self.minspeed(acid, minspd)
 
         elif ttlg < - self.aman.late_adjacent_threshold and alt > self.handover_alt:
@@ -321,10 +330,10 @@ class ATC(core.Entity):
     def check_tp_update(self, acid, ttlg):
 
         instruction_margin = self.aman.instruction_margin
-        # if self.aman.Flights.at[acid, 'updates'] - self.aman.Flights.at[acid, 'count'] > self.aman.max_updates:
-        #     instruction_margin = min(self.aman.instruction_margin * 2, self.aman.early_approach_margin)
-        # elif self.aman.Flights.at[acid, 'updates'] - self.aman.Flights.at[acid, 'count'] > 2*self.aman.max_updates:
-        #     instruction_margin = min(self.aman.instruction_margin * 3, self.aman.early_approach_margin)
+        if self.aman.Flights.at[acid, 'updates'] - self.aman.Flights.at[acid, 'count'] > self.aman.max_updates:
+            instruction_margin = min(self.aman.instruction_margin * 2, self.aman.early_approach_margin)
+        elif self.aman.Flights.at[acid, 'updates'] - self.aman.Flights.at[acid, 'count'] > 2*self.aman.max_updates:
+            instruction_margin = min(self.aman.instruction_margin * 3, self.aman.early_approach_margin)
         itype = self.active_instructions[acid]
         if abs(ttlg) <= instruction_margin:
             self.instruction_correct(acid)
@@ -427,7 +436,7 @@ class ATC(core.Entity):
         self.predictor.update(acid, t0)
 
         iaf = self.aman.Flights.loc[acid, 'IAF']
-        stack.forward(f'AT {acid} {iaf} DO DELAY 10 DEL {acid}', target_id=self.predictor.child_id)
+        # stack.forward(f'AT {acid} {iaf} DO DELAY 20 DEL {acid}', target_id=self.predictor.child_id)
         print(f'START UPDATE FOR {acid}')
         print(self.active_instructions)
 

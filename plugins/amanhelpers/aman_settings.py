@@ -19,7 +19,7 @@ instruction_margin = 20 # allowed error by ATC from expected eat
 approach_aim = 0  # 90 seconds before eat if an instruction is given is the aim (make negative)
 late_adjacent_threshold = 2 * 60  # if an aircraft is late then this is the threshold before communicating to an adjacent center
 early_adjacent_threshold = 2 * 60  # if an aircraft is early, then this is the ttlg threshold before communicating to an adjacent center, make negative?
-instruct = False # easy setting to disable all instructions to frozen aircraft
+instruct = True # easy setting to disable all instructions to frozen aircraft
 mach_reduction = 0.04
 max_speedup = 25  # knots
 max_slowdown = 50  # knots
@@ -33,6 +33,8 @@ popup_planner = 'delay'
 mach_threshold = 0
 handover_alt = 260.0 * 100  # ft (FL260)
 max_dogleg_ratio = 1.8
+max_updates = 10
+print_updates = True
 
 
 

@@ -156,6 +156,7 @@ class Predictor(core.Entity):
         self.predictions_cache = {}
         self.use_cache = False
         self.acids = set()
+        self.acids_to_update = set()
         self._fir_inside = {}
 
         # Counter for automatic fast-forward functionality
@@ -167,7 +168,7 @@ class Predictor(core.Entity):
         self.predictions_complete = False
 
         self.fast_tp = True
-
+        self.tp_dt = 3 # for when using cache
         traf.traf_parent_id = None
         self.departure_route_alt = 'FL200'
         # self.incorrect_predictions = ['AIA6768', 'KLM76QSH', 'EZY91XM']
@@ -200,7 +201,7 @@ class Predictor(core.Entity):
         if wptcross_check(cmdline):
             self.wptcrosscount += 1
 
-        if self.parent_id or cmds_disrupt_predictor(cmdline):
+        if self.parent_id or cmds_disrupt_predictor(cmdline) or holding_check(cmdline):
             return
         # print('outside', cmdline)
         # if cmds_disrupt_predictor(cmdline):
@@ -343,7 +344,8 @@ class Predictor(core.Entity):
         # Check if the added node is the child node to start the predict method.
         if node_id == self.child_id:
             stack.forward('PREDICTOR CLAIM', target_id=node_id)
-            stack.forward('SCEN TP', target_id=node_id)
+            scen = stack.get_scenname()
+            stack.forward(f'SCEN TP{scen}', target_id=node_id)
             stack.stack('ECHO PREDICTOR_successfully started.')
             self.predict()
 
@@ -442,7 +444,8 @@ class Predictor(core.Entity):
             acrte.calcfp()
             iactwp = acrte.iactwp
             traf.ap.ComputeVNAV(idxac, acrte.wptoalt[iactwp], acrte.wpxtoalt[iactwp], acrte.wptorta[iactwp],acrte.wpxtorta[iactwp])
-            print("completed ", acid, (time.time_ns() - t0)/1e6, "ms")
+            self.acids_to_update.add(acid)
+            print("completed data transfer to tp", acid, (time.time_ns() - t0)/1e6, "ms")
             print('-------------------------------')
             print()
 
@@ -650,8 +653,8 @@ class Predictor(core.Entity):
                         cmds_to_forward.append(cmd.upper())
                 print(cmds_to_forward)
                 stack.forward(*cmds_to_forward, target_id=self.child_id)
-                stack.forward('DT 3', target_id=self.child_id)
-                # stack.forward('ff', target_id=self.child_id)
+                stack.forward(f'DT {self.tp_dt}', target_id=self.child_id)
+                stack.forward('ff', target_id=self.child_id)
 
             else:
                 for acid in self.commands_per_flight.keys():
@@ -680,7 +683,7 @@ class Predictor(core.Entity):
             stack.stack(f'PCALL {scenario}')
             stack.stack('USECACHE_AMAN')
             stack.stack('FF')
-            stack.forward('DT 3', target_id=self.child_id)
+            stack.forward(f'DT {self.tp_dt}', target_id=self.child_id)
             stack.forward('FF', target_id=self.child_id)
             self.complete()
 
@@ -833,7 +836,7 @@ class Predictor(core.Entity):
         try:
             val = traf.ap.route[idxac].wptpredutc[idxwp]
         except:
-            print('maybe this?')
+
             print('parent: ', self.parent_id, 'child: ', self.child_id)
             print(acid, wpt, idxac, idxwp)
             print('route: ', traf.ap.route[idxac].wpname)
@@ -850,7 +853,11 @@ class Predictor(core.Entity):
             if t0_pred:
                 print("prediction sent ", acid, (time.time_ns() - t0_pred) / 1e6, "ms")
 
-
+            if acid in self.acids_to_update:
+                idxac = traf.id2idx(acid)
+                traf.delete(idxac)
+                self.acids_to_update.remove(acid)
+                print('removed acid: ', acid)
 
     @stack.command
     def speedtest(self):
@@ -1235,6 +1242,10 @@ def wptcross_check(cmdline):
     return True if match else False
 
 
+def holding_check(cmdline):
+    holding = re.search(r'\bHOLDING\b', cmdline, re.IGNORECASE)
+    atwp = re.search(r'\bATWP\b', cmdline, re.IGNORECASE)
+    return True if holding else False
 
 def parse_runway(acid):
     idxac = traf.id2idx(acid)

@@ -59,6 +59,7 @@ class Holding(core.Entity):
             'NARSO' : [355,200,999,220]
         }
 
+
         with self.settrafarrays():
             # per-aircraft list to store waypoint names where aircraft are holding, and delay
             self.holding_at = []

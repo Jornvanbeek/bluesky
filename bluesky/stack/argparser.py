@@ -147,7 +147,7 @@ class AcidArg(Parser):
         else:
             idx = bs.traf.id2idx(acid)
             if idx < 0:
-                raise ArgumentError(f'Aircraft with callsign {acid} not found')
+                raise ArgumentError(f'Aircraft with callsign {acid} not found, command: {argstring}')
 
             # Update ref position for navdb lookup
             bs.ref.lat = bs.traf.lat[idx]
