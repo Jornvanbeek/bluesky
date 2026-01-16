@@ -193,9 +193,36 @@ class AmanExporter():
         s_mw = pd.to_numeric(df.get('minwork'), errors='coerce')
         s_tw = pd.to_numeric(df.get('totalwork'), errors='coerce')
         s_xw = pd.to_numeric(df.get('extrawork'), errors='coerce')
+        s_ptime = pd.to_numeric(df.get('percentile_time'), errors='coerce')
+
+        # ATC / instruction bookkeeping (optional columns)
+        s_adj = pd.to_numeric(df.get('adjacent'), errors='coerce')
+        s_totaldelay = pd.to_numeric(df.get('totaldelay'), errors='coerce')
+        s_totalspeedup = pd.to_numeric(df.get('totalspeedup'), errors='coerce')
+        s_short_speed = pd.to_numeric(df.get('short speed'), errors='coerce')
+        s_delay_speed = pd.to_numeric(df.get('delay speed'), errors='coerce')
+        s_delay_mach = pd.to_numeric(df.get('delay mach'), errors='coerce')
+        s_delay_dogleg = pd.to_numeric(df.get('delay dogleg'), errors='coerce')
+        s_short_dogleg = pd.to_numeric(df.get('short dogleg'), errors='coerce')
+
+        # Slot changes
+        s_slot = pd.to_numeric(df.get('slot'), errors='coerce')
+        s_islot = pd.to_numeric(df.get('initialslot'), errors='coerce')
+        slot_diff = (s_slot - s_islot)
+        slot_absdiff = slot_diff.abs()
+        slot_absdiff_nz = slot_absdiff[(slot_absdiff > 0) & slot_absdiff.notna()]
+
+        # Swaps
+        s_swaps = pd.to_numeric(df.get('swaps'), errors='coerce')
 
         denom = s_tw.replace(0, np.nan)
         pct_xw = (s_xw / denom) * 100.0
+        pct_xw_clean = pct_xw.replace([np.inf, -np.inf], np.nan)
+
+        # popup masks (optional column)
+        popup_col = df.get('popup')
+        is_popup = (popup_col.astype('string').str.upper() == 'POPUP') if popup_col is not None else pd.Series(False, index=df.index)
+        is_nonpopup = ~is_popup
 
         # counts
         max_count = s_cnt.max(skipna=True)
@@ -204,6 +231,9 @@ class AmanExporter():
         max_count_acid = s_cnt.idxmax() if s_cnt.notna().any() else None
 
         return {
+            # mean_pct_extrawork at the very top
+            'mean_pct_extrawork': float(pct_xw_clean.mean(skipna=True)),
+
             # EAT adherence
             'mean_abs_eat_adherence': float(s_eat.abs().mean(skipna=True)),
             'max_abs_eat_adherence': float(s_eat.abs().max(skipna=True)),
@@ -231,11 +261,33 @@ class AmanExporter():
             'min_time_error_at_freeze': float(s_frz.min(skipna=True)),
             'mean_abs_time_error_at_freeze': float(s_frz.abs().mean(skipna=True)),
 
-            # work
+            # work (put pct extrawork first)
+            'mean_pct_extrawork_popup': float(pct_xw_clean[is_popup].mean(skipna=True)) if is_popup.any() else np.nan,
+            'mean_pct_extrawork_nonpopup': float(pct_xw_clean[is_nonpopup].mean(skipna=True)) if is_nonpopup.any() else np.nan,
             'mean_minwork': float(s_mw.mean(skipna=True)),
             'mean_totalwork': float(s_tw.mean(skipna=True)),
             'mean_extrawork': float(s_xw.mean(skipna=True)),
-            'mean_pct_extrawork': float(pct_xw.replace([np.inf, -np.inf], np.nan).mean(skipna=True)),
+
+            # percentile time
+            'mean_percentile_time': float(s_ptime.mean(skipna=True)),
+
+            # ATC / instruction bookkeeping
+            'mean_adjacent': float(s_adj.mean(skipna=True)),
+            'mean_totaldelay': float(s_totaldelay.mean(skipna=True)),
+            'mean_totalspeedup': float(s_totalspeedup.mean(skipna=True)),
+            'mean_short_speed': float(s_short_speed.mean(skipna=True)),
+            'mean_delay_speed': float(s_delay_speed.mean(skipna=True)),
+            'mean_delay_mach': float(s_delay_mach.mean(skipna=True)),
+            'mean_delay_dogleg': float(s_delay_dogleg.mean(skipna=True)),
+            'mean_short_dogleg': float(s_short_dogleg.mean(skipna=True)),
+
+            # Slot change statistics
+            'mean_slot_minus_initialslot': float(slot_diff.mean(skipna=True)),
+            'mean_abs_slot_minus_initialslot_nonzero': float(slot_absdiff_nz.mean(skipna=True)) if slot_absdiff_nz.size else np.nan,
+
+            # Swaps
+            'amount_of_swaps': float(s_swaps.fillna(0).sum()),
+            'mean_swaps': float(s_swaps.mean(skipna=True)),
 
             # size
             'n_acids': int(len(df)),
