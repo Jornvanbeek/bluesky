@@ -263,9 +263,9 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                     continue  # Not yet in traf
 
                 runway = row['runway']
-                sim.hold()
+                # sim.hold()
 
-                print('holding because of popup ', acid)
+                # print('holding because of popup ', acid)
                 self.totwohtml()
                 earlier_df = self.Flights[
                     (self.Flights['ETA'] < row['ETA'])
