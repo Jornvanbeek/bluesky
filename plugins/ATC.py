@@ -176,7 +176,7 @@ class ATC(core.Entity):
                     self.speed(acid, ttlg)
                 elif to_iaf > self.aman.nearby_threshold and direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
                     self.dogleg(acid, ttlg)
-                elif to_iaf < self.aman.nearby_threshold and ttlg < (self.aman.early_approach_margin + 20):
+                elif to_iaf < self.aman.nearby_threshold and to_iaf > 0.5 * self.aman.nearby_threshold and ttlg < (self.aman.early_approach_margin + 20):
                     self.dogleg(acid, ttlg)
                 elif to_iaf < self.aman.nearby_threshold and ttlg >= (self.aman.early_approach_margin + 20) and self.aman.Flights.loc[acid]['holding'] != True:
 
@@ -358,7 +358,12 @@ class ATC(core.Entity):
             selspd = traf.selspd[idx] / kts
             minspd = self.aman.Flights.loc[acid]['min_casdesc']
 
-            trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
+            try:
+                trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
+            except:
+                print(acid, selspd, itype, ttlg)
+                self.aman.totwohtml()
+                trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
 
             if 'speed' in itype and abs(minspd - selspd) > 1:
                 # more speed reduction possible
@@ -480,14 +485,16 @@ class ATC(core.Entity):
 
         if ttlg > 0:
             if reqspd > selspd:
-                print(f'ERROR IN SPEED CALCULATION {acid} {ttlg} {selspd} {reqspd}')
+                to_eto = self.aman.Flights.loc[acid]['ETO IAF'] - sim.simt
+                print(f'ERROR IN SPEED CALCULATION {acid} {ttlg} {selspd} {reqspd} {to_eto}')
             if reqspd < minspd:
                 instruct = minspd
             else:
                 instruct = reqspd
         elif ttlg <0:
             if reqspd < selspd:
-                print(f'ERROR IN SPEED CALCULATION {acid} {ttlg} {selspd} {reqspd}')
+                to_eto = self.aman.Flights.loc[acid]['ETO IAF'] - sim.simt
+                print(f'ERROR IN SPEED CALCULATION {acid} {ttlg} {selspd} {reqspd} {to_eto}')
             if reqspd > maxspd:
                 instruct = maxspd
             else:
@@ -814,6 +821,13 @@ class ATC(core.Entity):
                 return trackmiles, direct_qdr, direct_dist
             except:
                 print('findtrackmiles atc: ',acid, acrte.wpname, trackmiles )
+                print(i)
+                print(acrte.wpname[i])
+                print(acrte.wpname[i+1])
+                print(self.aman.Flights.loc[acid, 'IAF'])
+                print(direct_qdr)
+                print(direct_dist)
+
 
         # Route.before(acid, iaf, 'ADDWPT', )
 
