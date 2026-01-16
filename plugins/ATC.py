@@ -172,9 +172,11 @@ class ATC(core.Entity):
 
             #scenario 3: delay
             elif ttlg > self.aman.early_approach_margin:
+                dogleg_given = self.aman.Flights.loc[acid, 'dogleg']
+                curr_dogleg_ok = pd.isna(dogleg_given) or (float(dogleg_given) < self.max_dogleg_ratio)
                 if abs(minspd - selspd) > 1:
                     self.speed(acid, ttlg)
-                elif to_iaf > self.aman.nearby_threshold and direct_dist*self.max_dogleg_ratio > (trackmiles +1) and self.aman.Flights.loc[acid,'dogleg'] < self.max_dogleg_ratio: # and ttlg < max dogleg?
+                elif to_iaf > self.aman.nearby_threshold and direct_dist*self.max_dogleg_ratio > (trackmiles +1) and curr_dogleg_ok: # and ttlg < max dogleg?
                     self.dogleg(acid, ttlg)
                 elif to_iaf < self.aman.nearby_threshold and to_iaf > 0.5 * self.aman.nearby_threshold and ttlg < (self.aman.early_approach_margin + 20):
                     self.dogleg(acid, ttlg)

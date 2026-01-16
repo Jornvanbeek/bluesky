@@ -1,7 +1,11 @@
-from bluesky import core, stack, scr, traf, sim, net, network
+import bluesky
+from bluesky import core, stack, scr, traf, sim, net, network, plugins
 from bluesky.network import context as ctx
 import pandas as pd
 from datetime import datetime
+import webbrowser
+import os
+from plugins.amanhelpers import aman_settings
 
 
 
@@ -33,10 +37,11 @@ class monte_carlo(core.Entity):
         self.active_nodes = set()
         self._seq = 0
         self.batch = pd.DataFrame(columns=['scenario', 'run', 'seed', 'usecache', 'node', 'status', 'maxtime', 'starttime','endtime','elapsed'])
-
+        self.amansettings = aman_settings
+        self.opened = False
 
     @stack.command
-    def montecarlo(self, scenario: str, runs:int, maxnodes:int, usecache:bool=False, startseed:int=0, maxtime='5:00:00'):
+    def montecarlo(self, scenario: str, runs:int, maxnodes:int, usecache:bool=False, startseed:int=0, maxtime='5:00:00', title=None):
         rows = []
         for i in range(int(runs)):
             rows.append({
@@ -48,6 +53,10 @@ class monte_carlo(core.Entity):
                 'status': 'backlog',
                 'maxtime': maxtime
             })
+        if title:
+            self.title = title
+        else:
+            self.title = f'{scenario}_{self.amansettings.popup_planner}_FH{int(self.amansettings.freezehorizon/60)}_S{startseed}_R{runs}'
 
         self.batch = pd.concat([self.batch, pd.DataFrame(rows)])
         self.maxnodes = maxnodes
@@ -240,7 +249,7 @@ class monte_carlo(core.Entity):
     #     self.df_to_html()
 
     @stack.command
-    def df_to_html(self, path: str = "Montecarlo/montecarlo.html"):
+    def df_to_html(self, path: str = "Montecarlo/"):
         """Exporteer de batch-DataFrame naar een nette HTML-tabel."""
         if self.parent:
             return
@@ -313,15 +322,18 @@ class monte_carlo(core.Entity):
            </head>
            <body>
              <div class="container">
-               <h3>MonteCarlo batch — simtime: {sim_hhmmss}</h3>
+               <h3>{self.title} — simtime: {sim_hhmmss}</h3>
                {table_html}
              </div>
            </body>
            </html>
            """
-
-        with open(path, "w", encoding="utf-8") as f:
+        output_path = path + self.title +'.html'
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(html)
+            if not self.opened:
+                webbrowser.open(f"file://{os.path.abspath(output_path)}")
+                self.opened = True
 
 
     @stack.command
