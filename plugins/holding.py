@@ -4,6 +4,7 @@ from bluesky import core, stack, traf, sim  # , settings, navdb, scr, tools
 import math
 from bluesky.tools import aero
 import numpy as np
+from bluesky.core import plugin
 
 
 
@@ -66,6 +67,7 @@ class Holding(core.Entity):
             self.timeatwp = []
             self.delay = []
 
+        self.predictor = plugin.Plugin.plugins['NEWTP'].imp.predictor
 
     @stack.commandgroup
     def holding(self):
@@ -139,7 +141,8 @@ class Holding(core.Entity):
     @holding.subcommand
     def atwp(self, acid: 'acid', entry_hdg: 'hdg', entry_type: 'txt'= 'none', delay: 'time'= 0.0):
         # this function is called each time the aircraft passes over the selected iaf, to perform holding logic
-
+        if self.predictor.parent_id:
+            return
         ac = traf.id[acid]
         wpt = self.holding_at[acid]
         acrte = traf.ap.route[acid]

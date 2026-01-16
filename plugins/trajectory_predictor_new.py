@@ -860,6 +860,11 @@ class Predictor(core.Entity):
                 # print('removed acid: ', acid)
 
     @stack.command
+    def completehold(self):
+        sim.hold()
+        stack.forward('HOLD',target_id=self.child_id)
+
+    @stack.command
     def speedtest(self):
         t = time.time()
         if self.parent_id:

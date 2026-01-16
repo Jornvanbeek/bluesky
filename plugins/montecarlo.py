@@ -92,14 +92,14 @@ class monte_carlo(core.Entity):
 
         stack.forward('RESET', target_id=node_id)
         stack.forward('MC CLAIM', target_id=node_id)
-        stack.forward(f'SCEN {run}_{scenario}', target_id=node_id)
+        stack.forward(f'SCEN {seed}_{scenario}', target_id=node_id)
         stack.forward(f'SEED {seed}', target_id=node_id)
         if usecache:
             stack.forward(f'USECACHE {scenario}', target_id=node_id)
         else:
             stack.forward(f'PCALL {scenario}', target_id=node_id)
         stack.forward(f'SCHEDULE {maxtime} MC FINISHED', target_id=node_id)
-        stack.forward('DT 0.5', target_id=node_id)
+        stack.forward('DT 1', target_id=node_id)
         stack.forward(f'SEED {seed}', target_id=node_id)
 
 
@@ -112,14 +112,30 @@ class monte_carlo(core.Entity):
         self.parent = stack.sender()
 
     @MC.subcommand
+    def stopnode(self):
+        # do scen stopped + oldname
+        sim.quit()
+
+    @MC.subcommand
     def finished(self):
         if self.parent:
+            # stack.stack('SENDRESULT') this command does not work, as the sendresult function would have no destination to send to
             stack.forward('MC FINISHED', target_id=self.parent)
+
         else:
             node = stack.sender()
             if not self.parent and node in self.nodes:
                 stack.forward('SENDRESULT', target_id=node)
-                self.sendscen(node)
+                # self.sendscen(node)
+                # self.removenode(node)
+                stack.forward('COMPLETEHOLD', target_id=node)
+                stack.forward('DT 1', target_id=node)
+                self.active_nodes.remove(node)
+                reqnodes = min(self.maxnodes, len(self.batch))
+                actnodes = len(self.active_nodes)
+                newnodes = reqnodes - actnodes
+                if newnodes != 0:
+                    self.start()
 
 
     @network.subscriber(topic='MONTECARLORESULTS')
@@ -217,11 +233,11 @@ class monte_carlo(core.Entity):
     def storedf(self, path = "Montecarlo/montecarlo_batch.pkl"):
         self.batch.to_pickle(path)
 
-    @core.timed_function(dt= 5)
-    def autohtml(self):
-        if self.parent:
-            return
-        self.df_to_html()
+    # @core.timed_function(dt= 5)
+    # def autohtml(self):
+    #     if self.predictor.parent_id:
+    #         return
+    #     self.df_to_html()
 
     @stack.command
     def df_to_html(self, path: str = "Montecarlo/montecarlo.html"):
@@ -307,3 +323,14 @@ class monte_carlo(core.Entity):
         with open(path, "w", encoding="utf-8") as f:
             f.write(html)
 
+
+    @stack.command
+    def removenode(self, node_id):
+        # node_id = self.active_nodes.pop()
+        print(f"Removing node {node_id}")
+        # net.send(b'QUIT', to_group=node_id)
+        stack.forward('MC STOPNODE', target_id=node_id)
+        net.nodes.discard(node_id)
+        net.node_removed.emit(node_id)
+        self.active_nodes.remove(node_id)
+        self.nodes.remove(node_id)
