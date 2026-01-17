@@ -77,7 +77,7 @@ class monte_carlo(core.Entity):
             for id in ids:
                 self.active_nodes.add(id)
             net.send(b'ADDNODES', dict(count=newnodes, node_ids=ids), net.server_id)
-        if remaining <= 1: # keep last set of nodes alive
+        if remaining <= self.maxnodes - 1: # keep last set of nodes alive
             self.remove_when_done = False
 
 
