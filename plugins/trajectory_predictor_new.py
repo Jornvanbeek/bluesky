@@ -998,6 +998,15 @@ class Predictor(core.Entity):
 
             stack.stack('RESET')
 
+
+    @predictor.subcommand
+    def stopnode(self):
+        if self.parent_id:
+            sim.quit()
+        elif self.child_id:
+            stack.forward('PREDICTOR STOPNODE', target_id=self.child_id)
+
+
     def reset(self):
         """ Clear all traffic data when sim is reset and reset data for the predictor. """
         super().reset()

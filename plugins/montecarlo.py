@@ -39,6 +39,7 @@ class monte_carlo(core.Entity):
         self.batch = pd.DataFrame(columns=['scenario', 'run', 'seed', 'usecache', 'node', 'status', 'maxtime', 'starttime','endtime','elapsed'])
         self.amansettings = aman_settings
         self.opened = False
+        self.remove_when_done = True
 
     @stack.command
     def montecarlo(self, scenario: str, runs:int, maxnodes:int, usecache:bool=False, startseed:int=0, maxtime='5:00:00', title=None):
@@ -63,20 +64,29 @@ class monte_carlo(core.Entity):
         self.start()
 
     def start(self):
-        reqnodes= min(self.maxnodes, len(self.batch))
+        remaining = int(self.batch['status'].isin(['backlog']).sum())
+        #only backlog is used here, as the running nodes have not sent back their results yet,
+        # and thus are still labeled as running, while they are done. their node has already been removed from active nodes
+        # due to stack use and scheduling, results are first sent, and then the node is quit if applicable
+        reqnodes = min(int(self.maxnodes), remaining)
         actnodes = len(self.active_nodes)
         newnodes = reqnodes - actnodes
-        if newnodes != 0:
+        if newnodes > 0:
             ids = self._make_node_ids(newnodes)
             self.nodes = self.nodes + ids
+            for id in ids:
+                self.active_nodes.add(id)
             net.send(b'ADDNODES', dict(count=newnodes, node_ids=ids), net.server_id)
+        if remaining <= 1: # keep last set of nodes alive
+            self.remove_when_done = False
 
 
     @network.subscriber(topic='node-added')
     def on_node_added(self, node_id):
         if node_id in self.nodes:
             self.sendscen(node_id)
-            self.active_nodes.add(node_id)
+            # self.active_nodes.add(node_id)
+        # else: send quit command?
 
     def sendscen(self,node_id):
         selected_scen = self.batch.index[self.batch['status'].eq('backlog')]
@@ -137,13 +147,13 @@ class monte_carlo(core.Entity):
                 stack.forward('SENDRESULT', target_id=node)
                 # self.sendscen(node)
                 # self.removenode(node)
-                stack.forward('COMPLETEHOLD', target_id=node)
-                stack.forward('DT 1', target_id=node)
-                self.active_nodes.remove(node)
-                reqnodes = min(self.maxnodes, len(self.batch))
-                actnodes = len(self.active_nodes)
-                newnodes = reqnodes - actnodes
-                if newnodes != 0:
+                if self.remove_when_done:
+                    self.removenode(node)
+                    self.start()
+                else:
+                    stack.forward('COMPLETEHOLD', target_id=node)
+                    stack.forward('DT 1', target_id=node)
+                    self.active_nodes.remove(node)
                     self.start()
 
 
@@ -341,6 +351,7 @@ class monte_carlo(core.Entity):
         # node_id = self.active_nodes.pop()
         print(f"Removing node {node_id}")
         # net.send(b'QUIT', to_group=node_id)
+        stack.forward('PREDICTOR STOPNODE', target_id=node_id)
         stack.forward('MC STOPNODE', target_id=node_id)
         net.nodes.discard(node_id)
         net.node_removed.emit(node_id)
