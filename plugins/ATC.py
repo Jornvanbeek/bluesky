@@ -185,6 +185,7 @@ class ATC(core.Entity):
                     iaf = self.aman.Flights.loc[acid, 'IAF']
                     line = f'HOLDING AT {acid} {iaf} {ttlg}'
                     stack.stack(line)
+
                     # stack.stack(f'START_UPDATE {acid}')
                     # self.start_update(acid)
                     # stack.forward(line, target_id=self.predictor.child_id)
@@ -423,8 +424,27 @@ class ATC(core.Entity):
             self.determine_scenario(acid, ttlg)
 
     def instruction_correct(self, acid):
-        self.active_instructions.pop(acid)
-        self.aman.Flights.at[acid,'count'] += 1
+        itype = self.active_instructions.pop(acid)
+        if 'dogleg' in itype:
+            self.aman.Flights.at[acid, 'count'] += 2
+        else:
+            self.aman.Flights.at[acid,'count'] += 1
+
+
+        col = f"n_instr_{itype.strip().replace(' ', '_')}"
+        if col not in self.aman.Flights.columns:
+            # New column is appended at the end of the DataFrame.
+            self.aman.Flights[col] = 0
+            self.aman.Flights[col] = self.aman.Flights[col].astype(int)
+
+        # Initialize if NaN for this row
+        if pd.isna(self.aman.Flights.at[acid, col]):
+            self.aman.Flights.at[acid, col] = 0
+
+        # Increment per-itype count
+        self.aman.Flights.at[acid, col] += 1
+
+
 
 
         if len(self.active_instructions) == 0:
@@ -464,17 +484,19 @@ class ATC(core.Entity):
         reqdist = self.reqdist(acid, ttlg, trackmiles)
         if reqdist - direct_dist < 1:
             self.directiaf(acid)
+            instr = 'direct'
         else:
             if direct_dist*self.max_dogleg_ratio < reqdist:
                 reqdist = direct_dist*self.max_dogleg_ratio
             self.replacewaypoint(acid, direct_dist, reqdist, trackmiles, direct_qdr)
             self.aman.Flights.loc[acid, 'dogleg'] = round(reqdist/direct_dist,3)
+            instr = 'dogleg'
 
         if ttlg > 0:
             instrtype = 'delay'
         else:
             instrtype = 'short'
-        self.active_instructions[acid]= instrtype+' dogleg'  # acid: delay/short + dogleg/speed/mach
+        self.active_instructions[acid]= f'{instrtype} {instr}'  # acid: delay/short + dogleg/speed/mach
         self.start_update(acid)
 
 

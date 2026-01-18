@@ -6,7 +6,8 @@ import time
 import numpy as np
 
 from datetime import timedelta
-
+import matplotlib.pyplot as plt
+import numpy as np
 
 class AmanExporter():
 
@@ -302,3 +303,188 @@ class AmanExporter():
 
         sender = stack.sender()
         net.send('MONTECARLORESULTS',result, sender)
+
+    @stack.command
+    def etarateplot(self, df, step_min: int = 1, window_min: int = 15):
+        """
+        Plot moving-average arrival rate (ac/hr) over the scenario up to current sim time.
+        - ETA <= sim.simt
+        - x-axis in minutes since t0
+        """
+        # df = self.Flights
+        if df is None or df.empty or 'ETA' not in df.columns:
+            print("etarateplot: no Flights/ETA available")
+            df = self.Flights
+        simt = 15*3600.
+
+        # only ETAs up to current sim time
+        eta = pd.to_numeric(df['ETA'], errors='coerce')
+        eta = eta[(eta.notna()) & (eta <= simt)].values
+        if eta.size == 0:
+            print("etarateplot: no valid ETA values before simt")
+            return
+
+        # --- robust binning on fixed axis from t0..simt ---
+        step_min_i = int(step_min)
+        window_min_i = int(window_min)
+        if step_min_i <= 0 or window_min_i <= 0:
+            print("etarateplot: step_min and window_min must be > 0")
+            return
+
+        step_s = step_min_i * 60.0
+
+        # bin edges from 0 to simt
+        edges = np.arange(0.0, float(simt) + step_s, step_s)
+        # counts per bin
+        bin_idx = np.searchsorted(edges, eta, side="right") - 1
+        bin_idx = bin_idx[(bin_idx >= 0) & (bin_idx < len(edges) - 1)]
+        binned_vals = np.bincount(bin_idx, minlength=len(edges) - 1).astype(float)
+
+        # index as Timedelta for convenient x-axis
+        binned = pd.Series(
+            binned_vals,
+            index=pd.to_timedelta(edges[:-1], unit="s")
+        )
+
+        # rolling window in bins
+        win_bins = max(1, int(round((window_min_i * 60.0) / step_s)))
+        rolling = binned.rolling(win_bins, min_periods=1).sum()
+
+        # convert to ac/hr
+        rate = rolling * (60.0 / float(window_min_i))
+
+        # x-axis in minutes since t0
+        x_min = edges[:-1] / 60.0
+
+        # plot
+        plt.figure()
+        ax = plt.gca()
+
+        ax.plot(x_min, rate.values)
+        ax.set_xlabel("Time since t0 (minutes)")
+        ax.set_ylabel("Arrival rate (ac/hr)")
+        ax.set_title(f"ETA-based arrival rate ({window_min_i}-min moving avg)")
+        # grid
+        ax.grid(True)
+
+        # linker y-as: ticks per 4 ac/hr
+        max_rate = float(np.nanmax(rate.values)) if rate.size else 0.0
+        yticks_left = np.arange(0, max_rate + 4, 4)
+        ax.set_yticks(yticks_left)
+        ax.set_ylabel("Arrival rate (ac/hr)")
+
+        # dashed mean line
+        mean_rate = float(np.nanmean(rate.values)) if rate.size else 0.0
+        ax.axhline(mean_rate, linestyle='--')
+
+        # rechter y-as: arrivals per 15 min (=/4)
+        ax2 = ax.twinx()
+        yticks_right = yticks_left * (window_min_i / 60.0)  # 15 min -> /4
+        ax2.set_yticks(yticks_left)
+        ax2.set_yticklabels([f"{int(v)}" for v in yticks_right])
+        ax2.set_ylabel(f"Arrivals per {window_min_i} min")
+
+        scen = stack.get_scenname()
+        outpath = f"AMAN_DF/etarate_{scen}.png"
+        plt.savefig(outpath, dpi=200, bbox_inches="tight")
+        plt.close()
+
+        print(f"Saved: {outpath}")
+
+    @stack.command
+    def etabinsplot(self, df, bin_min: int = 15):
+        """
+        Plot arrival counts per bin_min-minute bins (no moving average), up to simt.
+        x-axis: minutes since t0.
+        """
+        if df is None or df.empty or 'ETA' not in df.columns:
+            print("etabinsplot: no Flights/ETA available")
+            return
+
+        simt = 15*3600.
+
+        eta = pd.to_numeric(df['ETA'], errors='coerce')
+        eta = eta[(eta.notna()) & (eta <= simt)].values
+        if eta.size == 0:
+            print("etabinsplot: no valid ETA values before simt")
+            return
+
+        bin_min_i = int(bin_min)
+        if bin_min_i <= 0:
+            print("etabinsplot: bin_min must be > 0")
+            return
+
+        bin_s = bin_min_i * 60.0
+
+        # fixed-width bin edges from 0..simt
+        edges = np.arange(0.0, float(simt) + bin_s, bin_s)
+        bin_idx = np.searchsorted(edges, eta, side="right") - 1
+        bin_idx = bin_idx[(bin_idx >= 0) & (bin_idx < len(edges) - 1)]
+        counts = np.bincount(bin_idx, minlength=len(edges) - 1).astype(float)
+
+        # x = left edges in minutes (fixed-width bins)
+        x_min = edges[:-1] / 60.0
+
+        plt.figure()
+        plt.bar(x_min, counts, width=(bin_s / 60.0), align='edge')
+        plt.xlabel("Time since t0 (minutes)")
+        plt.ylabel(f"Arrivals per {bin_min_i} min")
+        plt.title(f"ETA arrivals per {bin_min_i}-minute bins")
+        plt.grid(True)
+        # integer y-ticks, steps of 2 (no half aircraft)
+        max_cnt = int(np.nanmax(counts)) if counts.size else 0
+        plt.yticks(np.arange(0, max_cnt + 2, 2))
+
+        # dashed mean line (mean arrivals per bin)
+        mean_cnt = float(np.nanmean(counts)) if counts.size else 0.0
+        plt.axhline(mean_cnt, linestyle='--')
+
+        # rechter y-as: arrivals per hour
+        ax = plt.gca()
+        ax2 = ax.twinx()
+
+        # conversie: per bin -> per uur
+        factor = 60.0 / float(bin_min_i)
+        y_left = ax.get_yticks()
+        y_right = y_left * factor
+
+        ax2.set_yticks(y_left)
+        ax2.set_yticklabels([f"{int(v)}" for v in y_right])
+        ax2.set_ylabel("Arrivals per hour")
+
+        scen = stack.get_scenname()
+        outpath = f"AMAN_DF/etabins_{scen}_{bin_min_i}min.png"
+        plt.savefig(outpath, dpi=200, bbox_inches="tight")
+        plt.close()
+
+        print(f"Saved: {outpath}")
+
+    # import pickle
+    # from plugins.amanhelpers.amanexport import AmanExporter
+    # exporter = AmanExporter()
+    # exporter.etarateplot(dataframe)
+    # exporter.etabinsplot(dataframe)
+
+    # with open('AMAN_DF/flights_5_scenariotest.pkl', 'rb') as f:
+    #     dataframe = pickle.load(f)
+
+
+
+
+    # def eta_from_cache(self):
+    #     from plugins.amanhelpers.amanpredictionhandler import PredictionHandler
+    #     handler = PredictionHandler()
+    #     cache = handler.open_cache()
+    #     eta_list = []
+    #
+    #     for acid, prediction in cache:
+    #         wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead, work = prediction
+    #         wptime = scheduledtime + flighttime
+    #         if '/RW' in wpt:
+    #             dest, runway = handler.parse_destination(wpt)
+    #             # data = {'planningstate': 'new', 'TP ETA': wptime, 'runway': runway, 'type': type, 'origin': '',
+    #             #         'LAf': '', 'count': 0, 'Flighttime': flighttime, 'minwork': work}
+    #             eta = wptime
+    #             eta_list.append(wptime)
+    #
+    #     return eta_list

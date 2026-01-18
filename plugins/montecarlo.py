@@ -41,6 +41,21 @@ class monte_carlo(core.Entity):
         self.opened = False
         self.remove_when_done = True
 
+    def reset(self):
+        super().reset()
+        self._kill_all_nodes()
+        self.nodes = []
+        self.maxnodes = 0
+        self.parent = b''
+        self.active_nodes = set()
+        self._seq = 0
+        self.batch = pd.DataFrame(
+            columns=['scenario', 'run', 'seed', 'usecache', 'node', 'status', 'maxtime', 'starttime', 'endtime',
+                     'elapsed'])
+        self.amansettings = aman_settings
+        self.opened = False
+        self.remove_when_done = True
+
     @stack.command
     def montecarlo(self, scenario: str, runs:int, maxnodes:int, usecache:bool=False, startseed:int=0, maxtime='5:00:00', title=None):
         rows = []
@@ -357,3 +372,31 @@ class monte_carlo(core.Entity):
         net.node_removed.emit(node_id)
         self.active_nodes.remove(node_id)
         self.nodes.remove(node_id)
+
+
+
+
+    def _kill_all_nodes(self):
+        """Stop all nodes known to Montecarlo."""
+        # Combine bookkeeping sources, avoid modifying during iteration
+        all_nodes = list(set(self.nodes) | set(self.active_nodes))
+
+        for node_id in all_nodes:
+            try:
+                print(f"[MC] killing node {node_id}")
+                stack.forward('PREDICTOR STOPNODE', target_id=node_id)
+                stack.forward('MC STOPNODE', target_id=node_id)
+            except Exception:
+                pass
+
+        # Best-effort GUI cleanup
+        for node_id in all_nodes:
+            try:
+                net.nodes.discard(node_id)
+                net.node_removed.emit(node_id)
+            except Exception:
+                pass
+
+        # Local bookkeeping
+        self.nodes.clear()
+        self.active_nodes.clear()
