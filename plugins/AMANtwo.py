@@ -68,7 +68,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 setattr(self, k, v)
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'updates','Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'percentile_time','E_dep', 'E_enroute', 'E_fir',  'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead']
+        columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'updates','Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'percentile_time','E_dep', 'E_enroute', 'E_fir',  'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
         self.not_spawned = defaultdict(list)
@@ -593,7 +593,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                    'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count',
                    'updates', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO',
                    'percentile_time', 'E_dep', 'E_enroute', 'E_fir', 'planning', 'SID', 'FIR entry', 'Time error',
-                   'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead']
+                   'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
         self.not_spawned = defaultdict(list)

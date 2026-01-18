@@ -185,6 +185,9 @@ class ATC(core.Entity):
                     iaf = self.aman.Flights.loc[acid, 'IAF']
                     line = f'HOLDING AT {acid} {iaf} {ttlg}'
                     stack.stack(line)
+                    self.store_delay(acid, ttlg, delaytype='holdingtime')
+                    self.instruction_correct(acid, itype='holding')
+
 
                     # stack.stack(f'START_UPDATE {acid}')
                     # self.start_update(acid)
@@ -302,8 +305,9 @@ class ATC(core.Entity):
                     # print(f'received tp update{acid}')
 
 
-    def store_delay(self, acid, delay):
-        delaytype = self.active_instructions[acid]
+    def store_delay(self, acid, delay, delaytype=None):
+        if delaytype is None:
+            delaytype = self.active_instructions[acid]
 
         # Accumulate delay per instruction type (e.g. 'delay speed', 'delay dogleg', 'short speed', ...)
         if delaytype not in self.aman.Flights.columns:
@@ -423,9 +427,10 @@ class ATC(core.Entity):
             self.instruction_correct(acid)
             self.determine_scenario(acid, ttlg)
 
-    def instruction_correct(self, acid):
-        itype = self.active_instructions.pop(acid)
-        if 'dogleg' in itype:
+    def instruction_correct(self, acid, itype=None):
+        if itype is None:
+            itype = self.active_instructions.pop(acid)
+        if 'dogleg' in itype or 'holding' in itype:
             self.aman.Flights.at[acid, 'count'] += 2
         else:
             self.aman.Flights.at[acid,'count'] += 1
