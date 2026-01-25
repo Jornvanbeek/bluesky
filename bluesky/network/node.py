@@ -73,8 +73,8 @@ class Node(Entity):
 
 
     def update(self):
-
-        self.receive(show=False)
+        for i in range(100):
+            self.receive(show=False)
 
 
 

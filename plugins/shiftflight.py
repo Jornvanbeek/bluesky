@@ -54,6 +54,24 @@ class shiftflight(core.Entity):
         # todo schedule gebruiken ipv shift?
 
     @stack.command
+    def spawntime(self, acid):
+        """
+        Shift all scheduled scenario commands for `acid` by `error` seconds.
+        """
+        cmds = stack.stackbase.Stack.scencmd
+        times = stack.stackbase.Stack.scentime
+
+        spawntime = 999999999.
+
+        for i, cmd in enumerate(cmds):
+            if acid in cmd:
+                times[i] = max(0.0, times[i])
+                if times[i] < spawntime:
+                    spawntime = times[i]
+
+        return spawntime
+
+    @stack.command
     def printstackbase(self):
         print(stack.stackbase.Stack.scencmd)
         print(stack.stackbase.Stack.scentime)

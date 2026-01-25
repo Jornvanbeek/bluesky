@@ -305,21 +305,47 @@ class AmanExporter():
         net.send('MONTECARLORESULTS',result, sender)
 
     @stack.command
-    def etarateplot(self, df, step_min: int = 1, window_min: int = 15):
+    def etarateplot(self, data, step_min: int = 1, window_min: int = 15):
         """
         Plot moving-average arrival rate (ac/hr) over the scenario up to current sim time.
         - ETA <= sim.simt
         - x-axis in minutes since t0
         """
-        # df = self.Flights
-        if df is None or df.empty or 'ETA' not in df.columns:
-            print("etarateplot: no Flights/ETA available")
-            df = self.Flights
-        simt = 15*3600.
+        # simt = float(sim.simt) if hasattr(sim, 'simt') else None
+        simt = None
+        # # only ETAs up to current sim time
+        # eta = pd.to_numeric(df['ETA'], errors='coerce')
+        # eta = eta[(eta.notna()) & (eta <= simt)].values
 
-        # only ETAs up to current sim time
-        eta = pd.to_numeric(df['ETA'], errors='coerce')
-        eta = eta[(eta.notna()) & (eta <= simt)].values
+        # Extract ETA array
+        if isinstance(data, pd.DataFrame):
+            df = data
+            if df is None or df.empty or 'ETA' not in df.columns:
+                print("etarateplot: no Flights/ETA available")
+                df = getattr(self, 'Flights', None)
+                if df is None or df.empty or 'ETA' not in df.columns:
+                    return
+            eta = pd.to_numeric(df['ETA'], errors='coerce').values
+        else:
+            # list/array/Series
+            eta = pd.to_numeric(pd.Series(list(data)), errors='coerce').values
+
+        eta = eta[np.isfinite(eta)]
+        if eta.size == 0:
+            print("etarateplot: no valid ETA values")
+            return
+
+        # pick a safe plotting horizon
+        max_eta = float(np.nanmax(eta))
+        if max_eta > 24*3600:
+            max_eta = 500*60
+        if simt is None or (not np.isfinite(simt)) or simt <= 0:
+            simt_plot = max_eta
+        else:
+            simt_plot = min(float(simt), max_eta)
+
+        # only ETAs up to horizon
+        eta = eta[eta <= simt_plot]
         if eta.size == 0:
             print("etarateplot: no valid ETA values before simt")
             return
@@ -333,8 +359,8 @@ class AmanExporter():
 
         step_s = step_min_i * 60.0
 
-        # bin edges from 0 to simt
-        edges = np.arange(0.0, float(simt) + step_s, step_s)
+        # bin edges from 0 to simt_plot
+        edges = np.arange(0.0, float(simt_plot) + step_s, step_s)
         # counts per bin
         bin_idx = np.searchsorted(edges, eta, side="right") - 1
         bin_idx = bin_idx[(bin_idx >= 0) & (bin_idx < len(edges) - 1)]
@@ -392,22 +418,49 @@ class AmanExporter():
         print(f"Saved: {outpath}")
 
     @stack.command
-    def etabinsplot(self, df, bin_min: int = 15):
+    def etabinsplot(self, data, bin_min: int = 15):
         """
         Plot arrival counts per bin_min-minute bins (no moving average), up to simt.
         x-axis: minutes since t0.
         """
-        if df is None or df.empty or 'ETA' not in df.columns:
-            print("etabinsplot: no Flights/ETA available")
+        # if df is None or df.empty or 'ETA' not in df.columns:
+        #     print("etabinsplot: no Flights/ETA available")
+        #     return
+
+        # Determine sim horizon
+        # simt = float(sim.simt) if hasattr(sim, 'simt') else None
+        simt = None
+        # Extract ETA array
+        if isinstance(data, pd.DataFrame):
+            df = data
+            if df is None or df.empty or 'ETA' not in df.columns:
+                print("etabinsplot: no Flights/ETA available")
+                return
+            eta = pd.to_numeric(df['ETA'], errors='coerce').values
+        else:
+            eta = pd.to_numeric(pd.Series(list(data)), errors='coerce').values
+
+        eta = eta[np.isfinite(eta)]
+        if eta.size == 0:
+            print("etabinsplot: no valid ETA values")
             return
 
-        simt = 15*3600.
+        # pick a safe plotting horizon
+        max_eta = float(np.nanmax(eta))
+        if max_eta > 24*3600:
+            max_eta = 500*60
+        if simt is None or (not np.isfinite(simt)) or simt <= 0:
+            simt_plot = max_eta
+        else:
+            simt_plot = min(float(simt), max_eta)
 
-        eta = pd.to_numeric(df['ETA'], errors='coerce')
-        eta = eta[(eta.notna()) & (eta <= simt)].values
+        # Only ETAs up to plot horizon
+        eta = eta[eta <= simt_plot]
         if eta.size == 0:
             print("etabinsplot: no valid ETA values before simt")
             return
+
+
 
         bin_min_i = int(bin_min)
         if bin_min_i <= 0:
@@ -416,8 +469,8 @@ class AmanExporter():
 
         bin_s = bin_min_i * 60.0
 
-        # fixed-width bin edges from 0..simt
-        edges = np.arange(0.0, float(simt) + bin_s, bin_s)
+        # fixed-width bin edges from 0..simt_plot
+        edges = np.arange(0.0, float(simt_plot) + bin_s, bin_s)
         bin_idx = np.searchsorted(edges, eta, side="right") - 1
         bin_idx = bin_idx[(bin_idx >= 0) & (bin_idx < len(edges) - 1)]
         counts = np.bincount(bin_idx, minlength=len(edges) - 1).astype(float)
@@ -426,18 +479,21 @@ class AmanExporter():
         x_min = edges[:-1] / 60.0
 
         plt.figure()
-        plt.bar(x_min, counts, width=(bin_s / 60.0), align='edge')
-        plt.xlabel("Time since t0 (minutes)")
-        plt.ylabel(f"Arrivals per {bin_min_i} min")
-        plt.title(f"ETA arrivals per {bin_min_i}-minute bins")
-        plt.grid(True)
+        ax = plt.gca()
+        ax.bar(x_min, counts, width=(bin_s / 60.0), align='edge')
+        ax.set_xlabel("Time since t0 (minutes)")
+        ax.set_ylabel(f"Arrivals per {bin_min_i} min")
+        ax.set_title(f"ETA arrivals per {bin_min_i}-minute bins")
+        ax.grid(True)
+
         # integer y-ticks, steps of 2 (no half aircraft)
         max_cnt = int(np.nanmax(counts)) if counts.size else 0
-        plt.yticks(np.arange(0, max_cnt + 2, 2))
+        yticks_left = np.arange(0, max_cnt + 2, 2)
+        ax.set_yticks(yticks_left)
 
         # dashed mean line (mean arrivals per bin)
         mean_cnt = float(np.nanmean(counts)) if counts.size else 0.0
-        plt.axhline(mean_cnt, linestyle='--')
+        ax.axhline(mean_cnt, linestyle='--')
 
         # rechter y-as: arrivals per hour
         ax = plt.gca()
@@ -445,10 +501,8 @@ class AmanExporter():
 
         # conversie: per bin -> per uur
         factor = 60.0 / float(bin_min_i)
-        y_left = ax.get_yticks()
-        y_right = y_left * factor
-
-        ax2.set_yticks(y_left)
+        y_right = yticks_left * factor
+        ax2.set_yticks(yticks_left)
         ax2.set_yticklabels([f"{int(v)}" for v in y_right])
         ax2.set_ylabel("Arrivals per hour")
 
@@ -470,21 +524,37 @@ class AmanExporter():
 
 
 
+    @stack.command
+    def eta_from_cache(self, minutes: int = 15):
+        # if cache:
+        from plugins.amanhelpers.amanpredictionhandler import PredictionHandler
+        from plugins.shiftflight import shiftflight
 
-    # def eta_from_cache(self):
-    #     from plugins.amanhelpers.amanpredictionhandler import PredictionHandler
-    #     handler = PredictionHandler()
-    #     cache = handler.open_cache()
-    #     eta_list = []
-    #
-    #     for acid, prediction in cache:
-    #         wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, takeoff, dep_route, enroute, fir, abslookahead, work = prediction
-    #         wptime = scheduledtime + flighttime
-    #         if '/RW' in wpt:
-    #             dest, runway = handler.parse_destination(wpt)
-    #             # data = {'planningstate': 'new', 'TP ETA': wptime, 'runway': runway, 'type': type, 'origin': '',
-    #             #         'LAf': '', 'count': 0, 'Flighttime': flighttime, 'minwork': work}
-    #             eta = wptime
-    #             eta_list.append(wptime)
-    #
-    #     return eta_list
+        handler = PredictionHandler()
+        self.shiftflight = shiftflight()
+        preds = handler.open_cache()
+
+        # else:
+        #     preds = self.not_spawned
+
+        eta_list = []
+        for acid in preds.keys():
+            # print(acid)
+            for prediction in preds[acid]:
+                wpt, wptime, flighttime, estimatedcreatetime, wptpredutc, parent_id, type, origin, work = prediction
+                scheduledtime = self.shiftflight.spawntime(acid)
+
+                wptime = scheduledtime + flighttime
+
+                if '/RW' in wpt:
+                    # dest, runway = handler.parse_destination(wpt)
+                    # data = {'planningstate': 'new', 'TP ETA': wptime, 'runway': runway, 'type': type, 'origin': '',
+                    #         'LAf': '', 'count': 0, 'Flighttime': flighttime, 'minwork': work}
+                    eta = wptime
+                    eta_list.append(wptime)
+        print(eta_list)
+        print('plotting bins')
+        self.etabinsplot(eta_list, bin_min=15)
+        print('plotting rate')
+        self.etarateplot(eta_list, window_min=15)
+        # return eta_list
