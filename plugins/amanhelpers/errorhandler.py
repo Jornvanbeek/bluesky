@@ -17,12 +17,22 @@ class ErrorHandler:
         #
         # TODO deze goed checken, met name de signs
         self.segments()
+        # self.Flights['Time error'] = (
+        #         -self.Flights['t_departure'].fillna(0) * self.Flights['E_dep'].fillna(0) / 100
+        #         - self.Flights['t_enroute'].fillna(0) * self.Flights['E_enroute'].fillna(0) / 100
+        #         - self.Flights['t_fir'].fillna(0) * self.Flights['E_fir'].fillna(0) / 100
+        #     # - self.Flights['E_TO'].fillna(0) * 60
+        # )
+
         self.Flights['Time error'] = (
-                -self.Flights['t_departure'].fillna(0) * self.Flights['E_dep'].fillna(0) / 100
-                - self.Flights['t_enroute'].fillna(0) * self.Flights['E_enroute'].fillna(0) / 100
-                - self.Flights['t_fir'].fillna(0) * self.Flights['E_fir'].fillna(0) / 100
-            # - self.Flights['E_TO'].fillna(0) * 60
+                - self.Flights['t_departure'].infer_objects(copy=False).fillna(0) * self.Flights['E_dep'].infer_objects(
+            copy=False).fillna(0) / 100
+                - self.Flights['t_enroute'].infer_objects(copy=False).fillna(0) * self.Flights[
+                    'E_enroute'].infer_objects(copy=False).fillna(0) / 100
+                - self.Flights['t_fir'].infer_objects(copy=False).fillna(0) * self.Flights['E_fir'].infer_objects(
+            copy=False).fillna(0) / 100
         )
+
         self.Flights['ETO IAF'] = self.Flights['TP IAF'] + self.Flights['Time error']
 
 

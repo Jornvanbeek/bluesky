@@ -54,9 +54,9 @@ class Holding(core.Entity):
         self.rate_one = 60 #seconds
         #standard holding patterns for schiphol
         self.holdingpatterns = {
-            'SUGOL' : [110,70,100,250],
-            'RIVER' : [41,70,100,250],
-            'ARTIP' : [252,70,100,250],
+            'SUGOL' : [110,70,110,250],
+            'RIVER' : [41,70,110,250],
+            'ARTIP' : [252,70,110,250],
             'NARSO' : [355,200,999,220]
         }
 
