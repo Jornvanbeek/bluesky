@@ -170,7 +170,8 @@ class Predictor(core.Entity):
         self.fast_tp = True
         self.tp_dt = 3 # for when using cache
         traf.traf_parent_id = None
-        self.departure_route_alt = 'FL200'
+        self.departure_route_alt = 'FL190'
+        self.departure_route_alt_EBBR = 'FL130'
         # self.incorrect_predictions = ['AIA6768', 'KLM76QSH', 'EZY91XM']
         self.incorrect_predictions = []#['EZY91XM', 'DAL72SH']
         # Change the route class implementation for the child node using PredictorNodeRoute class.
