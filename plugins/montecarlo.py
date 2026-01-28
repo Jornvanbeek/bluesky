@@ -115,8 +115,8 @@ class monte_carlo(core.Entity):
             net.send(b'ADDNODES', dict(count=newnodes, node_ids=ids), net.server_id)
         if remaining == 0 and len(self.active_nodes) ==0 and len(self.multiple_mc) > 0:#if complete
             stack.stack('RESET')
-        if remaining <= self.maxnodes - 1: # keep last set of nodes alive
-            self.remove_when_done = False
+        # if remaining <= self.maxnodes - 1: # keep last set of nodes alive
+        #     self.remove_when_done = False
 
 
     @network.subscriber(topic='node-added')
