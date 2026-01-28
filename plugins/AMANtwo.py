@@ -68,7 +68,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 setattr(self, k, v)
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'updates','Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'percentile_time','E_dep', 'E_enroute', 'E_fir',  'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime', 'pending_delay']
+        columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'EAT_updates','count', 'updates','Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'percentile_time','E_dep', 'E_enroute', 'E_fir',  'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime', 'pending_delay']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
         self.not_spawned = defaultdict(list)
@@ -97,7 +97,6 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         self.update_times()
         self.planpopup()
         self.update_times()
-        self.replan_early()
         self.assignslots()
         self.update_times()
         self.freeze()
@@ -222,8 +221,16 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             cols.insert(1, 'initialslot')
             vals.insert(1, slot)
 
+        self.eat_update_plusone(slot, acid)
+
         self.Flights.loc[acid, cols] = vals
         return slot, sep
+
+    def eat_update_plusone(self, slot, flight):
+        self.Flights['EAT_updates'] = self.Flights['EAT_updates'].fillna(0).astype(int)
+        old_slot = self.Flights.at[flight, 'slot']
+        if pd.notna(old_slot) and float(old_slot) != float(slot):
+            self.Flights.at[flight, 'EAT_updates'] = int(self.Flights.at[flight, 'EAT_updates']) + 1
 
     def update_popup_entry(self,acid):
         stack.stack(f"COLOR {acid} 255,128,0")
@@ -356,7 +363,9 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             self.Flights.loc[airborne_popup, 'planningtype'] = 'airborne'
 
 
-
+    def replan_late_popup(self, acid):
+        sim.hold()
+        print('replanning late popup ', acid)
 
 
 
@@ -375,6 +384,8 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 break
             else:
                 slot = last_assigned_slot + separation
+
+                self.eat_update_plusone(slot, flight)
 
                 self.Flights.loc[flight, ['slot', 'EAT', 'LIV', 'LAS', 'LAf']] = [
                     slot,
@@ -591,11 +602,11 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         # Define the column names (keep in sync with __init__)
         columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA',
                    'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot',
-                   'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count',
-                   'updates', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO',
-                   'percentile_time', 'E_dep', 'E_enroute', 'E_fir', 'planning', 'SID', 'FIR entry', 'Time error',
-                   'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime',
-                   'pending_delay']
+                   'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate',
+                   'EAT_updates', 'count', 'updates', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc',
+                   'min_casdesc', 'E_TO', 'percentile_time', 'E_dep', 'E_enroute', 'E_fir', 'planning', 'SID',
+                   'FIR entry', 'Time error', 'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps',
+                   'lookahead', 'holdingtime', 'pending_delay']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
         self.not_spawned = defaultdict(list)
@@ -639,35 +650,6 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         self.Flights['planning'] = self.Flights['EAT'] - self.planninghorizon
 
 
-
-
-    # def replan_late(self,acid, ETA = None):
-    #     # simple version, only swap slots
-    #     row_replan = self.Flights.loc[acid]
-    #     if ETA is None:
-    #         ETA = row_replan['ETA']
-    #     runway = row_replan['runway']
-    #     slot = row_replan['slot']
-    #     frozen = self.Flights[
-    #         (self.Flights['runway'] == runway) &
-    #         (self.Flights['planningstate'] == 'frozen') &
-    #         (self.Flights['slot'] > slot)
-    #     ].sort_values('slot')
-    #
-    #     swaps = 0
-    #     for flight, row in frozen.iterrows():
-    #         if ETA <= row['ETA']:
-    #             break
-    #         else:
-    #             current_slot = row['slot']
-    #             liv = row['LIV']
-    #             self.Flights.at[flight, 'slot'] = slot
-    #             slot = current_slot
-    #             swaps += 1
-    #
-    #     self.Flights.at[acid, 'slot'] = slot
-    #     self.Flights.at[acid, 'swaps'] += swaps
-    #     self.Flights['EAT'] = self.Flights['slot'] - self.Flights['TMA']
 
 
     def replan_late(self,acid, ETA = None):
@@ -719,8 +701,12 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                     else:
                         separation = self.separation
 
-                    # slot is based on either previous slot or ETA, whichever is lower and thus achievable, or the previous slot plus separation
-                    slot = max(last_assigned_slot + separation, min(row['ETA'], row['slot']))
+                    # If a flight in between disappears, the next flight should inherit the vacated slot.
+                    # So we always compress the sequence by assigning the next slot directly behind the previous one,
+                    # even if the flight cannot make it based on ETA.
+                    slot = float(last_assigned_slot) + float(separation)
+
+                self.eat_update_plusone(slot, acid)
 
                 self.Flights.loc[acid, ['slot', 'EAT', 'LIV', 'LAS', 'LAf']] = [
                     slot,
@@ -751,8 +737,12 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
                 #to be clear, this is planning the slot of a flight that will have an earlier slot than the replanned flight
 
-                # slot is based on either previous slot or ETA, whichever is lower and thus achievable, or the previous slot plus separation
-                slot = max(last_assigned_slot + separation, min(row['ETA'], row['slot']))
+                # If a flight in between disappears, the next flight should inherit the vacated slot.
+                # So we always compress the sequence by assigning the next slot directly behind the previous one,
+                # even if the flight cannot make it based on ETA.
+                slot = float(last_assigned_slot) + float(separation)
+
+            self.eat_update_plusone(slot, flight)
 
             self.Flights.loc[flight, ['slot', 'EAT', 'LIV', 'LAS', 'LAf']] = [
                 slot,
@@ -778,95 +768,6 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
         self.Flights.at[acid, 'swaps'] += int(swaps)
 
-
-
-    def replan_early(self):
-
-        if self.aman_parent_id:
-            return
-
-        threshold = 0.7
-        thr_small = 0.2
-        small_cooldown = 120
-        # threshold = settings.replan_early_threshold
-        sep = self.separation
-
-        for runway in self.Flights['runway'].dropna().unique():
-            frozen = self.Flights[
-                (self.Flights['runway'] == runway) &
-                (self.Flights['planningstate'] == 'frozen') &
-                (self.Flights['slot'].notna())].sort_values(by='slot')
-            if len(frozen) < 3:
-                continue
-
-            previousslot = None
-            frozen_ids = list(frozen.index)
-            for i, (flight, row) in enumerate(frozen.iterrows()):
-                if previousslot is None:
-                    previousslot = row['slot']
-                    continue
-                else:
-                    slot = row['slot']
-                    # liv = row['LIV']
-                    gap = slot - previousslot - sep
-                    if gap <= 0:
-                        previousslot = slot
-                        continue
-
-                    elif (gap/sep) < threshold:
-                        previousslot = slot
-                        continue
-
-                    elif (gap/sep) > threshold:
-                        #select all later slots than previousslot, to make sure that also the current selected flight can be optimized
-                        later_slots = frozen[frozen['slot'] > previousslot].copy()
-                        if later_slots.empty:
-                            previousslot = slot
-                            continue
-
-                        later_slots = later_slots.sort_values(by=['slot','ETA'])
-                        chosen = None
-                        chosenslot = None
-                        swaps = 0
-                        for acid, entry in later_slots.iterrows():
-                            early_eta = entry['ETA'] - self.standard_early
-                            candidate_slot = max(float(previousslot) + sep, early_eta)
-
-                            if candidate_slot <= slot:
-                                chosen = acid
-                                chosenslot = early_eta
-
-                                print(f'replanning {acid} because of earlier availability')
-                                self.totwohtml()
-                                sim.hold()
-                                break
-                            swaps += 1
-                        if chosen is None:
-                            previousslot = slot
-                            continue
-
-                        tma_chosen = self.Flights.at[chosen, 'TMA']
-                        self.Flights.loc[chosen, ['slot', 'EAT', 'LIV', 'LAS', 'LAf']] = [
-                            chosenslot,
-                            chosenslot - tma_chosen,
-                            sep,
-                            previousslot,
-                            flight,
-                        ]
-
-                        if 'swaps' not in self.Flights.columns:
-                            self.Flights['swaps'] = 0
-                        self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
-                        self.Flights.at[chosen, 'swaps'] += swaps
-
-                          # replan everything from b onward (excluding the moved flight)
-                        after = frozen[(frozen['slot'] >= chosenslot) & (frozen.index != chosen)].sort_values(by='slot')
-
-                        last_assigned_slot = chosenslot
-                        last_assigned_flight = chosen
-                        last_assigned_type = self.Flights.at[chosen, 'type']
-
-                        self.replanslots(after, last_assigned_slot, last_assigned_flight,last_assigned_type)
 
 
 

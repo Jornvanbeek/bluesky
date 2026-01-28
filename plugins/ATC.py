@@ -137,6 +137,10 @@ class ATC(core.Entity):
             return
         idx = traf.id2idx(acid)
         if idx == -1:
+            if self.aman.Flights.loc[acid]['planningstate'] == 'frozen' and self.aman.Flights.loc[acid]['planningtype'] == 'ground freeze':
+                latest_possible_deptime = self.aman.Flights.loc[acid]['ETD'] + self.aman.late_approach_margin + self.aman.max_timegain_popup
+                if sim.simt > latest_possible_deptime:
+                    self.aman.replan_late_popup(acid)
             return
         if self.aman.Flights.loc[acid]['holding'] == True:
             return
@@ -144,6 +148,9 @@ class ATC(core.Entity):
         maxspd = self.aman.Flights.loc[acid]['max_casdesc']
         minspd = self.aman.Flights.loc[acid]['min_casdesc']
         alt = traf.alt[idx]/ft
+        iactwp = traf.ap.route[idx].iactwp
+        wpalt = traf.ap.route[idx].wpalt
+        maxalt_wp = wpalt.index(max(wpalt))
         to_iaf = self.aman.Flights.loc[acid, 'ETO IAF'] - sim.simt
         vs = traf.vs[idx]
         trackmiles, direct_qdr, direct_dist = self.findtrackmiles(acid)
@@ -154,8 +161,13 @@ class ATC(core.Entity):
             # print('acid in active_instructions ', acid)
             return
 
+        if self.check_update_slot(acid,ttlg):
+            sim.hold()
+            print(f'updated slot for {acid} with previously ttlg = {ttlg}')
+            return
+
         #standard scenarios
-        if alt < self.handover_alt and vs < 0.5:
+        if alt < self.handover_alt and iactwp >= maxalt_wp:
 
             # scenario 2: speedup
             if ttlg <= -self.aman.late_approach_margin:
@@ -233,37 +245,67 @@ class ATC(core.Entity):
             elif abs(trackmiles - direct_dist) < 1 and selspd >4. and abs(maxspd - selspd) < 1:
                 ETA = self.reset_ETA(acid)
                 self.aman.replan_late(acid, ETA=ETA)
-                # print(f'replanning {acid}')
-                #remove conditionals
-        # elif ttlg > self.aman.early_adjacent_threshold:  # delay
-        #     if selspd < 4. and pd.isna(self.aman.Flights.loc[acid]['selspd']):
-        #         self.delay_mach(acid)
-        #     else:
-        #         if selspd >4. and abs(minspd - selspd) > 1:
-        #             self.speed(acid, ttlg)
-        #         elif direct_dist*self.max_dogleg_ratio > (trackmiles +1): # and ttlg < max dogleg?
-        #             self.dogleg(acid, ttlg)
-        #
-        #
-        # elif ttlg <= -self.aman.late_adjacent_threshold: # speed up
-        #     if selspd < 4. and abs(trackmiles - direct_dist) > 1: # if not direct
-        #         self.dogleg(acid, ttlg)
-        #         print('adjacent speed up dogleg', ttlg)
-        #     else:
-        #         if selspd >4. and abs(maxspd - selspd) > 1:
-        #             self.speed(acid, ttlg)
-        #         elif abs(trackmiles - direct_dist) > 1: # if not direct
-        #             self.dogleg(acid, ttlg)
-        #             print('adjacent speed up dogleg in mach', ttlg)
-        #         elif selspd >4. and abs(maxspd - selspd) <= 1:
-        #             ETA = self.reset_ETA(acid)
-        #             self.aman.replan_late(acid, ETA=ETA)
-        #             print(f'replanning {acid}')
-        #         elif selspd <4. and abs(trackmiles - direct_dist) > 1:
-        #             ETA = self.reset_ETA(acid)
-        #             self.aman.replan_late(acid, ETA=ETA)
-        #             print(f'replanning {acid}')
-        # #else: no update needed
+
+
+    def check_update_slot(self, acid, ttlg):
+        runway = self.aman.Flights.at[acid, 'runway']
+        curr_slot = self.aman.Flights.at[acid, 'slot']
+
+        prev_slot = self.aman.Flights.at[acid, 'LAS']
+        liv = self.aman.Flights.at[acid, 'LIV']
+        eta = self.aman.Flights.at[acid, 'ETA']
+        if prev_slot is None and ttlg>0:
+            newslot = eta - self.aman.standard_early
+
+        else:
+            if ttlg >0 and prev_slot+liv < eta:
+                #no instruction to be given this update
+                newslot = max(prev_slot + liv, eta - self.aman.standard_early)
+            else:
+                return False
+
+        # Only act if the new slot would be earlier than the current slot
+        if pd.isna(newslot) or float(newslot) >= float(curr_slot):
+            return False
+
+        difference = curr_slot - newslot
+
+        # Update this flight's slot/EAT (no instruction)
+        tma = self.aman.Flights.at[acid, 'TMA']
+        self.aman.eat_update_plusone(float(newslot), acid)
+        self.aman.Flights.at[acid, 'slot'] = float(newslot)
+        self.aman.Flights.at[acid, 'EAT'] = float(newslot) - float(tma)
+
+        # Shift all later frozen flights on the same runway by the same amount
+        later_mask = (
+            (self.aman.Flights['runway'] == runway)
+            & (self.aman.Flights['planningstate'] == 'frozen')
+            & (self.aman.Flights['slot'].notna())
+            & (self.aman.Flights['slot'] > float(curr_slot))
+        )
+
+        if later_mask.any():
+            later_df = self.aman.Flights[later_mask].sort_values(by='slot')
+            for flight, row in later_df.iterrows():
+                old_s = float(row['slot'])
+                new_s = old_s - difference
+                tma_f = row['TMA']
+
+                self.aman.eat_update_plusone(float(new_s), flight)
+                self.aman.Flights.at[flight, 'slot'] = float(new_s)
+                self.aman.Flights.at[flight, 'EAT'] = float(new_s) - float(tma_f)
+
+                # Keep numeric LAS consistent if present
+                las_f = row['LAS']
+                if pd.notna(las_f):
+                    self.aman.Flights.at[flight, 'LAS'] = float(las_f) - difference
+
+        # Recompute ttlg etc.
+
+        self.aman.update_times()
+        return True #return true to stop instruction from happening
+
+
 
 
     def reset_ETA(self, acid):
@@ -297,17 +339,39 @@ class ATC(core.Entity):
                     ttlg = self.aman.Flights.loc[acid, 'ttlg']
                     # print('updated ttlg: ',acid, ttlg)
 
-                    delay = data['TP IAF'] - previous_iaftime
-                    self.store_delay(acid, delay)
+                    # Keep track of pending delay (accumulated TP-IAF delta).
+                    delay = float(data['TP IAF']) - float(previous_iaftime)
+                    if pd.isna(self.aman.Flights.at[acid, 'pending_delay']):
+                        self.aman.Flights.at[acid, 'pending_delay'] = 0.0
+                    self.aman.Flights.at[acid, 'pending_delay'] += delay
+
                     # print("prediction received and stored ", acid, (time.time_ns() - t0) / 1e6, "ms")
                     self.check_tp_update(acid, ttlg)
 
                     # print(f'received tp update{acid}')
 
 
-    def store_delay(self, acid, delay, delaytype=None):
+    def store_delay(self, acid, delay=None, delaytype=None):
+        # If delay is not explicitly provided, commit the accumulated pending_delay.
+        if delay is None:
+            delay = self.aman.Flights.at[acid, 'pending_delay']
+
+            # Determine delaytype from active instruction if not provided
         if delaytype is None:
             delaytype = self.active_instructions[acid]
+
+        # if delay > 0 and 'short' in delaytype:
+        #     delaytype = 'delay ' + delaytype.strip().split()[1:]
+        # elif delay < 0 and 'delay' in delaytype:
+        #     delaytype = 'short ' + delaytype.strip().split()[1:]
+
+        tokens = str(delaytype).strip().split()
+        if len(tokens) >= 2 and tokens[0] in ('delay', 'short'):
+            kind = 'delay' if delay > 0 else 'short'
+            delaytype = ' '.join([kind] + tokens[1:])
+        else:
+            print('storedelay error: ', tokens)
+
 
         # Accumulate delay per instruction type (e.g. 'delay speed', 'delay dogleg', 'short speed', ...)
         if delaytype not in self.aman.Flights.columns:
@@ -333,6 +397,10 @@ class ATC(core.Entity):
             self.aman.Flights.at[acid, 'totalspeedup'] += delay
 
 
+        # Reset pending delay after committing it
+        if 'pending_delay' in self.aman.Flights.columns:
+            self.aman.Flights.at[acid, 'pending_delay'] = 0.0
+
 
     def check_tp_update(self, acid, ttlg):
 
@@ -345,7 +413,7 @@ class ATC(core.Entity):
         if abs(ttlg) <= instruction_margin:
             self.instruction_correct(acid)
             return
-        if 'mach' in itype:
+        if 'mach' in itype or 'adjacent' in itype:
             self.instruction_correct(acid)
             return
 
@@ -428,12 +496,19 @@ class ATC(core.Entity):
             self.determine_scenario(acid, ttlg)
 
     def instruction_correct(self, acid, itype=None):
+
         if itype is None:
             itype = self.active_instructions.pop(acid)
-        if 'dogleg' in itype or 'holding' in itype:
-            self.aman.Flights.at[acid, 'count'] += 2
+
+        # Commit pending_delay now that the instruction is considered correct
+        self.store_delay(acid, delay=None, delaytype=itype)
+
+        if 'holding' in itype:
+            self.aman.Flights.at[acid, 'count'] += self.aman.count_holding
+        if 'dogleg' in itype:
+            self.aman.Flights.at[acid, 'count'] += self.aman.count_dogleg
         else:
-            self.aman.Flights.at[acid,'count'] += 1
+            self.aman.Flights.at[acid,'count'] += self.aman.count_normal
 
 
         col = f"n_instr_{itype.strip().replace(' ', '_')}"
@@ -574,7 +649,11 @@ class ATC(core.Entity):
         # else:
         #     instrtype = 'short'
         #deze dingen werken niet vanwege hoe check tp update is
-        self.active_instructions[acid]= 'adjacent'
+        if ttlg > 0:
+            type = 'delay'
+        else:
+            type = 'short'
+        self.active_instructions[acid]= type + ' adjacent'
         self.start_update(acid)
 
     def minspeed(self, acid, spd):
@@ -670,7 +749,17 @@ class ATC(core.Entity):
 
         wpt_alt = math.tan(math.radians(self.aman.descent_angle)) * opposing * nm
         wpt_alt = wpt_alt + iaf_alt
-        wpt_alt = min(wpt_alt, alt)  # make sure that new wp alt is not above current altitude
+        if wpt_alt > alt:
+            # Highest altitude constraint remaining on the active route from current waypoint onward (meters)
+            iactwp = acrte.iactwp
+            remaining_wpalt = acrte.wpalt[iactwp:]
+            max_alt_remaining_route = max(remaining_wpalt) if len(remaining_wpalt) > 0 else alt
+            vs = float(traf.vs[idx])
+
+            if max_alt_remaining_route > alt and vs > 0.1:
+                wpt_alt = min(wpt_alt, max_alt_remaining_route)
+            else:
+                wpt_alt = min(wpt_alt, alt)  # make sure that new wp alt is not above current altitude
         wpt_alt = round(wpt_alt, 0)
 
         newwp_name = f'DOGLEG{acid}'

@@ -40,6 +40,8 @@ class monte_carlo(core.Entity):
         self.amansettings = aman_settings
         self.opened = False
         self.remove_when_done = True
+        self.multiple_mc = []
+        self.multiple_mc_called = []
 
     def reset(self):
         super().reset()
@@ -55,6 +57,17 @@ class monte_carlo(core.Entity):
         self.amansettings = aman_settings
         self.opened = False
         self.remove_when_done = True
+        self.nextmc()
+
+    @stack.command
+    def addmultiplemc(self, stackcommand):
+        self.multiple_mc.append(stackcommand)
+
+    def nextmc(self):
+        com = self.multiple_mc.pop()
+        self.multiple_mc_called.append(com)
+        stack.stack(com)
+
 
     @stack.command
     def montecarlo(self, scenario: str, runs:int, maxnodes:int, usecache:bool=False, startseed:int=0, maxtime='5:00:00', title=None):
