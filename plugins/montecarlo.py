@@ -60,11 +60,17 @@ class monte_carlo(core.Entity):
         self.nextmc()
 
     @stack.command
-    def addmultiplemc(self, stackcommand):
-        self.multiple_mc.append(stackcommand)
+    def addmultiplemc(self, *parts: str):
+        # accepteert: ADDMULTIPLEMC MONTECARLO scen 100 8 ...
+        # en maakt er weer één string commando van
+        cmd = " ".join(parts).strip()
+        if cmd:
+            self.multiple_mc.append(cmd)
 
+    @stack.command
     def nextmc(self):
         com = self.multiple_mc.pop()
+        print(com)
         self.multiple_mc_called.append(com)
         stack.stack(com)
 
@@ -105,8 +111,10 @@ class monte_carlo(core.Entity):
             for id in ids:
                 self.active_nodes.add(id)
             net.send(b'ADDNODES', dict(count=newnodes, node_ids=ids), net.server_id)
-        if remaining <= self.maxnodes - 1: # keep last set of nodes alive
-            self.remove_when_done = False
+        if remaining == 0 and len(self.active_nodes) ==0 and len(self.multiple_mc) > 0:#if complete
+            stack.stack('RESET')
+        # if remaining <= self.maxnodes - 1: # keep last set of nodes alive
+        #     self.remove_when_done = False
 
 
     @network.subscriber(topic='node-added')

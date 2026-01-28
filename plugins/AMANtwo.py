@@ -874,9 +874,3 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         # change route if runway is changed
         # set horizons function
         # check scenario generator if it is the same as info in so6 file. (replacing aircraft is verified, not validated)
-
-
-
-
-
-
