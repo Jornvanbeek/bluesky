@@ -68,7 +68,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 setattr(self, k, v)
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count', 'updates','Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'percentile_time','E_dep', 'E_enroute', 'E_fir',  'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime']
+        columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'EAT_updates','count', 'updates','Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'percentile_time','E_dep', 'E_enroute', 'E_fir',  'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime', 'pending_delay']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
         self.not_spawned = defaultdict(list)
@@ -221,8 +221,16 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             cols.insert(1, 'initialslot')
             vals.insert(1, slot)
 
+        self.eat_update_plusone(slot, acid)
+
         self.Flights.loc[acid, cols] = vals
         return slot, sep
+
+    def eat_update_plusone(self, slot, flight):
+        self.Flights['EAT_updates'] = self.Flights['EAT_updates'].fillna(0).astype(int)
+        old_slot = self.Flights.at[flight, 'slot']
+        if pd.notna(old_slot) and float(old_slot) != float(slot):
+            self.Flights.at[flight, 'EAT_updates'] = int(self.Flights.at[flight, 'EAT_updates']) + 1
 
     def update_popup_entry(self,acid):
         stack.stack(f"COLOR {acid} 255,128,0")
@@ -355,7 +363,9 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             self.Flights.loc[airborne_popup, 'planningtype'] = 'airborne'
 
 
-
+    def replan_late_popup(self, acid):
+        sim.hold()
+        print('replanning late popup ', acid)
 
 
 
@@ -374,6 +384,8 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 break
             else:
                 slot = last_assigned_slot + separation
+
+                self.eat_update_plusone(slot, flight)
 
                 self.Flights.loc[flight, ['slot', 'EAT', 'LIV', 'LAS', 'LAf']] = [
                     slot,
@@ -590,10 +602,11 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         # Define the column names (keep in sync with __init__)
         columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA',
                    'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot',
-                   'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'count',
-                   'updates', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO',
-                   'percentile_time', 'E_dep', 'E_enroute', 'E_fir', 'planning', 'SID', 'FIR entry', 'Time error',
-                   'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime']
+                   'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate',
+                   'EAT_updates', 'count', 'updates', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc',
+                   'min_casdesc', 'E_TO', 'percentile_time', 'E_dep', 'E_enroute', 'E_fir', 'planning', 'SID',
+                   'FIR entry', 'Time error', 'Error at Freeze', 'minwork', 'totalwork', 'extrawork', 'swaps',
+                   'lookahead', 'holdingtime', 'pending_delay']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
         self.not_spawned = defaultdict(list)
@@ -637,35 +650,6 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         self.Flights['planning'] = self.Flights['EAT'] - self.planninghorizon
 
 
-
-
-    # def replan_late(self,acid, ETA = None):
-    #     # simple version, only swap slots
-    #     row_replan = self.Flights.loc[acid]
-    #     if ETA is None:
-    #         ETA = row_replan['ETA']
-    #     runway = row_replan['runway']
-    #     slot = row_replan['slot']
-    #     frozen = self.Flights[
-    #         (self.Flights['runway'] == runway) &
-    #         (self.Flights['planningstate'] == 'frozen') &
-    #         (self.Flights['slot'] > slot)
-    #     ].sort_values('slot')
-    #
-    #     swaps = 0
-    #     for flight, row in frozen.iterrows():
-    #         if ETA <= row['ETA']:
-    #             break
-    #         else:
-    #             current_slot = row['slot']
-    #             liv = row['LIV']
-    #             self.Flights.at[flight, 'slot'] = slot
-    #             slot = current_slot
-    #             swaps += 1
-    #
-    #     self.Flights.at[acid, 'slot'] = slot
-    #     self.Flights.at[acid, 'swaps'] += swaps
-    #     self.Flights['EAT'] = self.Flights['slot'] - self.Flights['TMA']
 
 
     def replan_late(self,acid, ETA = None):
@@ -717,8 +701,12 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                     else:
                         separation = self.separation
 
-                    # slot is based on either previous slot or ETA, whichever is lower and thus achievable, or the previous slot plus separation
-                    slot = max(last_assigned_slot + separation, min(row['ETA'], row['slot']))
+                    # If a flight in between disappears, the next flight should inherit the vacated slot.
+                    # So we always compress the sequence by assigning the next slot directly behind the previous one,
+                    # even if the flight cannot make it based on ETA.
+                    slot = float(last_assigned_slot) + float(separation)
+
+                self.eat_update_plusone(slot, acid)
 
                 self.Flights.loc[acid, ['slot', 'EAT', 'LIV', 'LAS', 'LAf']] = [
                     slot,
@@ -749,8 +737,12 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
                 #to be clear, this is planning the slot of a flight that will have an earlier slot than the replanned flight
 
-                # slot is based on either previous slot or ETA, whichever is lower and thus achievable, or the previous slot plus separation
-                slot = max(last_assigned_slot + separation, min(row['ETA'], row['slot']))
+                # If a flight in between disappears, the next flight should inherit the vacated slot.
+                # So we always compress the sequence by assigning the next slot directly behind the previous one,
+                # even if the flight cannot make it based on ETA.
+                slot = float(last_assigned_slot) + float(separation)
+
+            self.eat_update_plusone(slot, flight)
 
             self.Flights.loc[flight, ['slot', 'EAT', 'LIV', 'LAS', 'LAf']] = [
                 slot,
@@ -775,6 +767,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
         self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
         self.Flights.at[acid, 'swaps'] += int(swaps)
+
 
 
 
@@ -881,9 +874,3 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         # change route if runway is changed
         # set horizons function
         # check scenario generator if it is the same as info in so6 file. (replacing aircraft is verified, not validated)
-
-
-
-
-
-
