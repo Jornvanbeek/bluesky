@@ -29,7 +29,8 @@ CD - A321   AIRBUS              A321                     A321__  A321 /
 CD - A332   AIRBUS              A330-200                 A332__  A332 /
 CD - A333   AIRBUS              A330-300                 A333__  A330 /
 CD - A339   AIRBUS              A330-900                 B788__  A339 /
-CD - A359   AIRBUS              A350-900                 A333__  A330 /
+CD - A359   AIRBUS              A350-900                 A333__  A359 /
+CD - A35K   AIRBUS              A350-1000                B77L__  A35K /
 CD - A342   AIRBUS              A340-200                 A342__  A342 /
 CD - A343   AIRBUS              A340-300                 A343__  A340 /
 CD - A345   AIRBUS              A340-500                 A345__  A345 /
