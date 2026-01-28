@@ -120,7 +120,7 @@ class Route(Route):
         if wpname in ['ARTIP', 'SUGOL', 'RIVER'] or 'EHAM/RW' in wpname:
             stack.stack(f'{self.acid} AT {wpname} DO PREDICTOR WPTCROSS {self.acid} {wpname}')
             if len(self.wpname) > 0 and self.wpname[0] in ['EBBR', 'EDDL']:
-                print('added relevant altcross to ', self.acid, self.orig)
+                # print('added relevant altcross to ', self.acid, self.orig)
                 stack.stack(f'ATALT {self.acid} FL130 PREDICTOR ALTCROSS {self.acid}')
         return super().addwpt_data(overwrt, wpidx, wpname, wplat, wplon, wptype, wpalt, wpspd)
 
