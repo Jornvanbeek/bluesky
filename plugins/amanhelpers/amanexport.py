@@ -186,35 +186,41 @@ class AmanExporter():
             return {'n_acids': 0}
 
         # veilige numerieke Series
-        s_eat = pd.to_numeric(df.get('EAT adherence'), errors='coerce')
-        s_cnt = pd.to_numeric(df.get('count'), errors='coerce')
-        s_eto = pd.to_numeric(df.get('E_TO'), errors='coerce')
-        s_tpa = pd.to_numeric(df.get('TP accuracy'), errors='coerce')
-        s_frz = pd.to_numeric(df.get('Error at Freeze'), errors='coerce')
-        s_mw = pd.to_numeric(df.get('minwork'), errors='coerce')
-        s_tw = pd.to_numeric(df.get('totalwork'), errors='coerce')
-        s_xw = pd.to_numeric(df.get('extrawork'), errors='coerce')
-        s_ptime = pd.to_numeric(df.get('percentile_time'), errors='coerce')
+        def get_num(col: str) -> pd.Series:
+            """Return numeric Series for df[col] if present, else all-NaN Series with df.index."""
+            if col in df.columns:
+                return pd.to_numeric(df[col], errors='coerce')
+            return pd.Series(np.nan, index=df.index)
+
+        s_eat = get_num('EAT adherence')
+        s_cnt = get_num('count')
+        s_eto = get_num('E_TO')
+        s_tpa = get_num('TP accuracy')
+        s_frz = get_num('Error at Freeze')
+        s_mw = get_num('minwork')
+        s_tw = get_num('totalwork')
+        s_xw = get_num('extrawork')
+        s_ptime = get_num('percentile_time')
 
         # ATC / instruction bookkeeping (optional columns)
-        s_adj = pd.to_numeric(df.get('adjacent'), errors='coerce')
-        s_totaldelay = pd.to_numeric(df.get('totaldelay'), errors='coerce')
-        s_totalspeedup = pd.to_numeric(df.get('totalspeedup'), errors='coerce')
-        s_short_speed = pd.to_numeric(df.get('short speed'), errors='coerce')
-        s_delay_speed = pd.to_numeric(df.get('delay speed'), errors='coerce')
-        s_delay_mach = pd.to_numeric(df.get('delay mach'), errors='coerce')
-        s_delay_dogleg = pd.to_numeric(df.get('delay dogleg'), errors='coerce')
-        s_short_dogleg = pd.to_numeric(df.get('short dogleg'), errors='coerce')
+        s_adj = get_num('adjacent')
+        s_totaldelay = get_num('totaldelay')
+        s_totalspeedup = get_num('totalspeedup')
+        s_short_speed = get_num('short speed')
+        s_delay_speed = get_num('delay speed')
+        s_delay_mach = get_num('delay mach')
+        s_delay_dogleg = get_num('delay dogleg')
+        s_short_dogleg = get_num('short dogleg')
 
         # Slot changes
-        s_slot = pd.to_numeric(df.get('slot'), errors='coerce')
-        s_islot = pd.to_numeric(df.get('initialslot'), errors='coerce')
+        s_slot = get_num('slot')
+        s_islot = get_num('initialslot')
         slot_diff = (s_slot - s_islot)
         slot_absdiff = slot_diff.abs()
         slot_absdiff_nz = slot_absdiff[(slot_absdiff > 0) & slot_absdiff.notna()]
 
         # Swaps
-        s_swaps = pd.to_numeric(df.get('swaps'), errors='coerce')
+        s_swaps = get_num('swaps')
 
         denom = s_tw.replace(0, np.nan)
         pct_xw = (s_xw / denom) * 100.0

@@ -10,8 +10,8 @@ max_dogleg_ratio = 1.5
 # freezehorizon = 16 * 60
 freezehorizon = 20 * 60
 capacity = 34#34 #aircraft per hour, if no LIV, per runway
-popup_planner ='FCFS'
-# popup_planner = 'delay'
+# popup_planner ='FCFS'
+popup_planner = 'delay'
 error_multiplicator = (1.0,1.0,1.0,1.0)
 # error_multiplicator = (0,0,0,0)
 
