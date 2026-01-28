@@ -71,6 +71,16 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'EAT_updates','count', 'updates','Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO', 'percentile_time','E_dep', 'E_enroute', 'E_fir',  'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'ttlg at freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime', 'pending_delay']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
+        # --- explicit dtypes for non-numeric columns (prevents FutureWarning on assignment) ---
+        self.obj_cols = [
+            'planningstate', 'planningtype', 'type', 'IAF', 'runway', 'origin', 'TPstate',
+            'SID', 'FIR entry', 'popup']
+        self.intcols = ['EAT_updates', 'count', 'updates', 'swaps']
+        self.boolcols = ['dogleg', 'direct', 'holding', 'earliest']
+        self.set_coltype(self.intcols, 'int64')
+        self.set_coltype(self.obj_cols, 'object')
+        self.set_coltype(self.boolcols, 'bool')
+
         self.not_spawned = defaultdict(list)
         self.aman_parent_id = None
         self.LIV_separation = LivSeparation()
@@ -81,6 +91,34 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
         # self.Flights['updates'] = 0
         # self.Flights['updates'] = self.Flights['updates'].astype(int)
+
+
+    def set_coltype(self, cols, dtype):
+        """Set column dtypes safely, also when the DataFrame is still empty.
+
+        Key point: don't use fillna(0) for object/bool columns.
+        """
+        for c in cols:
+            if c not in self.Flights.columns:
+                continue
+
+            # If the DF is empty, keep an empty Series with the right dtype.
+            if len(self.Flights.index) == 0:
+                self.Flights[c] = pd.Series(dtype=dtype, index=self.Flights.index)
+                continue
+
+            # Int/counter columns
+            if str(dtype) in ('int64', 'int32', 'int'):
+                self.Flights[c] = self.Flights[c].fillna(0).astype(dtype)
+
+            # Nullable boolean is safer than plain bool when NaNs exist
+            elif str(dtype) in ('bool', 'boolean'):
+                target = 'boolean' if str(dtype) == 'bool' else dtype
+                self.Flights[c] = self.Flights[c].astype(target)
+
+            # Object/string columns
+            else:
+                self.Flights[c] = self.Flights[c].astype(dtype)
 
 
     # update of planningstates, core functionality
@@ -227,6 +265,14 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         return slot, sep
 
     def eat_update_plusone(self, slot, flight):
+        """Increment EAT_updates only when the flight is frozen."""
+        if flight not in self.Flights.index:
+            return
+
+        # Only count slot/EAT updates once the flight is frozen
+        if self.Flights.at[flight, 'planningstate'] in ['preplanned', 'ground']:
+            return
+
         self.Flights['EAT_updates'] = self.Flights['EAT_updates'].fillna(0).astype(int)
         old_slot = self.Flights.at[flight, 'slot']
         if pd.notna(old_slot) and float(old_slot) != float(slot):
@@ -240,11 +286,29 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         self.Flights.at[acid, 'popup'] = 'POPUP'
 
     def maskpopup(self):
+        plannertype = settings.popup_planner
+
         mask_popup = (
-                (self.Flights['planningstate'].isin(['new']))
+                (self.Flights['planningstate'].isin(['new', 'ground']))
                 & ((self.Flights['ETO IAF'] - sim.simt) < self.freezehorizon)
         )
+
+        # Default: mark as POPUP
         self.Flights.loc[mask_popup, 'planningstate'] = 'POPUP'
+
+        # FCFS special rule: if the aircraft is already spawned but still below the visible altitude,
+        # keep it as 'new' (do not treat it as popup yet).
+        if plannertype == 'FCFS' and mask_popup.any():
+            low_alt = []
+            for acid in self.Flights.index[mask_popup]:
+                idxac = traf.id2idx(acid)
+                if idxac < 0:
+                    continue
+                alt_ft = round(traf.alt[idxac] / ft)
+                if alt_ft < self.visible_altitude:
+                    low_alt.append(acid)
+            if low_alt:
+                self.Flights.loc[low_alt, 'planningstate'] = 'new'
 
         mask_ground = (
                 (self.Flights['planningstate'].isin(['ground']))
@@ -252,6 +316,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         )
         # Convert the ground mask to only those that are actually spawned (idx >= 0)
         spawned_ground = [acid for acid in self.Flights.index[mask_ground] if traf.id2idx(acid) >= 0]
+
         self.Flights.loc[spawned_ground, 'planningstate'] = 'POPUP'
 
 
@@ -262,7 +327,6 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             mask_popup = (
                     (self.Flights['planningstate'] == 'POPUP')
                     & ((self.Flights['ETO IAF'] - sim.simt) < self.freezehorizon)
-
             )
             popup_candidates = self.Flights[mask_popup].sort_values(by='ETA')
 
@@ -319,6 +383,8 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
                 self.replanslots(later_df, last_assigned_slot, last_assigned_flight, last_assigned_type)
 
+            # Ensure object dtype before assignment to avoid FutureWarning
+            self.Flights['planningtype'] = self.Flights['planningtype'].astype('object')
             self.Flights.loc[mask_popup, 'planningtype'] = 'FCFS'
 
 
@@ -361,41 +427,125 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                     force_back_of_queue=True
                 )
                 self.update_popup_entry(acid) #function for color, error at freeze etc.
+            # Ensure object dtype before assignment to avoid FutureWarning
+            self.Flights['planningtype'] = self.Flights['planningtype'].astype('object')
             self.Flights.loc[airborne_popup, 'planningtype'] = 'airborne'
 
 
     def replan_late_popup(self, acid):
+        """Remove a too-late popup from the frozen chain.
+
+        Requirements:
+        - The popup loses its slot immediately.
+        - Flights behind it on the same runway get earlier slots (compressed).
+        - The popup is reset so that when it spawns/creates again it is treated like a normal popup.
+
+        Implementation notes:
+        - Uses stored `LAS` (previous slot) and `LAf` (previous flight) from the DataFrame.
+        - Uses `replanslots(..., force_compress=True)` for compression.
+        """
         sim.hold()
         print('replanning late popup ', acid)
 
+        if acid not in self.Flights.index:
+            return
+
+        runway = self.Flights.at[acid, 'runway']
+        if pd.isna(runway) or runway == '':
+            return
+
+        old_slot = self.Flights.at[acid, 'slot']
+        if pd.isna(old_slot):
+            return
+        old_slot = float(old_slot)
+
+        # Only compress if the flight is currently part of the frozen chain
+        was_frozen = (self.Flights.at[acid, 'planningstate'] == 'frozen')
+
+        # Determine predecessor from stored bookkeeping
+        last_assigned_slot = self.Flights.at[acid, 'LAS']
+        last_assigned_flight = self.Flights.at[acid, 'LAf']
+
+        if pd.isna(last_assigned_slot):
+            last_assigned_slot = None
+        else:
+            last_assigned_slot = float(last_assigned_slot)
+
+        if pd.isna(last_assigned_flight) or last_assigned_flight == 'None':
+            last_assigned_flight = None
+
+        if last_assigned_flight is not None and last_assigned_flight in self.Flights.index:
+            last_assigned_type = self.Flights.at[last_assigned_flight, 'type']
+        else:
+            last_assigned_type = None
+
+        # Flights behind the removed popup (same runway, frozen)
+        after_df = self.Flights[
+            (self.Flights['runway'] == runway)
+            & (self.Flights['planningstate'] == 'frozen')
+            & (self.Flights['slot'].notna())
+            & (self.Flights['slot'] > old_slot)
+        ].sort_values('slot')
+
+        # 1) Compress the frozen chain behind the removed popup
+        if was_frozen and (last_assigned_slot is not None) and (not after_df.empty):
+            self.replanslots(
+                after_df,
+                last_assigned_slot,
+                last_assigned_flight,
+                last_assigned_type,
+                force_compress=True,
+            )
+
+        # 2) Remove the popup's reserved slot and reset state
+        # Make it eligible to be treated as a normal popup again once (re)created.
+        self.Flights.at[acid, 'planningstate'] = 'new'
+
+        # Clear slot-related fields
+        for c in ('slot', 'EAT', 'manualslot', 'LIV', 'LAS', 'LAf', 'slot'):
+            if c in self.Flights.columns:
+                self.Flights.at[acid, c] = np.nan
+
+        # Optional bookkeeping cleanup
+        if 'planningtype' in self.Flights.columns:
+            self.Flights['planningtype'] = self.Flights['planningtype'].astype('object')
+            self.Flights.at[acid, 'planningtype'] = 'late popup'
+        if 'popup' in self.Flights.columns:
+            self.Flights['popup'] = self.Flights.get('popup', pd.Series(dtype='object')).astype('object')
+            self.Flights.at[acid, 'popup'] = 'POPUP'
 
 
-    def replanslots(self, df, last_assigned_slot, last_assigned_flight, last_assigned_type):
+
+
+
+
+    def replanslots(self, df, last_assigned_slot, last_assigned_flight, last_assigned_type, force_compress: bool = False):
 
         for flight, row in df.iterrows():
             if self.dynamic_LIV:
                 separation = self.LIV_separation.required_separation(last_assigned_flight, last_assigned_type, flight, row['type'])
             else:
                 separation = self.separation
-                # slot is based on either previous slot or ETA, whichever is lower and thus achievable, or the previous slot plus separation
 
-            if row['slot'] > last_assigned_slot + separation:
+            # If there's a gap, the default behaviour is to stop replanning and keep remaining slots as-is.
+            # For some operations (e.g. removing a flight from the frozen chain) we want to fully compress.
+            if (not force_compress) and (row['slot'] > last_assigned_slot + separation):
                 slot = row['slot']
                 last_assigned_slot, last_assigned_flight, last_assigned_type = slot, flight, row['type']
                 break
-            else:
-                slot = last_assigned_slot + separation
 
-                self.eat_update_plusone(slot, flight)
+            slot = last_assigned_slot + separation
 
-                self.Flights.loc[flight, ['slot', 'EAT', 'LIV', 'LAS', 'LAf']] = [
-                    slot,
-                    slot - row['TMA'],
-                    separation,
-                    last_assigned_slot,
-                    last_assigned_flight,
-                ]
-                last_assigned_slot, last_assigned_flight, last_assigned_type = slot, flight, row['type']
+            self.eat_update_plusone(slot, flight)
+
+            self.Flights.loc[flight, ['slot', 'EAT', 'LIV', 'LAS', 'LAf']] = [
+                slot,
+                slot - row['TMA'],
+                separation,
+                last_assigned_slot,
+                last_assigned_flight,
+            ]
+            last_assigned_slot, last_assigned_flight, last_assigned_type = slot, flight, row['type']
 
         return last_assigned_slot, last_assigned_flight, last_assigned_type
 
@@ -613,6 +763,10 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                    'lookahead', 'holdingtime', 'pending_delay']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
+        self.set_coltype(self.intcols, 'int64')
+        self.set_coltype(self.obj_cols, 'object')
+        self.set_coltype(self.boolcols, 'bool')
+
         self.not_spawned = defaultdict(list)
         self.aman_parent_id = None
         self.LIV_separation = LivSeparation()

@@ -161,10 +161,10 @@ class ATC(core.Entity):
             # print('acid in active_instructions ', acid)
             return
 
-        if self.check_update_slot(acid,ttlg):
-            sim.hold()
-            print(f'updated slot for {acid} with previously ttlg = {ttlg}')
-            return
+        # if self.check_update_slot(acid,ttlg):
+        #     sim.hold()
+        #     print(f'updated slot for {acid} with previously ttlg = {ttlg}')
+        #     return
 
         #standard scenarios
         if alt < self.handover_alt and iactwp >= maxalt_wp:
@@ -197,8 +197,8 @@ class ATC(core.Entity):
                     iaf = self.aman.Flights.loc[acid, 'IAF']
                     line = f'HOLDING AT {acid} {iaf} {ttlg}'
                     stack.stack(line)
-                    self.store_delay(acid, ttlg, delaytype='holdingtime')
-                    self.instruction_correct(acid, itype='holding')
+                    # self.store_delay(acid, ttlg, delaytype='holdingtime')
+                    self.instruction_correct(acid, itype='holding', delay=ttlg)
 
 
                     # stack.stack(f'START_UPDATE {acid}')
@@ -369,6 +369,8 @@ class ATC(core.Entity):
         if len(tokens) >= 2 and tokens[0] in ('delay', 'short'):
             kind = 'delay' if delay > 0 else 'short'
             delaytype = ' '.join([kind] + tokens[1:])
+        elif delaytype == 'holding':
+            delaytype = 'holdingtime'
         else:
             print('storedelay error: ', tokens)
 
@@ -495,13 +497,13 @@ class ATC(core.Entity):
             self.instruction_correct(acid)
             self.determine_scenario(acid, ttlg)
 
-    def instruction_correct(self, acid, itype=None):
+    def instruction_correct(self, acid, itype=None, delay=None):
 
         if itype is None:
             itype = self.active_instructions.pop(acid)
 
         # Commit pending_delay now that the instruction is considered correct
-        self.store_delay(acid, delay=None, delaytype=itype)
+        self.store_delay(acid, delay=delay, delaytype=itype)
 
         if 'holding' in itype:
             self.aman.Flights.at[acid, 'count'] += self.aman.count_holding

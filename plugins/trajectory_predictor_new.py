@@ -119,6 +119,9 @@ class Route(Route):
         """Upon adding waypoint data, triggers a prediction for the waypoint crossing."""
         if wpname in ['ARTIP', 'SUGOL', 'RIVER'] or 'EHAM/RW' in wpname:
             stack.stack(f'{self.acid} AT {wpname} DO PREDICTOR WPTCROSS {self.acid} {wpname}')
+            if len(self.wpname) > 0 and self.wpname[0] in ['EBBR', 'EDDL']:
+                print('added relevant altcross to ', self.acid, self.orig)
+                stack.stack(f'ATALT {self.acid} FL130 PREDICTOR ALTCROSS {self.acid}')
         return super().addwpt_data(overwrt, wpidx, wpname, wplat, wplon, wptype, wpalt, wpspd)
 
 
@@ -171,7 +174,7 @@ class Predictor(core.Entity):
         self.tp_dt = 3 # for when using cache
         traf.traf_parent_id = None
         self.departure_route_alt = 'FL190'
-        self.departure_route_alt_EBBR = 'FL130'
+        self.departure_route_alt_nearby = 'FL130'
         # self.incorrect_predictions = ['AIA6768', 'KLM76QSH', 'EZY91XM']
         self.incorrect_predictions = []#['EZY91XM', 'DAL72SH']
         # Change the route class implementation for the child node using PredictorNodeRoute class.

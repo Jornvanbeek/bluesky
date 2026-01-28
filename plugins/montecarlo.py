@@ -69,10 +69,11 @@ class monte_carlo(core.Entity):
 
     @stack.command
     def nextmc(self):
-        com = self.multiple_mc.pop()
-        print(com)
-        self.multiple_mc_called.append(com)
-        stack.stack(com)
+        if len(self.multiple_mc) >0:
+            com = self.multiple_mc.pop()
+            print(com)
+            self.multiple_mc_called.append(com)
+            stack.stack(com)
 
 
     @stack.command

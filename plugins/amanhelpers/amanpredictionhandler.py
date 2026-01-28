@@ -191,6 +191,9 @@ class PredictionHandler:
                         if self.Flights.loc[acid, 'planningstate'] == 'ground':
                             data['planningstate'] = 'ground'
 
+                        elif self.Flights.loc[acid, 'planningstate'] == 'frozen':
+                            data['planningstate'] = 'frozen'
+
 
                             # sim.hold()
                             # print('popup created ground planningstate', acid)
