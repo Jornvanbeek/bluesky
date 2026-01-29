@@ -202,6 +202,8 @@ class PredictionHandler:
                             # print('popup created ground planningstate', acid)
 
                         for key, value in data.items():
+                            # if key in ['planningstate', 'IAF', 'origin']:
+                            #     self.aman.Flights[key] = self.aman.Flights[key].astype('object')
                             self.Flights.at[acid, key] = value
 
 
@@ -216,7 +218,7 @@ class PredictionHandler:
             cache = self.open_cache()
             self.not_spawned = cache
             self.regenerate_errors()
-            print('regenerate errors?')
+            # print('regenerate errors?')
             self.predictions_cache = cache
             self.use_cache = True
 

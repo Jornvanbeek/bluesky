@@ -137,7 +137,7 @@ def init(bada_path=''):
     for line in data:
         syn = Synonym(line)
         synonyms[syn.accode] = syn
-    print('%d aircraft entries loaded' % len(synonyms))
+    # print('%d aircraft entries loaded' % len(synonyms))
 
     # Load aircraft coefficient data
     for fname in bada_path.glob('*.OPF'):
@@ -154,7 +154,7 @@ def init(bada_path=''):
 
         if ac:
             accoeffs[ac.actype] = ac
-    print('%d unique aircraft coefficient sets loaded' % len(accoeffs))
+    # print('%d unique aircraft coefficient sets loaded' % len(accoeffs))
     return (len(synonyms) > 0 and len(accoeffs) > 0)
 
 

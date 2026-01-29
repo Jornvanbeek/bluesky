@@ -385,15 +385,15 @@ class Predictor(core.Entity):
             # Generate a new child node ID and create a new child prediction node.
             self.child_id = genid(GROUPID_SIM)
             net.addnodes(1, self.child_id)
-        print(f'Parent id in predictor class: {self.parent_id}')
-        print(f'child id in predictor class: {self.child_id}')
+        # print(f'Parent id in predictor class: {self.parent_id}')
+        # print(f'child id in predictor class: {self.child_id}')
 
     @predictor.subcommand
     def claim(self):
         """Automatically called by the parent process to identify the child process's owner."""
         self.parent_id = stack.sender()
         traf.traf_parent_id = self.parent_id
-        print('My parent is', self.parent_id)
+        # print('My parent is', self.parent_id)
 
     @predictor.subcommand
     def update(self, acid, t0 = None):
@@ -734,7 +734,7 @@ class Predictor(core.Entity):
 
     @stack.command
     def predictions_required(self, aircraft, waypoints):
-        print('stackcommand predictions called ', aircraft,waypoints, self.child_id, self.parent_id)
+        # print('stackcommand predictions called ', aircraft,waypoints, self.child_id, self.parent_id)
         self.predictions_count_required = int(aircraft) * int(waypoints)
         if self.child_id:
             stack.forward(f'PREDICTIONS REQUIRED {aircraft} {waypoints}', target_id=self.child_id)
