@@ -182,15 +182,8 @@ class PredictionHandler:
                     # data['instruction'] = []
                     #add data to dataframe
                     if acid not in self.Flights.index:
-                        # Ensure stable dtypes even if the dataframe/columns were previously all-NA (can be float on some pandas versions)
-                        for _c in ['runway', 'type', 'IAF', 'planningstate', 'origin', 'LAf']:
-                            if _c not in self.Flights.columns:
-                                self.Flights[_c] = pd.Series(dtype='string')
-                            else:
-                                # Force nullable string dtype to avoid FutureWarning on incompatible dtype assignment
-                                if self.Flights[_c].dtype != 'string':
-                                    self.Flights[_c] = self.Flights[_c].astype('string')
-                        self.Flights.loc[acid, ['runway', 'type', 'IAF', 'planningstate', 'origin', 'LAf']] = ['', '', '', '', '', '']
+                        # Adds a new row for acid if it doesn't exist
+                        self.Flights.loc[acid] = {'runway': '', 'type': '', 'IAF': '', 'planningstate': '', 'origin': '', 'LAf': ''}
                         self.Flights.loc[acid] = data
 
                     else:
