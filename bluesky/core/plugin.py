@@ -163,7 +163,7 @@ def init(mode):
     for pname in settings.enabled_plugins:
         if pname.upper() not in Plugin.plugins_ext:
             success = Plugin.load(pname.upper())
-            print(success[1])
+            # print(success[1])
 
     # Create the plugin management stack command
     @stack.command(name='PLUGINS', aliases=('PLUGIN', 'PLUG-IN', 'PLUG-INS', f'{req_type.upper()}PLUGIN'))

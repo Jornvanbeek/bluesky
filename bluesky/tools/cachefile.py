@@ -34,7 +34,7 @@ class CacheFile():
             self.file.close()
             self.file = None
             raise CacheError('Cache file out of date: ' + str(self.fname))
-        print('Reading cache:', self.fname)
+        # print('Reading cache:', self.fname)
 
     def load(self):
         ''' Load a variable from the cache file. '''
