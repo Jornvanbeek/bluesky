@@ -680,6 +680,7 @@ class ATC(core.Entity):
         # self.instructions.append(f'DIRECT {acid} {iaf}')
 
         traf.ap.route[idxac].direct(idxac,iaf)
+        self.aman.Flights['direct'] = self.aman.Flights['direct'].astype('boolean')
         self.aman.Flights.loc[acid, 'direct'] = True
 
     @stack.command
