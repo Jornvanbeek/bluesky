@@ -1108,7 +1108,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         """Set popup planner. Usage: POPUP_PLANNER FCFS|DELAY"""
         p = str(planner).strip().lower()
         if p not in ('FCFS', 'delay'):
-            stack.stack("POPUP_PLANNER expects 'FCFS' or 'DELAY'. Got:", planner)
+            stack.stack("POPUP_PLANNER expects 'FCFS' or 'delay'. Got:", planner)
             return
         # Keep both the instance attribute and the settings module in sync
         self.popup_planner = p
