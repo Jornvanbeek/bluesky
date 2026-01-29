@@ -101,6 +101,9 @@ class Route(Route):
         if wpname in ['ARTIP', 'SUGOL', 'RIVER']:
             self.iaf = wpname
             stack.stack(f'{self.acid} AT {self.iaf} DO TMA_CROSS {self.acid}')
+            if len(self.wpname) > 0 and self.wpname[0] in ['EBBR', 'EDDL']:
+                # print('added relevant altcross to ', self.acid, self.orig)
+                stack.stack(f'ATALT {self.acid} 13000 PREDICTOR ALTCROSS {self.acid}')
         if wpname in ['ARTIP', 'SUGOL', 'RIVER'] or 'EHAM/RW' in wpname:
             global predictor
             if self.acid in predictor.predicted_ac_not_spawned.keys():
@@ -121,7 +124,7 @@ class Route(Route):
             stack.stack(f'{self.acid} AT {wpname} DO PREDICTOR WPTCROSS {self.acid} {wpname}')
             if len(self.wpname) > 0 and self.wpname[0] in ['EBBR', 'EDDL']:
                 # print('added relevant altcross to ', self.acid, self.orig)
-                stack.stack(f'ATALT {self.acid} FL130 PREDICTOR ALTCROSS {self.acid}')
+                stack.stack(f'ATALT {self.acid} 13000 PREDICTOR ALTCROSS {self.acid}')
         return super().addwpt_data(overwrt, wpidx, wpname, wplat, wplon, wptype, wpalt, wpspd)
 
 

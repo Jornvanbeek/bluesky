@@ -178,8 +178,10 @@ class ATC(core.Entity):
                 elif abs(maxspd - selspd) > 1:
                     self.speed(acid, ttlg)
                 else:
-                    ETA = self.reset_ETA(acid)
-                    self.aman.replan_late(acid, ETA=ETA)
+                    # ETA = self.reset_ETA(acid)
+                    self.aman.replan_late(acid)
+
+                    return
                     # print(f'replanning {acid}')
 
             #scenario 3: delay
@@ -245,6 +247,7 @@ class ATC(core.Entity):
             elif abs(trackmiles - direct_dist) < 1 and selspd >4. and abs(maxspd - selspd) < 1:
                 ETA = self.reset_ETA(acid)
                 self.aman.replan_late(acid, ETA=ETA)
+
 
 
     def check_update_slot(self, acid, ttlg):

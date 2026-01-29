@@ -5,7 +5,7 @@
 # the reason is to change the settings easily in scenario files, or through the stack at startup
 
 
-max_dogleg_ratio = 1.5
+max_dogleg_ratio = 1.4
 # freezehorizon = 14 * 60
 # freezehorizon = 16 * 60
 freezehorizon = 20 * 60
@@ -20,7 +20,7 @@ firname = 'FIRNL'
 
 planninghorizon = freezehorizon + 15*60
 TMA_scan = 5 * 60  # only aircraft within 5 mins of the tma get checked if they are in the tma
-visible_altitude = 10000  # (FL100)
+visible_altitude = 13000  # (FL130)
 # separation = 75
 standard_early = 60  # seconds that ASAP plans early if there is no slot taken before the slot being planned, make negative?
 late_approach_margin = 120

@@ -189,10 +189,13 @@ class PredictionHandler:
                     else:
                         # Updates the existing row for acid
                         if self.Flights.loc[acid, 'planningstate'] == 'ground':
-                            data['planningstate'] = 'ground'
+                            data['planningstate'] = 'early popup'
 
                         elif self.Flights.loc[acid, 'planningstate'] == 'frozen':
                             data['planningstate'] = 'frozen'
+
+                        elif self.Flights.loc[acid, 'planningstate'] == 'late popup':
+                            data['planningstate'] = 'new'
 
 
                             # sim.hold()
@@ -200,6 +203,10 @@ class PredictionHandler:
 
                         for key, value in data.items():
                             self.Flights.at[acid, key] = value
+
+
+
+
             else:
                 print('popup created, should manage dataframe entry')
 

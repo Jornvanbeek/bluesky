@@ -185,14 +185,14 @@ class monte_carlo(core.Entity):
                 stack.forward('SENDRESULT', target_id=node)
                 # self.sendscen(node)
                 # self.removenode(node)
-                if self.remove_when_done:
-                    self.removenode(node)
-                    self.start()
-                else:
-                    stack.forward('COMPLETEHOLD', target_id=node)
-                    stack.forward('DT 1', target_id=node)
-                    self.active_nodes.remove(node)
-                    self.start()
+                # if self.remove_when_done:
+                #     self.removenode(node)
+                #     self.start()
+                # else:
+                #     stack.forward('COMPLETEHOLD', target_id=node)
+                #     stack.forward('DT 1', target_id=node)
+                #     self.active_nodes.remove(node)
+                #     self.start()
 
 
     @network.subscriber(topic='MONTECARLORESULTS')
@@ -224,6 +224,8 @@ class monte_carlo(core.Entity):
             self.storedf()
             self.df_to_html()
 
+            self.removenode(from_node)
+            self.start()
 
 
     @stack.command
