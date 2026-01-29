@@ -183,7 +183,7 @@ class PredictionHandler:
                     #add data to dataframe
                     if acid not in self.Flights.index:
                         # Adds a new row for acid if it doesn't exist
-                        self.Flights.loc[acid] = {'runway': '', 'type': '', 'IAF': '', 'planningstate': 'init', 'origin': '', 'LAf': ''}
+                        self.Flights.loc[acid] = {'planningstate': 'init'}
                         self.Flights.loc[acid] = data
 
                     else:
