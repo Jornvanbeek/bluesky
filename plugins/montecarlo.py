@@ -232,16 +232,56 @@ class monte_carlo(core.Entity):
     def getresults(self, targetnode:int=0):
         stack.forward('SENDRESULT', target_id=self.nodes[targetnode])
 
-    def _make_node_ids(self, n: int):
-        """Return n full IDs under this server, last byte in 0xF0..0xFF."""
-        base = net.server_id[:-1]  # 4-byte group/server prefix
-        ids = []
-        for i in range(n):
-            last = 0xF0 + ((self._seq + i) % 16)  # 240..255
-            ids.append(base + bytes([last]))
-        self._seq = (self._seq + n) % 16
-        return ids
+    # def _make_node_ids(self, n: int):
+    #     """Return n full IDs under this server, last byte in 0xF0..0xFF."""
+    #     base = net.server_id[:-1]  # 4-byte group/server prefix
+    #     ids = []
+    #     for i in range(n):
+    #         last = 0xF0 + ((self._seq + i) % 16)  # 240..255
+    #         ids.append(base + bytes([last]))
+    #     self._seq = (self._seq + n) % 16
+    #     return ids
 
+    def _make_node_ids(self, n: int):
+        """
+        Return n unique node ids by varying the last byte.
+        Uses a safe high-byte pool to avoid reserved/odd ids.
+        """
+        base = net.server_id[:-1]  # keep server prefix
+        used = set(self.nodes) | set(self.active_nodes) | set(getattr(net, "nodes", set()))
+
+        POOL_START = 0xC0  # 192
+        POOL_END = 0xFF  # 255 inclusive
+        SKIP = {0x81}  # if this one is used by some child node in your setup
+
+        ids = []
+        # self._seq is your rolling counter; keep it, but map into the pool
+        offset = self._seq
+
+        # pool size excluding skips
+        pool = [b for b in range(POOL_START, POOL_END + 1) if b not in SKIP]
+        pool_size = len(pool)
+
+        tries = 0
+        while len(ids) < n and tries < pool_size + n + 10:
+            last = pool[offset % pool_size]
+            cand = base + bytes([last])
+            offset += 1
+            tries += 1
+
+            if cand in used or cand in ids:
+                continue
+            ids.append(cand)
+
+        self._seq = offset  # advance seq
+
+        if len(ids) < n:
+            raise RuntimeError(
+                f"Not enough free node IDs in pool {hex(POOL_START)}..{hex(POOL_END)} "
+                f"(requested {n}, got {len(ids)})."
+            )
+
+        return ids
 
 
     @stack.command

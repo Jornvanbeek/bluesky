@@ -332,6 +332,8 @@ class ATC(core.Entity):
                     # 'TP ETA': wptime + TMA
                     data = {'TP IAF': wptime, 'IAF': wpt, 'TPstate': 'updated', 'TP ETA': wptime + TMA}
                     for key, value in data.items():
+                        if key =='TPstate':
+                            self.aman.Flights[key].astype('object')
                         self.aman.Flights.at[acid, key] = value
                     ttlg = self.aman.Flights.loc[acid, 'ttlg']
                     # print('ttlg updated? previous: ',acid, ttlg)
@@ -647,6 +649,7 @@ class ATC(core.Entity):
             iaf = self.aman.Flights.loc[acid, 'IAF']
             cmdtext = f"DIRECT {acid} {iaf}"
             traf.cond.ataltcmd(idx, targalt, cmdtext)
+            self.aman.Flights['direct'] = self.aman.Flights['direct'].astype('boolean')
             self.aman.Flights.loc[acid, 'direct'] = True
 
         # if ttlg > 0:
