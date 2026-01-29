@@ -197,7 +197,7 @@ class monte_carlo(core.Entity):
 
     @network.subscriber(topic='MONTECARLORESULTS')
     def results(self, **data):
-        print('received results: ', data)
+        print('received results: ')
         if not self.parent:
             from_node = ctx.sender_id
             mask = (self.batch['node'] == from_node) & (self.batch['status'] == 'running')
@@ -220,7 +220,7 @@ class monte_carlo(core.Entity):
             if pd.notna(start):
                 self.batch.at[job_id, 'elapsed'] = (end - start).total_seconds()
 
-            self.printdf()
+            # self.printdf()
             self.storedf()
             self.df_to_html()
 
@@ -325,7 +325,7 @@ class monte_carlo(core.Entity):
     def sendresult_example(self):
         result = {'LLDA': 300, 'Instructions': 2, 'work': 1, 'delay energy': 69}
         sender = stack.sender()
-        print('sendresult')
+        # print('sendresult')
         net.send('MONTECARLORESULTS',result, sender)
         #example of function that can be placed in other plugin to emit results, automatically get added to dataframe
 
@@ -429,7 +429,7 @@ class monte_carlo(core.Entity):
     @stack.command
     def removenode(self, node_id):
         # node_id = self.active_nodes.pop()
-        print(f"Removing node {node_id}")
+        # print(f"Removing node {node_id}")
         # net.send(b'QUIT', to_group=node_id)
         stack.forward('PREDICTOR STOPNODE', target_id=node_id)
         stack.forward('MC STOPNODE', target_id=node_id)
@@ -448,7 +448,7 @@ class monte_carlo(core.Entity):
 
         for node_id in all_nodes:
             try:
-                print(f"[MC] killing node {node_id}")
+                # print(f"[MC] killing node {node_id}")
                 stack.forward('PREDICTOR STOPNODE', target_id=node_id)
                 stack.forward('MC STOPNODE', target_id=node_id)
             except Exception:
