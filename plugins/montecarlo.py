@@ -185,14 +185,14 @@ class monte_carlo(core.Entity):
                 stack.forward('SENDRESULT', target_id=node)
                 # self.sendscen(node)
                 # self.removenode(node)
-                if self.remove_when_done:
-                    self.removenode(node)
-                    self.start()
-                else:
-                    stack.forward('COMPLETEHOLD', target_id=node)
-                    stack.forward('DT 1', target_id=node)
-                    self.active_nodes.remove(node)
-                    self.start()
+                # if self.remove_when_done:
+                #     self.removenode(node)
+                #     self.start()
+                # else:
+                #     stack.forward('COMPLETEHOLD', target_id=node)
+                #     stack.forward('DT 1', target_id=node)
+                #     self.active_nodes.remove(node)
+                #     self.start()
 
 
     @network.subscriber(topic='MONTECARLORESULTS')
@@ -220,6 +220,9 @@ class monte_carlo(core.Entity):
             if pd.notna(start):
                 self.batch.at[job_id, 'elapsed'] = (end - start).total_seconds()
 
+            self.removenode(from_node)
+            self.start()
+
             self.printdf()
             self.storedf()
             self.df_to_html()
@@ -231,15 +234,22 @@ class monte_carlo(core.Entity):
         stack.forward('SENDRESULT', target_id=self.nodes[targetnode])
 
     def _make_node_ids(self, n: int):
-        """Return n full IDs under this server, last byte in 0xF0..0xFF."""
-        base = net.server_id[:-1]  # 4-byte group/server prefix
+        """Return n unique full IDs under this server, last byte in 0..255 (skip ones already used)."""
+        base = net.server_id[:-1]
+        used = set(self.nodes) | set(self.active_nodes) | set(getattr(net, "nodes", set()))
         ids = []
-        for i in range(n):
-            last = 0xF0 + ((self._seq + i) % 16)  # 240..255
-            ids.append(base + bytes([last]))
-        self._seq = (self._seq + n) % 16
-        return ids
+        b = self._seq  # start search from seq
 
+        while len(ids) < n:
+            last = b % 256
+            cand = base + bytes([last])
+            b += 1
+            if cand in used or cand in ids:
+                continue
+            ids.append(cand)
+
+        self._seq = b % 256
+        return ids
 
 
     @stack.command

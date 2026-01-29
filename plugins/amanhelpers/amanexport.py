@@ -192,6 +192,36 @@ class AmanExporter():
                 return pd.to_numeric(df[col], errors='coerce')
             return pd.Series(np.nan, index=df.index)
 
+        def get_num_any(cols: list[str]) -> pd.Series:
+            """Return numeric Series for the first column that exists in df, else all-NaN Series."""
+            for c in cols:
+                if c in df.columns:
+                    return pd.to_numeric(df[c], errors='coerce')
+            return pd.Series(np.nan, index=df.index)
+
+        def _mean_nonzero(s: pd.Series) -> float:
+            if s is None or len(s) == 0:
+                return np.nan
+            m = s.notna() & (s != 0)
+            return float(s[m].mean(skipna=True)) if m.any() else np.nan
+
+        def _count_nonzero(s: pd.Series) -> int:
+            if s is None or len(s) == 0:
+                return 0
+            return int(((s.notna()) & (s != 0)).sum())
+
+        def _min(s: pd.Series) -> float:
+            return float(s.min(skipna=True))
+
+        def _max(s: pd.Series) -> float:
+            return float(s.max(skipna=True))
+
+        def _mean(s: pd.Series) -> float:
+            return float(s.mean(skipna=True))
+
+        def _mean_abs(s: pd.Series) -> float:
+            return float(s.abs().mean(skipna=True))
+
         s_eat = get_num('EAT adherence')
         s_cnt = get_num('count')
         s_eto = get_num('E_TO')
@@ -203,7 +233,8 @@ class AmanExporter():
         s_ptime = get_num('percentile_time')
 
         # ATC / instruction bookkeeping (optional columns)
-        s_adj = get_num('adjacent')
+        # "short adjacent" may have different column names and may only be created once nonzero values exist
+        s_short_adj = get_num_any(['short adjacent', 'short_adjacent', 'short_adj', 'adjacent'])
         s_totaldelay = get_num('totaldelay')
         s_totalspeedup = get_num('totalspeedup')
         s_short_speed = get_num('short speed')
@@ -221,6 +252,10 @@ class AmanExporter():
 
         # Swaps
         s_swaps = get_num('swaps')
+        # EAT_updates
+        s_eat_updates = get_num('EAT_updates')
+        # TTLG at freeze
+        s_ttlg_freeze = get_num('ttlg at freeze')
 
         denom = s_tw.replace(0, np.nan)
         pct_xw = (s_xw / denom) * 100.0
@@ -238,65 +273,101 @@ class AmanExporter():
         max_count_acid = s_cnt.idxmax() if s_cnt.notna().any() else None
 
         return {
-            # mean_pct_extrawork at the very top
+            # --- Top: extrawork percentage ---
             'mean_pct_extrawork': float(pct_xw_clean.mean(skipna=True)),
 
-            # EAT adherence
-            'mean_abs_eat_adherence': float(s_eat.abs().mean(skipna=True)),
-            'max_abs_eat_adherence': float(s_eat.abs().max(skipna=True)),
-
-            # count stats
+            # --- Count stats (plus mean nonzero) ---
             'pct_count_eq_0': float((s_cnt.fillna(0) == 0).mean() * 100.0),
-            'mean_count': float(s_cnt.mean(skipna=True)),
+            'mean_count': _mean(s_cnt),
+            'mean_count_nonzero': _mean_nonzero(s_cnt),
             'max_count': float(max_count) if pd.notna(max_count) else np.nan,
             'second_highest_count': float(second_highest) if pd.notna(second_highest) else np.nan,
             'max_count_acid': str(max_count_acid) if max_count_acid is not None else None,
 
-            # E_TO
-            'mean_E_TO': float(s_eto.mean(skipna=True)),
-            'mean_abs_E_TO': float(s_eto.abs().mean(skipna=True)),
-            'min_E_TO': float(s_eto.min(skipna=True)),
-            'max_E_TO': float(s_eto.max(skipna=True)),
+            # --- EAT_updates stats ---
+            'min_EAT_updates': _min(s_eat_updates) if s_eat_updates.notna().any() else np.nan,
+            'mean_EAT_updates': _mean(s_eat_updates),
+            'max_EAT_updates': _max(s_eat_updates) if s_eat_updates.notna().any() else np.nan,
+            'mean_EAT_updates_nonzero': _mean_nonzero(s_eat_updates),
 
-            # TP accuracy
+            # --- Swaps stats (plus sums) ---
+            'min_swaps': _min(s_swaps) if s_swaps.notna().any() else np.nan,
+            'mean_swaps': _mean(s_swaps),
+            'max_swaps': _max(s_swaps) if s_swaps.notna().any() else np.nan,
+            'mean_swaps_nonzero': _mean_nonzero(s_swaps),
+            'amount_of_swaps': float(s_swaps.fillna(0).sum()),
+
+            # --- TTLG at freeze ---
+            'min_ttlg_at_freeze': _min(s_ttlg_freeze) if s_ttlg_freeze.notna().any() else np.nan,
+            'mean_ttlg_at_freeze': _mean(s_ttlg_freeze),
+            'max_ttlg_at_freeze': _max(s_ttlg_freeze) if s_ttlg_freeze.notna().any() else np.nan,
+            'mean_abs_ttlg_at_freeze': _mean_abs(s_ttlg_freeze),
+
+            # --- E_TO (as before) ---
+            'mean_E_TO': _mean(s_eto),
+            'mean_abs_E_TO': _mean_abs(s_eto),
+            'min_E_TO': _min(s_eto) if s_eto.notna().any() else np.nan,
+            'max_E_TO': _max(s_eto) if s_eto.notna().any() else np.nan,
+
+            # --- Delay / speedup / short-adjacent / delay-mach instruction statistics ---
+            # totaldelay: mean, max, mean(nonzero)
+            'mean_totaldelay': _mean(s_totaldelay),
+            'max_totaldelay': _max(s_totaldelay) if s_totaldelay.notna().any() else np.nan,
+            'mean_totaldelay_nonzero': _mean_nonzero(s_totaldelay),
+
+            # totalspeedup: min, mean, mean(nonzero)
+            'min_totalspeedup': _min(s_totalspeedup) if s_totalspeedup.notna().any() else np.nan,
+            'mean_totalspeedup': _mean(s_totalspeedup),
+            'mean_totalspeedup_nonzero': _mean_nonzero(s_totalspeedup),
+
+            # short-adjacent: min, mean, mean(nonzero) and total count
+            # "short adjacent" may have different column names and may only be created once nonzero values exist
+            'min_short_adjacent': _min(s_short_adj) if s_short_adj.notna().any() else np.nan,
+            'mean_short_adjacent': _mean(s_short_adj),
+            'mean_short_adjacent_nonzero': _mean_nonzero(s_short_adj),
+            'count_short_adjacent_nonzero': _count_nonzero(s_short_adj),
+
+            # delay mach: min, mean, mean(nonzero) and total count
+            'min_delay_mach': _min(s_delay_mach) if s_delay_mach.notna().any() else np.nan,
+            'mean_delay_mach': _mean(s_delay_mach),
+            'mean_delay_mach_nonzero': _mean_nonzero(s_delay_mach),
+            'count_delay_mach_nonzero': _count_nonzero(s_delay_mach),
+
+            # keep some additional instruction fields (useful for analysis)
+            'mean_short_speed': _mean(s_short_speed),
+            'mean_delay_speed': _mean(s_delay_speed),
+            'mean_delay_dogleg': _mean(s_delay_dogleg),
+            'mean_short_dogleg': _mean(s_short_dogleg),
+
+            # --- EAT adherence ---
+            'mean_abs_eat_adherence': float(s_eat.abs().mean(skipna=True)),
+            'max_abs_eat_adherence': float(s_eat.abs().max(skipna=True)),
+
+            # --- TP accuracy ---
             'mean_TP_accuracy': float(s_tpa.mean(skipna=True)),
             'max_abs_TP_accuracy': float(s_tpa.abs().max(skipna=True)),
 
-            # Time error at freeze
+            # --- Time error at freeze (existing field) ---
             'mean_time_error_at_freeze': float(s_frz.mean(skipna=True)),
             'max_time_error_at_freeze': float(s_frz.max(skipna=True)),
             'min_time_error_at_freeze': float(s_frz.min(skipna=True)),
             'mean_abs_time_error_at_freeze': float(s_frz.abs().mean(skipna=True)),
 
-            # work (put pct extrawork first)
+            # --- Work / popup splits ---
             'mean_pct_extrawork_popup': float(pct_xw_clean[is_popup].mean(skipna=True)) if is_popup.any() else np.nan,
             'mean_pct_extrawork_nonpopup': float(pct_xw_clean[is_nonpopup].mean(skipna=True)) if is_nonpopup.any() else np.nan,
             'mean_minwork': float(s_mw.mean(skipna=True)),
             'mean_totalwork': float(s_tw.mean(skipna=True)),
             'mean_extrawork': float(s_xw.mean(skipna=True)),
 
-            # percentile time
+            # --- Percentile time ---
             'mean_percentile_time': float(s_ptime.mean(skipna=True)),
 
-            # ATC / instruction bookkeeping
-            'mean_adjacent': float(s_adj.mean(skipna=True)),
-            'mean_totaldelay': float(s_totaldelay.mean(skipna=True)),
-            'mean_totalspeedup': float(s_totalspeedup.mean(skipna=True)),
-            'mean_short_speed': float(s_short_speed.mean(skipna=True)),
-            'mean_delay_speed': float(s_delay_speed.mean(skipna=True)),
-            'mean_delay_mach': float(s_delay_mach.mean(skipna=True)),
-            'mean_delay_dogleg': float(s_delay_dogleg.mean(skipna=True)),
-            'mean_short_dogleg': float(s_short_dogleg.mean(skipna=True)),
-
-            # Slot change statistics
+            # --- Slot change statistics ---
             'mean_slot_minus_initialslot': float(slot_diff.mean(skipna=True)),
             'mean_abs_slot_minus_initialslot_nonzero': float(slot_absdiff_nz.mean(skipna=True)) if slot_absdiff_nz.size else np.nan,
 
-            # Swaps
-            'amount_of_swaps': float(s_swaps.fillna(0).sum()),
-            'mean_swaps': float(s_swaps.mean(skipna=True)),
-
-            # size
+            # --- Size / reproducibility ---
             'n_acids': int(len(df)),
             'error_seed': int(np.random.get_state()[1][0]),
         }

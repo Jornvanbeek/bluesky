@@ -247,7 +247,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             slot = base
         else:
             if force_back_of_queue:
-                slot = float(prev_slot) + sep
+                slot = max(float(prev_slot) + sep, (eta - self.late_approach_margin))
             else:
                 slot = max(float(prev_slot) + sep, base)
 
@@ -862,7 +862,9 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                     # If a flight in between disappears, the next flight should inherit the vacated slot.
                     # So we always compress the sequence by assigning the next slot directly behind the previous one,
                     # even if the flight cannot make it based on ETA.
-                    slot = float(last_assigned_slot) + float(separation)
+                    # slot = float(last_assigned_slot) + float(separation)
+
+                    slot = max(last_assigned_slot + separation, (ETA- self.late_approach_margin))
 
                 self.eat_update_plusone(slot, acid)
 
@@ -898,7 +900,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 # If a flight in between disappears, the next flight should inherit the vacated slot.
                 # So we always compress the sequence by assigning the next slot directly behind the previous one,
                 # even if the flight cannot make it based on ETA.
-                slot = float(last_assigned_slot) + float(separation)
+                slot = max(last_assigned_slot + separation, (row['ETA']- self.late_approach_margin))
 
             self.eat_update_plusone(slot, flight)
 
@@ -915,6 +917,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
             self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
             self.Flights.at[flight, 'swaps'] += 1
+            print('replan late swap ', flight)
 
             last_assigned_slot, last_assigned_flight, last_assigned_type = slot, flight, row['type']
 
@@ -925,7 +928,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
         self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
         self.Flights.at[acid, 'swaps'] += int(swaps)
-
+        print('replan late swap ', acid, swaps)
 
 
 
