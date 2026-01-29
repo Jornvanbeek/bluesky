@@ -997,9 +997,9 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
         for i, (flight, row) in enumerate(later.iterrows()):
             if ETA <= row['slot'] and not replanned:
-                replan_df = pd.concat( [later.iloc[:i], row_replan_df, later.iloc[i:]],
-                    axis=0
-                )
+                parts = [later.iloc[:i], row_replan_df, later.iloc[i:]]
+                parts = [p for p in parts if not p.empty]
+                replan_df = pd.concat(parts, axis=0)
                 replanned = True
                 break
             else:
