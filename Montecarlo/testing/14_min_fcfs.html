@@ -1,0 +1,542 @@
+
+           <html>
+           <head>
+           <meta charset="utf-8" />
+           <style>
+               .container {
+                   padding: 12px;
+               }
+               .table {
+                   border-collapse: collapse;
+                   font-size: 12px;
+                   white-space: nowrap;
+               }
+               .table th {
+                   position: sticky;
+                   top: 0;
+                   background: #f1f1f1;
+               }
+               .table th, .table td {
+                   border: 1px solid #000;
+                   padding: 4px 6px;
+                   text-align: left;
+               }
+           </style>
+           </head>
+           <body>
+             <div class="container">
+               <h3>MonteCarlo batch — simtime: 00:00:00</h3>
+               <table border="1" class="dataframe table table-bordered">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>scenario</th>
+      <th>run</th>
+      <th>seed</th>
+      <th>usecache</th>
+      <th>node</th>
+      <th>status</th>
+      <th>maxtime</th>
+      <th>starttime</th>
+      <th>endtime</th>
+      <th>elapsed</th>
+      <th>mean_abs_eat_adherence</th>
+      <th>max_abs_eat_adherence</th>
+      <th>pct_count_eq_0</th>
+      <th>mean_count</th>
+      <th>max_count</th>
+      <th>second_highest_count</th>
+      <th>max_count_acid</th>
+      <th>mean_E_TO</th>
+      <th>mean_abs_E_TO</th>
+      <th>min_E_TO</th>
+      <th>max_E_TO</th>
+      <th>mean_TP_accuracy</th>
+      <th>max_abs_TP_accuracy</th>
+      <th>mean_time_error_at_freeze</th>
+      <th>max_time_error_at_freeze</th>
+      <th>min_time_error_at_freeze</th>
+      <th>mean_abs_time_error_at_freeze</th>
+      <th>mean_minwork</th>
+      <th>mean_totalwork</th>
+      <th>mean_extrawork</th>
+      <th>mean_pct_extrawork</th>
+      <th>n_acids</th>
+      <th>error_seed</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>scenariotest</td>
+      <td>0</td>
+      <td>5</td>
+      <td>True</td>
+      <td>b'S .\xc5\xf2'</td>
+      <td>done</td>
+      <td>10:00:00</td>
+      <td>2026-01-16 20:44:03</td>
+      <td>2026-01-16 21:01:57</td>
+      <td>0 days 00:00:00</td>
+      <td>47.549239</td>
+      <td>268.3</td>
+      <td>51.058824</td>
+      <td>0.917647</td>
+      <td>24.0</td>
+      <td>23.0</td>
+      <td>TRA082</td>
+      <td>0.003778</td>
+      <td>0.016756</td>
+      <td>-2.205584</td>
+      <td>3.942811</td>
+      <td>133.802532</td>
+      <td>2739.0</td>
+      <td>-7.029892</td>
+      <td>86.919409</td>
+      <td>-385.016563</td>
+      <td>25.440794</td>
+      <td>36049725821.448219</td>
+      <td>37354886966.141151</td>
+      <td>1374911666.567235</td>
+      <td>2.722443</td>
+      <td>425</td>
+      <td>1991508151</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>scenariotest</td>
+      <td>1</td>
+      <td>6</td>
+      <td>True</td>
+      <td>b'S .\xc5\xf1'</td>
+      <td>done</td>
+      <td>10:00:00</td>
+      <td>2026-01-16 20:44:04</td>
+      <td>2026-01-16 21:02:06</td>
+      <td>0 days 00:00:00</td>
+      <td>45.464721</td>
+      <td>298.4</td>
+      <td>48.941176</td>
+      <td>0.905882</td>
+      <td>23.0</td>
+      <td>16.0</td>
+      <td>TRA082</td>
+      <td>0.060153</td>
+      <td>0.060153</td>
+      <td>0.0</td>
+      <td>11.293878</td>
+      <td>134.762025</td>
+      <td>2739.0</td>
+      <td>-7.293291</td>
+      <td>108.940734</td>
+      <td>-456.944325</td>
+      <td>25.088083</td>
+      <td>36049725821.448219</td>
+      <td>37304853398.77935</td>
+      <td>1344380186.389082</td>
+      <td>2.678537</td>
+      <td>425</td>
+      <td>798871721</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>scenariotest</td>
+      <td>2</td>
+      <td>7</td>
+      <td>True</td>
+      <td>b'S .\xc5\xf3'</td>
+      <td>done</td>
+      <td>10:00:00</td>
+      <td>2026-01-16 20:44:04</td>
+      <td>2026-01-16 21:02:01</td>
+      <td>0 days 00:00:00</td>
+      <td>49.161772</td>
+      <td>293.9</td>
+      <td>49.176471</td>
+      <td>0.910588</td>
+      <td>24.0</td>
+      <td>17.0</td>
+      <td>TRA082</td>
+      <td>0.060329</td>
+      <td>0.084027</td>
+      <td>-2.839172</td>
+      <td>27.875107</td>
+      <td>128.949495</td>
+      <td>2739.0</td>
+      <td>-12.934912</td>
+      <td>68.385068</td>
+      <td>-611.720909</td>
+      <td>29.880429</td>
+      <td>36049725821.448219</td>
+      <td>37212393875.645996</td>
+      <td>1232418576.072083</td>
+      <td>2.525506</td>
+      <td>425</td>
+      <td>2259319302</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>scenariotest</td>
+      <td>3</td>
+      <td>8</td>
+      <td>True</td>
+      <td>b'S .\xc5\xf0'</td>
+      <td>done</td>
+      <td>10:00:00</td>
+      <td>2026-01-16 20:44:04</td>
+      <td>2026-01-16 21:02:09</td>
+      <td>0 days 00:00:00</td>
+      <td>47.388832</td>
+      <td>299.0</td>
+      <td>47.294118</td>
+      <td>0.927059</td>
+      <td>23.0</td>
+      <td>16.0</td>
+      <td>TRA082</td>
+      <td>-0.017054</td>
+      <td>0.03713</td>
+      <td>-10.224932</td>
+      <td>2.776164</td>
+      <td>155.881013</td>
+      <td>2739.0</td>
+      <td>-6.382614</td>
+      <td>121.363345</td>
+      <td>-266.179513</td>
+      <td>27.404038</td>
+      <td>36049725821.448219</td>
+      <td>37454689219.674568</td>
+      <td>1494216007.284297</td>
+      <td>3.217017</td>
+      <td>425</td>
+      <td>2528139623</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>scenariotest</td>
+      <td>4</td>
+      <td>9</td>
+      <td>True</td>
+      <td>b'S .\xc5\xf4'</td>
+      <td>done</td>
+      <td>10:00:00</td>
+      <td>2026-01-16 21:02:00</td>
+      <td>2026-01-16 21:19:39</td>
+      <td>0 days 00:00:00</td>
+      <td>45.212911</td>
+      <td>298.9</td>
+      <td>50.117647</td>
+      <td>0.861176</td>
+      <td>23.0</td>
+      <td>16.0</td>
+      <td>TRA082</td>
+      <td>0.012193</td>
+      <td>0.021024</td>
+      <td>-1.876579</td>
+      <td>5.802232</td>
+      <td>121.85101</td>
+      <td>2739.0</td>
+      <td>-11.478355</td>
+      <td>111.19817</td>
+      <td>-305.362633</td>
+      <td>27.80829</td>
+      <td>36049725821.448219</td>
+      <td>37221119790.856339</td>
+      <td>1241144491.282425</td>
+      <td>2.491376</td>
+      <td>425</td>
+      <td>3030976880</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>scenariotest</td>
+      <td>5</td>
+      <td>10</td>
+      <td>True</td>
+      <td>b'S .\xc5\xf5'</td>
+      <td>done</td>
+      <td>10:00:00</td>
+      <td>2026-01-16 21:02:05</td>
+      <td>2026-01-16 21:19:56</td>
+      <td>0 days 00:00:00</td>
+      <td>45.764541</td>
+      <td>294.6</td>
+      <td>48.470588</td>
+      <td>0.898824</td>
+      <td>23.0</td>
+      <td>16.0</td>
+      <td>TRA082</td>
+      <td>-0.026162</td>
+      <td>0.026162</td>
+      <td>-5.665982</td>
+      <td>0.0</td>
+      <td>150.541985</td>
+      <td>2739.0</td>
+      <td>-8.786522</td>
+      <td>88.258351</td>
+      <td>-320.74062</td>
+      <td>26.368785</td>
+      <td>36049725821.448219</td>
+      <td>37392841896.135231</td>
+      <td>1411418073.291096</td>
+      <td>3.010265</td>
+      <td>425</td>
+      <td>305235619</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>scenariotest</td>
+      <td>6</td>
+      <td>11</td>
+      <td>True</td>
+      <td>b'S .\xc5\xf6'</td>
+      <td>done</td>
+      <td>10:00:00</td>
+      <td>2026-01-16 21:02:09</td>
+      <td>2026-01-16 21:20:17</td>
+      <td>0 days 00:00:00</td>
+      <td>46.942785</td>
+      <td>255.7</td>
+      <td>48.470588</td>
+      <td>0.969412</td>
+      <td>24.0</td>
+      <td>17.0</td>
+      <td>TRA082</td>
+      <td>0.034566</td>
+      <td>0.051062</td>
+      <td>-3.505357</td>
+      <td>7.6728</td>
+      <td>133.979798</td>
+      <td>2739.0</td>
+      <td>-10.232007</td>
+      <td>87.279837</td>
+      <td>-351.219637</td>
+      <td>28.057843</td>
+      <td>36049725821.448219</td>
+      <td>37247447660.693253</td>
+      <td>1295220717.140339</td>
+      <td>2.719212</td>
+      <td>425</td>
+      <td>3106104607</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>scenariotest</td>
+      <td>7</td>
+      <td>12</td>
+      <td>True</td>
+      <td>b'S .\xc5\xf7'</td>
+      <td>done</td>
+      <td>10:00:00</td>
+      <td>2026-01-16 21:02:11</td>
+      <td>2026-01-16 21:20:20</td>
+      <td>0 days 00:00:00</td>
+      <td>48.496465</td>
+      <td>308.0</td>
+      <td>48.470588</td>
+      <td>0.957647</td>
+      <td>23.0</td>
+      <td>16.0</td>
+      <td>TRA082</td>
+      <td>0.025369</td>
+      <td>0.040484</td>
+      <td>-3.211893</td>
+      <td>9.221889</td>
+      <td>116.584383</td>
+      <td>2739.0</td>
+      <td>-11.780909</td>
+      <td>116.353277</td>
+      <td>-551.318529</td>
+      <td>29.304983</td>
+      <td>36049725821.448219</td>
+      <td>37092238942.084381</td>
+      <td>1189577568.875637</td>
+      <td>2.440867</td>
+      <td>425</td>
+      <td>1370457442</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>scenariotest</td>
+      <td>8</td>
+      <td>13</td>
+      <td>True</td>
+      <td>b'S .\xc5\xf8'</td>
+      <td>done</td>
+      <td>10:00:00</td>
+      <td>2026-01-16 21:19:41</td>
+      <td>2026-01-16 21:34:45</td>
+      <td>0 days 00:00:00</td>
+      <td>47.756709</td>
+      <td>298.7</td>
+      <td>50.117647</td>
+      <td>0.908235</td>
+      <td>24.0</td>
+      <td>17.0</td>
+      <td>TRA082</td>
+      <td>0.010109</td>
+      <td>0.018867</td>
+      <td>-1.712571</td>
+      <td>3.954451</td>
+      <td>117.444444</td>
+      <td>2739.0</td>
+      <td>-11.062424</td>
+      <td>81.155426</td>
+      <td>-350.800598</td>
+      <td>25.661642</td>
+      <td>36049725821.448219</td>
+      <td>37195340765.310097</td>
+      <td>1215365465.736189</td>
+      <td>2.346482</td>
+      <td>425</td>
+      <td>4060634533</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>scenariotest</td>
+      <td>9</td>
+      <td>14</td>
+      <td>True</td>
+      <td>b'S .\xc5\xf9'</td>
+      <td>done</td>
+      <td>10:00:00</td>
+      <td>2026-01-16 21:19:58</td>
+      <td>2026-01-16 21:35:07</td>
+      <td>0 days 00:00:00</td>
+      <td>48.882487</td>
+      <td>297.2</td>
+      <td>49.647059</td>
+      <td>0.861176</td>
+      <td>23.0</td>
+      <td>16.0</td>
+      <td>TRA082</td>
+      <td>0.001193</td>
+      <td>0.025683</td>
+      <td>-3.082505</td>
+      <td>3.389249</td>
+      <td>128.374684</td>
+      <td>2739.0</td>
+      <td>-8.6472</td>
+      <td>98.086835</td>
+      <td>-277.056587</td>
+      <td>25.634655</td>
+      <td>36049725821.448219</td>
+      <td>37321457506.837433</td>
+      <td>1341482207.263521</td>
+      <td>2.657917</td>
+      <td>425</td>
+      <td>3433186001</td>
+    </tr>
+    <tr>
+      <th>min</th>
+      <td>NaN</td>
+      <td>0.0</td>
+      <td>5.0</td>
+      <td>1.0</td>
+      <td></td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>0 days 00:00:00</td>
+      <td>45.212911</td>
+      <td>255.7</td>
+      <td>47.294118</td>
+      <td>0.861176</td>
+      <td>23.0</td>
+      <td>16.0</td>
+      <td>NaN</td>
+      <td>-0.026162</td>
+      <td>0.016756</td>
+      <td>-10.224932</td>
+      <td>0.0</td>
+      <td>116.584383</td>
+      <td>2739.0</td>
+      <td>-12.934912</td>
+      <td>68.385068</td>
+      <td>-611.720909</td>
+      <td>25.088083</td>
+      <td>36049725821.448219</td>
+      <td>37092238942.084381</td>
+      <td>1189577568.875637</td>
+      <td>2.346482</td>
+      <td>425.0</td>
+      <td>305235619.0</td>
+    </tr>
+    <tr>
+      <th>mean</th>
+      <td>NaN</td>
+      <td>4.5</td>
+      <td>9.5</td>
+      <td>1.0</td>
+      <td></td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>0 days 00:00:00</td>
+      <td>47.262046</td>
+      <td>291.27</td>
+      <td>49.176471</td>
+      <td>0.911765</td>
+      <td>23.4</td>
+      <td>17.0</td>
+      <td>NaN</td>
+      <td>0.016447</td>
+      <td>0.038135</td>
+      <td>-3.432458</td>
+      <td>7.592858</td>
+      <td>132.217137</td>
+      <td>2739.0</td>
+      <td>-9.562813</td>
+      <td>96.794045</td>
+      <td>-387.635991</td>
+      <td>27.064954</td>
+      <td>36049725821.448227</td>
+      <td>37279727002.215782</td>
+      <td>1314013495.99019</td>
+      <td>2.680962</td>
+      <td>425.0</td>
+      <td>2288443387.9</td>
+    </tr>
+    <tr>
+      <th>max</th>
+      <td>NaN</td>
+      <td>9.0</td>
+      <td>14.0</td>
+      <td>1.0</td>
+      <td></td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>0 days 00:00:00</td>
+      <td>49.161772</td>
+      <td>308.0</td>
+      <td>51.058824</td>
+      <td>0.969412</td>
+      <td>24.0</td>
+      <td>23.0</td>
+      <td>NaN</td>
+      <td>0.060329</td>
+      <td>0.084027</td>
+      <td>0.0</td>
+      <td>27.875107</td>
+      <td>155.881013</td>
+      <td>2739.0</td>
+      <td>-6.382614</td>
+      <td>121.363345</td>
+      <td>-266.179513</td>
+      <td>29.880429</td>
+      <td>36049725821.448219</td>
+      <td>37454689219.674568</td>
+      <td>1494216007.284297</td>
+      <td>3.217017</td>
+      <td>425.0</td>
+      <td>4060634533.0</td>
+    </tr>
+  </tbody>
+</table>
+             </div>
+           </body>
+           </html>
+           

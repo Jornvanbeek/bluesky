@@ -11,7 +11,7 @@ max_dogleg_ratio = 1.4
 freezehorizon = 20 * 60
 capacity = 34#34 #aircraft per hour, if no LIV, per runway
 # popup_planner ='FCFS'
-popup_planner = 'delay'
+popup_planner = 'DELAY'
 error_multiplicator = (1.0,1.0,1.0,1.0)
 # error_multiplicator = (0,0,0,0)
 
@@ -38,7 +38,7 @@ nearby_threshold = 180  # seconds before iaf, no more instructions possible
 dogleg_multiplyer = 0.99
 descent_angle = 3.0  # degrees
 
-max_timegain_popup = 4 *60 # if this is not possible because aircraft not spawned: replan. if airborne: normal check
+max_timegain_popup = 2 *60 # if this is not possible because aircraft not spawned: replan. if airborne: normal check
 expected_delay_percentile = 75
 
 mach_threshold = 0

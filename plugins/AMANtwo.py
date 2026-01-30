@@ -316,7 +316,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                     low_alt.append(acid)
             if low_alt:
                 self.Flights.loc[low_alt, 'planningstate'] = 'new'
-        elif plannertype == 'delay':
+        elif plannertype == 'DELAY':
             mask_popup = (
                     (self.Flights['planningstate'].isin(['new']))
                     & ((self.Flights['ETO IAF'] - sim.simt) < self.freezehorizon)
@@ -404,7 +404,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
 
 
-        elif plannertype == 'delay':
+        elif plannertype == 'DELAY':
 
             airborne_popup = (
                     (self.Flights['planningstate'] == 'POPUP')
@@ -597,7 +597,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             # Filter frozen and preplanned flights for the current runway
             frozen_flights = self.Flights.query("planningstate == 'frozen' and runway == @runway")
 
-            if settings.popup_planner == 'delay':
+            if settings.popup_planner == 'DELAY':
                 # Include preplanned + ground, and sort by delayed ETA
                 mask = (
                         (self.Flights['runway'] == runway)
@@ -1078,9 +1078,10 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
     #planning functions
 
     @stack.command
-    def freezehorizon(self, minutes):
+    def freezehorizon(self, minutes: float):
         self.freezehorizon = 60.* minutes
-        self.update_planningstate()
+        # self.update_planningstate()
+        stack.stack(f'ECHO FH set to {self.freezehorizon}')
 
 
 
@@ -1106,13 +1107,14 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
     @stack.command
     def popup_planner(self, planner: str):
         """Set popup planner. Usage: POPUP_PLANNER FCFS|DELAY"""
-        p = str(planner).strip().lower()
-        if p not in ('FCFS', 'delay'):
-            stack.stack("POPUP_PLANNER expects 'FCFS' or 'delay'. Got:", planner)
+        p = str(planner).strip().upper()
+        if p not in ('FCFS', 'DELAY'):
+            stack.stack("ECHO POPUPPLANNER expects 'FCFS' or 'DELAY'. Got:", planner)
             return
         # Keep both the instance attribute and the settings module in sync
         self.popup_planner = p
-        settings.popup_planner = p
+        stack.stack(f"ECHO planner set to {self.popup_planner}")
+
 
     @stack.command
     def capacity(self, per_hour):
@@ -1127,10 +1129,10 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             return
 
         self.capacity = cap
-        settings.capacity = cap
+
         # separation in seconds between slots
         self.separation = round(60 * 60 / cap, 0)
-        settings.separation = self.separation
+
 
     @stack.command
     def set_uncertainty(self, takeoff: float, dep_route: float, enroute: float, fir: float):
@@ -1141,8 +1143,8 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             stack.stack("SET_UNCERTAINTY expects 4 numbers. Error:", e)
             return
 
-        settings.error_uncertainty = vals
-        stack.stack('set uncertainty to: ', vals)
+        self.error_multiplicator = vals
+        stack.stack(f'ECHO uncertainty set to {self.error_multiplicator}')
 
 
         # #todo list

@@ -186,6 +186,22 @@ class AmanExporter():
             return {'n_acids': 0}
 
         # veilige numerieke Series
+
+        # --- Settings (try instance attrs first, then aman_settings module) ---
+        def _get_setting(attr: str):
+            v = getattr(self, attr, None)
+            if v is not None:
+                return v
+            try:
+                import aman_settings  # project-level settings module
+                return getattr(aman_settings, attr, None)
+            except Exception:
+                return None
+
+        setting_freezehorizon = _get_setting('freezehorizon')
+        setting_popup_planner = _get_setting('popup_planner')
+        setting_error_multiplicator = _get_setting('error_multiplicator')
+        setting_capacity = _get_setting('capacity')
         def get_num(col: str) -> pd.Series:
             """Return numeric Series for df[col] if present, else all-NaN Series with df.index."""
             if col in df.columns:
@@ -221,6 +237,9 @@ class AmanExporter():
 
         def _mean_abs(s: pd.Series) -> float:
             return float(s.abs().mean(skipna=True))
+
+        def _median(s: pd.Series) -> float:
+            return float(s.median(skipna=True))
 
         s_eat = get_num('EAT adherence')
         s_cnt = get_num('count')
@@ -266,6 +285,18 @@ class AmanExporter():
         is_popup = (popup_col.astype('string').str.upper() == 'POPUP') if popup_col is not None else pd.Series(False, index=df.index)
         is_nonpopup = ~is_popup
 
+        # holding mask (optional column)
+        holding_col = df.get('holding')
+        if holding_col is None:
+            is_holding = pd.Series(False, index=df.index)
+        else:
+            # be robust to bool/object/NA
+            is_holding = holding_col.astype('boolean').fillna(False)
+
+        # count stats split by popup / holding
+        s_cnt_popup = s_cnt[is_popup] if is_popup is not None else pd.Series(np.nan, index=df.index)
+        s_cnt_holding = s_cnt[is_holding] if is_holding is not None else pd.Series(np.nan, index=df.index)
+
         # counts
         max_count = s_cnt.max(skipna=True)
         uniq = np.sort(s_cnt.dropna().unique())
@@ -276,6 +307,12 @@ class AmanExporter():
             # --- Top: extrawork percentage ---
             'mean_pct_extrawork': float(pct_xw_clean.mean(skipna=True)),
 
+            # --- Scenario / AMAN settings snapshot ---
+            'freezehorizon': float(setting_freezehorizon) if setting_freezehorizon is not None else None,
+            'popup_planner': str(setting_popup_planner) if setting_popup_planner is not None else None,
+            'error_multiplicator': tuple(setting_error_multiplicator) if setting_error_multiplicator is not None else None,
+            'capacity': float(setting_capacity) if setting_capacity is not None else None,
+
             # --- Count stats (plus mean nonzero) ---
             'pct_count_eq_0': float((s_cnt.fillna(0) == 0).mean() * 100.0),
             'mean_count': _mean(s_cnt),
@@ -283,6 +320,16 @@ class AmanExporter():
             'max_count': float(max_count) if pd.notna(max_count) else np.nan,
             'second_highest_count': float(second_highest) if pd.notna(second_highest) else np.nan,
             'max_count_acid': str(max_count_acid) if max_count_acid is not None else None,
+
+            # --- Count stats: popup subset ---
+            'min_count_popup': _min(s_cnt_popup) if s_cnt_popup.notna().any() else np.nan,
+            'mean_count_popup': _mean(s_cnt_popup),
+            'max_count_popup': _max(s_cnt_popup) if s_cnt_popup.notna().any() else np.nan,
+
+            # --- Count stats: holding subset (holding == True) ---
+            'min_count_holding': _min(s_cnt_holding) if s_cnt_holding.notna().any() else np.nan,
+            'mean_count_holding': _mean(s_cnt_holding),
+            'max_count_holding': _max(s_cnt_holding) if s_cnt_holding.notna().any() else np.nan,
 
             # --- EAT_updates stats ---
             'min_EAT_updates': _min(s_eat_updates) if s_eat_updates.notna().any() else np.nan,
@@ -300,6 +347,7 @@ class AmanExporter():
             # --- TTLG at freeze ---
             'min_ttlg_at_freeze': _min(s_ttlg_freeze) if s_ttlg_freeze.notna().any() else np.nan,
             'mean_ttlg_at_freeze': _mean(s_ttlg_freeze),
+            'median_ttlg_at_freeze': _median(s_ttlg_freeze),
             'max_ttlg_at_freeze': _max(s_ttlg_freeze) if s_ttlg_freeze.notna().any() else np.nan,
             'mean_abs_ttlg_at_freeze': _mean_abs(s_ttlg_freeze),
 

@@ -101,22 +101,26 @@ class monte_carlo(core.Entity):
 
     def start(self):
         remaining = int(self.batch['status'].isin(['backlog']).sum())
-        #only backlog is used here, as the running nodes have not sent back their results yet,
-        # and thus are still labeled as running, while they are done. their node has already been removed from active nodes
-        # due to stack use and scheduling, results are first sent, and then the node is quit if applicable
-        reqnodes = min(int(self.maxnodes), remaining)
+        # Goal: keep exactly self.maxnodes active nodes while there is still backlog.
+        # Any surplus nodes will be idled by `sendscen()` (it sends RESET when no backlog).
+        if remaining > 0:
+            reqnodes = int(self.maxnodes)
+        else:
+            reqnodes = 0
+
         actnodes = len(self.active_nodes)
         newnodes = reqnodes - actnodes
+
         if newnodes > 0:
             ids = self._make_node_ids(newnodes)
             self.nodes = self.nodes + ids
-            for id in ids:
-                self.active_nodes.add(id)
+            for nid in ids:
+                self.active_nodes.add(nid)
             net.send(b'ADDNODES', dict(count=newnodes, node_ids=ids), net.server_id)
-        if remaining == 0 and len(self.active_nodes) ==0 and len(self.multiple_mc) > 0:#if complete
+
+        # If complete and there is a queued next MC command, reset to continue the queue
+        if remaining == 0 and len(self.active_nodes) == 0 and len(self.multiple_mc) > 0:
             stack.stack('RESET')
-        # if remaining <= self.maxnodes - 1: # keep last set of nodes alive
-        #     self.remove_when_done = False
 
 
     @network.subscriber(topic='node-added')
