@@ -333,8 +333,12 @@ class monte_carlo(core.Entity):
         net.send('MONTECARLORESULTS',result, sender)
         #example of function that can be placed in other plugin to emit results, automatically get added to dataframe
 
-    def storedf(self, path = "Montecarlo/montecarlo_batch.pkl"):
-        self.batch.to_pickle(path)
+    def storedf(self, path: str = "Montecarlo/"):
+        """Store the batch DataFrame as a pickle, including the current title in the filename."""
+        # Ensure output directory exists
+        os.makedirs(path, exist_ok=True)
+        filename = f"{self.title}.pkl"
+        self.batch.to_pickle(os.path.join(path, filename))
 
     # @core.timed_function(dt= 5)
     # def autohtml(self):
