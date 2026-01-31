@@ -226,6 +226,11 @@ class AmanExporter():
                 return 0
             return int(((s.notna()) & (s != 0)).sum())
 
+        def _count_notna(s: pd.Series) -> int:
+            if s is None or len(s) == 0:
+                return 0
+            return int(s.notna().sum())
+
         def _min(s: pd.Series) -> float:
             return float(s.min(skipna=True))
 
@@ -276,6 +281,9 @@ class AmanExporter():
         # TTLG at freeze
         s_ttlg_freeze = get_num('ttlg at freeze')
 
+        # FH margin at freeze (optional column; multiple possible names)
+        s_fh_margin_freeze = get_num('fh_margin_at_freeze')
+
         denom = s_tw.replace(0, np.nan)
         pct_xw = (s_xw / denom) * 100.0
         pct_xw_clean = pct_xw.replace([np.inf, -np.inf], np.nan)
@@ -321,15 +329,20 @@ class AmanExporter():
             'second_highest_count': float(second_highest) if pd.notna(second_highest) else np.nan,
             'max_count_acid': str(max_count_acid) if max_count_acid is not None else None,
 
-            # --- Count stats: popup subset ---
-            'min_count_popup': _min(s_cnt_popup) if s_cnt_popup.notna().any() else np.nan,
-            'mean_count_popup': _mean(s_cnt_popup),
-            'max_count_popup': _max(s_cnt_popup) if s_cnt_popup.notna().any() else np.nan,
 
             # --- Count stats: holding subset (holding == True) ---
             'min_count_holding': _min(s_cnt_holding) if s_cnt_holding.notna().any() else np.nan,
             'mean_count_holding': _mean(s_cnt_holding),
             'max_count_holding': _max(s_cnt_holding) if s_cnt_holding.notna().any() else np.nan,
+
+            # --- Popup count per scenario ---
+            'count_popup': int(is_popup.fillna(False).sum()) if is_popup is not None else 0,
+
+            # --- FH margin at freeze ---
+            'count_fh_margin_at_freeze': _count_notna(s_fh_margin_freeze),
+            'min_fh_margin_at_freeze': _min(s_fh_margin_freeze) if s_fh_margin_freeze.notna().any() else np.nan,
+            'mean_fh_margin_at_freeze': _mean(s_fh_margin_freeze),
+            'max_fh_margin_at_freeze': _max(s_fh_margin_freeze) if s_fh_margin_freeze.notna().any() else np.nan,
 
             # --- EAT_updates stats ---
             'min_EAT_updates': _min(s_eat_updates) if s_eat_updates.notna().any() else np.nan,

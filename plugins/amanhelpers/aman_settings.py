@@ -9,9 +9,9 @@ max_dogleg_ratio = 1.4
 # freezehorizon = 14 * 60
 # freezehorizon = 16 * 60
 freezehorizon = 20 * 60
-capacity = 34#34 #aircraft per hour, if no LIV, per runway
-# popup_planner ='FCFS'
-popup_planner = 'DELAY'
+capacity = 36#34 #aircraft per hour, if no LIV, per runway (actual capacity +2)
+popup_planner ='FCFS'
+# popup_planner = 'DELAY'
 error_multiplicator = (1.0,1.0,1.0,1.0)
 # error_multiplicator = (0,0,0,0)
 
@@ -20,7 +20,8 @@ firname = 'FIRNL'
 
 planninghorizon = freezehorizon + 15*60
 TMA_scan = 5 * 60  # only aircraft within 5 mins of the tma get checked if they are in the tma
-visible_altitude = 13000  # (FL130)
+standard_visible_altitude = 13000  # (FL130)
+visible_altitude_specific = {'EGSH': 10000, 'EGSS': 10000,'EGLC': 10000, 'EDDL': 2000, 'EDDW':2000, 'EBBR':1000, 'EDDV':5000}
 # separation = 75
 standard_early = 60  # seconds that ASAP plans early if there is no slot taken before the slot being planned, make negative?
 late_approach_margin = 120

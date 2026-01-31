@@ -286,8 +286,12 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         if ttlg == 0 or pd.isna(ttlg):
             ttlg = self.Flights.loc[acid, 'EAT'] - self.Flights.loc[acid, 'ETO IAF']
         self.Flights.loc[acid, 'ttlg at freeze'] = self.Flights.loc[acid, 'ttlg']
+
         if 'fh_margin_at_freeze' in self.Flights.columns:
-            self.Flights.loc[acid, 'fh_margin_at_freeze'] = self.Flights.loc[acid, 'fh_margin']
+            idxac = traf.id2idx(acid)
+            alt_ft = round(traf.alt[idxac] / ft)
+            self.Flights.loc[acid, 'fh_margin_at_freeze'] = (self.Flights.loc[acid, 'ETO IAF'] - sim.simt) - self.freezehorizon
+            self.Flights.at[acid, 'alt_at_freeze'] = alt_ft
         self.Flights.at[acid, 'popup'] = 'POPUP'
 
     def maskpopup(self):
@@ -312,7 +316,13 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 if idxac < 0:
                     continue
                 alt_ft = round(traf.alt[idxac] / ft)
-                if alt_ft < self.visible_altitude:
+
+                origin = self.Flights.loc[acid, 'origin']
+                if origin in self.visible_altitude_specific.keys():
+                    if alt_ft < self.visible_altitude_specific[origin]:
+                        low_alt.append(acid)
+
+                elif alt_ft < self.standard_visible_altitude:
                     low_alt.append(acid)
             if low_alt:
                 self.Flights.loc[low_alt, 'planningstate'] = 'new'
@@ -583,7 +593,12 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
             # Check altitude in feet
             alt_ft = round(traf.alt[idxac] / ft)
-            if alt_ft >= self.visible_altitude:  # FL100
+            origin = self.Flights.loc[acid, 'origin']
+            if origin in self.visible_altitude_specific.keys():
+                if alt_ft >= self.visible_altitude_specific[origin]:
+                    self.Flights.at[acid, 'planningstate'] = 'preplanned'
+                    stack.stack(f"COLOR {acid} 0,150,255")
+            elif alt_ft >= self.standard_visible_altitude:  # FL100
                 # Now we flip them to 'preplanned'
                 self.Flights.at[acid, 'planningstate'] = 'preplanned'
                 stack.stack(f"COLOR {acid} 0,150,255")
@@ -692,15 +707,11 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             self.Flights.loc[freeze_idx, 'planningstate'] = 'frozen'
             self.Flights.loc[freeze_idx, 'Error at Freeze'] = self.Flights.loc[freeze_idx, 'Time error']
             self.Flights.loc[freeze_idx, 'ttlg at freeze'] = self.Flights.loc[freeze_idx, 'ttlg']
-            if 'fh_margin_at_freeze' in self.Flights.columns:
-                self.Flights.loc[freeze_idx, 'fh_margin_at_freeze'] = self.Flights.loc[freeze_idx, 'fh_margin']
 
             self.Flights.loc[preplanned_before_max_slot.index, 'planningstate'] = 'frozen'
             self.Flights.loc[preplanned_before_max_slot.index, 'Error at Freeze'] = self.Flights.loc[preplanned_before_max_slot.index, 'Time error']
             self.Flights.loc[preplanned_before_max_slot.index, 'ttlg at freeze'] = self.Flights.loc[
                 preplanned_before_max_slot.index, 'ttlg']
-            if 'fh_margin_at_freeze' in self.Flights.columns:
-                self.Flights.loc[preplanned_before_max_slot.index, 'fh_margin_at_freeze'] = self.Flights.loc[preplanned_before_max_slot.index, 'fh_margin']
 
             self.color(self.Flights.loc[freeze_idx], '100,255,100')
             self.color(preplanned_before_max_slot, '100,255,100')
@@ -807,7 +818,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
                 except:
                     continue
-
+            self.Flights.loc[flight, 'fh_margin_at_spawn'] = int((self.Flights.loc[flight, 'ETO IAF'] - sim.simt) - self.freezehorizon)
 
 
     def update_times(self):
@@ -824,9 +835,9 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         self.Flights['ttlg'] = self.Flights['EAT'] - self.Flights['ETO IAF']
         self.Flights['planning'] = self.Flights['EAT'] - self.planninghorizon
 
-        # Freeze-horizon margin (seconds): positive means outside FH, negative means inside FH
-        # Requested metric: (ETO IAF - sim.simt) - freezehorizon
-        self.Flights['fh_margin'] = (self.Flights['ETO IAF'] - sim.simt) - float(self.freezehorizon)
+
+
+
 
 
 
