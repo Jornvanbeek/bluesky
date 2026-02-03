@@ -68,7 +68,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 setattr(self, k, v)
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'EAT_updates','count', 'updates','Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO','fh_margin', 'fh_margin_at_spawn', 'fh_margin_at_freeze', 'percentile_time','E_dep', 'E_enroute', 'E_fir',  'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'ttlg at freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime', 'pending_delay']
+        columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'EAT_updates','count', 'updates','Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO','fh_margin', 'fh_margin_at_spawn', 'fh_margin_at_freeze', 'percentile_time','E_dep', 'E_enroute', 'E_fir', 'gsfactor',  'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'ttlg at freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime', 'pending_delay']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
         # --- explicit dtypes for non-numeric columns (prevents FutureWarning on assignment) ---
@@ -91,7 +91,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
         # self.Flights['updates'] = 0
         # self.Flights['updates'] = self.Flights['updates'].astype(int)
-
+        traf.update_pos = self.update_pos_error
 
     def set_coltype(self, cols, dtype):
         """Set column dtypes safely, also when the DataFrame is still empty.
@@ -142,7 +142,10 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         self.update_times()
         stack.stack('instruct_frozen')
 
+    @core.timed_function(dt= 6)
+    def update_errors_timed(self):
 
+        self.update_traf_gsfactor_from_flights(self.Flights, sim.simt)
 
     # def popup(self):
     #
@@ -786,7 +789,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                    'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot',
                    'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate',
                    'EAT_updates', 'count', 'updates', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc',
-                   'min_casdesc', 'E_TO', 'fh_margin', 'fh_margin_at_spawn', 'fh_margin_at_freeze', 'percentile_time', 'E_dep', 'E_enroute', 'E_fir', 'planning', 'SID',
+                   'min_casdesc', 'E_TO', 'fh_margin', 'fh_margin_at_spawn', 'fh_margin_at_freeze', 'percentile_time', 'E_dep', 'E_enroute', 'E_fir', 'gsfactor', 'planning', 'SID',
                    'FIR entry', 'Time error', 'Error at Freeze', 'ttlg at freeze', 'minwork', 'totalwork', 'extrawork', 'swaps',
                    'lookahead', 'holdingtime', 'pending_delay']
         self.Flights = pd.DataFrame(columns = columns)
@@ -818,7 +821,11 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
                 except:
                     continue
-            self.Flights.loc[flight, 'fh_margin_at_spawn'] = int((self.Flights.loc[flight, 'ETO IAF'] - sim.simt) - self.freezehorizon)
+            try:
+                self.Flights.loc[flight, 'fh_margin_at_spawn'] = int((self.Flights.loc[flight, 'ETO IAF'] - sim.simt) - self.freezehorizon)
+            except:
+                print(self.Flights.loc[flight, 'ETO IAF'])
+                return
 
 
     def update_times(self):
@@ -828,6 +835,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         # error introduction here
         # self.Flights['totalerror'] = self.Flights['creation'] + self.Flights['deproute'] + self.Flights['outsidefir'] + self.Flights
         # self.Flights['ETA'] = self.Flights['correct_ETA'] + self.Flights['totalerror']
+        self.Flights['TMA'] = self.Flights['TP ETA'] - self.Flights['TP IAF']
         self.update_errors()
 
         self.Flights['TMA'] = self.Flights['TP ETA'] - self.Flights['TP IAF']
