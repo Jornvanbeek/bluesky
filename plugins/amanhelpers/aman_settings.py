@@ -63,7 +63,9 @@ separation = round(60*60/capacity,0)
 
 # ErrorGenerator settings (used by plugins/errorgenerator.py)
 # Only settings that have concrete defaults (not None) live here.
-
+errorstart = 26.0*60 #start of error application. must be before freeze horizon
+max_groundspeed_factor = 1.5
+min_groundspeed_factor = 0.5
 departure_route_title = 'SID_rel'
 stddev_withinfir = 1.5  # %
 # JohnsonSU params: (a, b, loc, scale)

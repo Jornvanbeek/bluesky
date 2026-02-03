@@ -54,72 +54,79 @@ class ErrorHandler:
 
     def update_errors(self):
         """
-        Requested behavior:
-        - SID error applies from creation -> ALTCROSS CLIMB time (= df['SID'])
-        - Enroute error applies from ALTCROSS CLIMB (=SID) -> FIR entry (=df['FIR entry'])
-        - Within FIR: do nothing (no additional drift here)
-        - TP values drift toward realized times using elapsed segment time:
-              drift = elapsed_dep * E_dep/100 + elapsed_enr * E_enroute/100
-
-        Sign convention:
-        - E > 0  => later/slower => positive drift (adds seconds)
+        Updated behavior:
+        - Drift starts at 'interesting window' (ETO IAF - (freezehorizon + 5 min)), not at creation.
+        - Enroute error is applied immediately if SID is missing.
+        - Drift TP values toward realized times using elapsed segment time.
         """
-
-
-
-        # # Store immutable TP baselines once
-        # if 'TP IAF_base' not in self.Flights.columns or self.Flights['TP IAF_base']:
-        #     self.Flights['TP IAF_base'] = self.Flights['TP IAF']
-        # if 'TP ETA' in self.Flights.columns and 'TP ETA_base' not in self.Flights.columns:
-        #     self.Flights['TP ETA_base'] = self.Flights['TP ETA']
 
         t = float(sim.simt)
 
-        TO = self.Flights['creation'].astype(float)
-        SID = self.Flights['SID'].astype(float)  # mag NaN zijn
-        FIR = self.Flights['FIR entry'].astype(float)  # mag NaN zijn
-        IAF = self.Flights['TP IAF'].astype(float)  # mag NaN zijn
+        SID = self.Flights['SID'].astype(float)
+        FIR = self.Flights['FIR entry'].astype(float)
+
+        tp_iaf = self.Flights['TP IAF'].astype(float)
+        eto = self.Flights['ETO IAF'].astype(float) if 'ETO IAF' in self.Flights.columns else pd.Series(np.nan, index=self.Flights.index)
 
         Edep = self.Flights['E_dep'].astype(float).fillna(0.0)
         Eenr = self.Flights['E_enroute'].astype(float).fillna(0.0)
+        Efir = self.Flights['E_fir'].astype(float).fillna(0.0) if 'E_fir' in self.Flights.columns else pd.Series(0.0, index=self.Flights.index)
 
-        # --- kies een "departure end" ---
-        # voorkeur: SID, anders FIR, anders IAF, anders nu
-        dep_end = SID.copy()
-        dep_end = dep_end.fillna(FIR)
-        dep_end = dep_end.fillna(IAF)
-        dep_end = dep_end.fillna(t)
+        # Anchor for window start: prefer ETO IAF, else TP IAF
+        eto_ref = eto.where(eto.notna(), tp_iaf)
 
-        # elapsed departure: creation -> min(now, dep_end)
-        elapsed_dep = (np.minimum(t, dep_end) - TO).clip(lower=0.0)
-        elapsed_dep = elapsed_dep.fillna(0.0)
+        # Start time of the 'interesting window'
+        start_time = eto_ref - self.errorstart
 
-        # --- enroute start is dep_end (dus SID als die er is, anders FIR/IAF/nu) ---
-        enr_start = dep_end
+        # Only apply drift once we are inside the window
+        in_window = start_time.notna() & (t >= start_time)
 
-        # enroute end: FIR (als die er is), anders 0 enroute (want jij wil binnen FIR niets aanpassen)
+        # End of enroute drift: FIR if known else eto_ref
+        enr_end = FIR.where(FIR.notna(), eto_ref)
+
+        # Departure elapsed (only if SID exists): start_time -> min(now, min(SID, enr_end))
+        elapsed_dep = pd.Series(0.0, index=self.Flights.index, dtype=float)
+        dep_ok = in_window & SID.notna() & enr_end.notna()
+        if dep_ok.any():
+            dep_end = np.minimum(SID.loc[dep_ok], enr_end.loc[dep_ok])
+            elapsed_dep.loc[dep_ok] = (np.minimum(t, dep_end) - start_time.loc[dep_ok]).clip(lower=0.0)
+
+        # Enroute elapsed:
+        # - if SID exists: max(SID, start_time) -> min(now, enr_end)
+        # - if SID missing: start_time -> min(now, enr_end)
         elapsed_enr = pd.Series(0.0, index=self.Flights.index, dtype=float)
-        enr_ok = FIR.notna() & enr_start.notna()
+        enr_ok = in_window & enr_end.notna()
+        if enr_ok.any():
+            enr_start = start_time.loc[enr_ok]
+            sid_here = SID.loc[enr_ok]
+            enr_start = enr_start.where(sid_here.isna(), np.maximum(sid_here, enr_start))
+            elapsed_enr.loc[enr_ok] = (np.minimum(t, enr_end.loc[enr_ok]) - enr_start).clip(lower=0.0)
 
-        # elapsed enroute: enr_start -> min(now, FIR)
-        elapsed_enr.loc[enr_ok] = (np.minimum(t, FIR.loc[enr_ok]) - enr_start.loc[enr_ok]).clip(lower=0.0)
-        elapsed_enr = elapsed_enr.fillna(0.0)
+        # FIR elapsed:
+        # - only if FIR entry exists: max(FIR, start_time) -> min(now, eto_ref)
+        elapsed_fir = pd.Series(0.0, index=self.Flights.index, dtype=float)
+        fir_ok = in_window & FIR.notna() & eto_ref.notna()
+        if fir_ok.any():
+            fir_start = np.maximum(FIR.loc[fir_ok], start_time.loc[fir_ok])
+            elapsed_fir.loc[fir_ok] = (np.minimum(t, eto_ref.loc[fir_ok]) - fir_start).clip(lower=0.0)
 
-        drift_seconds = elapsed_dep * (Edep / 100.0) + elapsed_enr * (Eenr / 100.0)
+        drift_seconds = (elapsed_dep * (Edep / 100.0)) + (elapsed_enr * (Eenr / 100.0)) + (elapsed_fir * (Efir / 100.0))
         drift_seconds = drift_seconds.astype(float).fillna(0.0)
 
         # For debugging/plots
         self.Flights['Time error'] = drift_seconds
-        # print('drift: ', drift_seconds)
 
-        # Drift TP values toward realized times
-        self.Flights['ETO IAF'] = self.Flights['TP IAF'] + drift_seconds
-        if 'TP ETA_base' in self.Flights.columns:
-            self.Flights['ETA'] = self.Flights['TP ETA'] + drift_seconds
+        # Only update ETO IAF where TP IAF exists
+        m_tp = self.Flights['TP IAF'].notna()
+        self.Flights.loc[m_tp, 'ETO IAF'] = self.Flights.loc[m_tp, 'TP IAF'] + drift_seconds.loc[m_tp]
 
+        # Only update ETA if TP ETA exists
+        if 'TP ETA' in self.Flights.columns:
+            m = self.Flights['TP ETA'].notna()
+            if m.any():
+                self.Flights.loc[m, 'ETA'] = self.Flights.loc[m, 'TP ETA'] + drift_seconds.loc[m]
 
         # AMAN values based on drifted TP
-        # self.Flights['ETO IAF'] = self.Flights['TP IAF']
         self.Flights['ETA'] = self.Flights['ETO IAF'] + self.Flights['TMA']
 
         # Apply percentile_time offset (minutes -> seconds), NaN treated as 0
@@ -132,17 +139,9 @@ class ErrorHandler:
     # =========================
     def update_traf_gsfactor_from_flights(self, Flights, simt: float):
         """
-        Phases (as requested):
-          - SID error applies from creation -> ALTCROSS CLIMB time (= Flights['SID'])
-          - enroute error applies from ALTCROSS CLIMB (=SID) -> FIR entry (=Flights['FIR entry'])
-          - within FIR: DO NOTHING (factor = 1.0)
-
-        Requires Flights index = ACID, and columns:
-          'creation', 'SID', 'FIR entry', 'E_dep', 'E_enroute'
-
-        Sign convention used here:
-          - E > 0  => slower => factor = 1 - E/100
-          - If you want E > 0 => faster: change to 1 + E/100
+        Updated phases:
+          - Error is applied starting from 5 min before freezehorizon window, anchored at ETO IAF (or TP IAF).
+          - If SID is missing, enroute error is applied immediately.
         """
         n = traf.ntraf
         if n == 0:
@@ -150,34 +149,59 @@ class ErrorHandler:
 
         ids = np.array([str(a).upper() for a in traf.id], dtype=object)
 
-        cols = ['creation', 'SID', 'FIR entry', 'E_dep', 'E_enroute']
+        cols = ['SID', 'FIR entry', 'E_dep', 'E_enroute', 'E_fir', 'ETO IAF', 'TP IAF']
         sub = Flights.reindex(ids)[cols]
 
-        TO = sub['creation'].to_numpy(dtype=float)
         SID = sub['SID'].to_numpy(dtype=float)
         FIR = sub['FIR entry'].to_numpy(dtype=float)
 
         Edep = sub['E_dep'].to_numpy(dtype=float)
         Eenr = sub['E_enroute'].to_numpy(dtype=float)
+        Efir = sub['E_fir'].to_numpy(dtype=float)
+
+        eto = sub['ETO IAF'].to_numpy(dtype=float)
+        tp_iaf = sub['TP IAF'].to_numpy(dtype=float)
 
         t = float(simt)
 
-        has_TO = np.isfinite(TO)
         has_SID = np.isfinite(SID)
         has_FIR = np.isfinite(FIR)
 
-        # creation -> SID
-        dep_mask = has_TO & has_SID & (t >= TO) & (t < SID)
+        # Reference time to anchor the 'interesting window'
+        # Prefer ETO IAF, fall back to TP IAF
+        eto_ref = np.where(np.isfinite(eto), eto, tp_iaf)
+        has_eto_ref = np.isfinite(eto_ref)
 
-        # SID -> FIR
-        enr_mask = has_SID & has_FIR & (t >= SID) & (t < FIR)
+        # Start applying error only from 5 minutes before the freeze horizon window
+        # window_start = eto_ref - (freezehorizon + 5 min)
+        window_start = eto_ref - (float(self.freezehorizon) + 5.0 * 60.0)
+        active = has_eto_ref & (t >= window_start)
+
+        # End of enroute scaling: at FIR entry if known, otherwise at eto_ref
+        enr_end = np.where(has_FIR, FIR, eto_ref)
+
+        # If SID exists: departure error until SID (but not past enr_end)
+        dep_end = np.where(has_SID, np.minimum(SID, enr_end), np.nan)
+        dep_mask = active & has_SID & (t < dep_end)
+
+        # Enroute error:
+        # - If SID exists: from SID to enr_end
+        # - If SID missing: from window_start to enr_end (i.e. use enroute error immediately)
+        enr_start = np.where(has_SID, np.maximum(SID, window_start), window_start)
+        enr_mask = active & (t >= enr_start) & (t < enr_end)
+
+        # FIR error:
+        # - only if FIR entry exists: from max(FIR, window_start) to eto_ref
+        fir_start = np.where(has_FIR, np.maximum(FIR, window_start), np.nan)
+        fir_mask = active & has_FIR & (t >= fir_start) & (t < eto_ref)
 
         factor = np.ones(n, dtype=float)
         factor[dep_mask] = 1.0 - (Edep[dep_mask] / 100.0)
         factor[enr_mask] = 1.0 - (Eenr[enr_mask] / 100.0)
+        factor[fir_mask] = 1.0 - (Efir[fir_mask] / 100.0)
 
         # safety
-        factor = np.clip(factor, 0.2, 2.0)
+        factor = np.clip(factor, self.min_groundspeed_factor, self.max_groundspeed_factor)
         factor[~np.isfinite(factor)] = 1.0
 
         traf.gsfactor = factor
