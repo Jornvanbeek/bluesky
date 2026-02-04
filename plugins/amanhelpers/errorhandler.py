@@ -72,6 +72,16 @@ class ErrorHandler:
         Eenr = self.Flights['E_enroute'].astype(float).fillna(0.0)
         Efir = self.Flights['E_fir'].astype(float).fillna(0.0) if 'E_fir' in self.Flights.columns else pd.Series(0.0, index=self.Flights.index)
 
+        # If a mach/adjacent instruction has occurred (not in the future), switch to E_fir instead of E_enroute.
+        # We detect this via the accumulated delay columns created in ATC.store_delay / instruction_correct.
+        instr_cols = ['delay mach', 'short mach', 'delay adjacent', 'short adjacent']
+        instr_happened = pd.Series(False, index=self.Flights.index)
+        for c in instr_cols:
+            if c in self.Flights.columns:
+                instr_happened = instr_happened | (self.Flights[c].fillna(0.0).astype(float) != 0.0)
+        # Effective enroute error: use E_fir after instruction happened
+        Eenr_eff = Eenr.where(~instr_happened, Efir)
+
         # Anchor for window start: prefer ETO IAF, else TP IAF
         eto_ref = eto.where(eto.notna(), tp_iaf)
 
@@ -110,7 +120,7 @@ class ErrorHandler:
             fir_start = np.maximum(FIR.loc[fir_ok], start_time.loc[fir_ok])
             elapsed_fir.loc[fir_ok] = (np.minimum(t, eto_ref.loc[fir_ok]) - fir_start).clip(lower=0.0)
 
-        drift_seconds = (elapsed_dep * (Edep / 100.0)) + (elapsed_enr * (Eenr / 100.0)) + (elapsed_fir * (Efir / 100.0))
+        drift_seconds = (elapsed_dep * (Edep / 100.0)) + (elapsed_enr * (Eenr_eff / 100.0)) + (elapsed_fir * (Efir / 100.0))
         drift_seconds = drift_seconds.astype(float).fillna(0.0)
 
         # For debugging/plots
@@ -149,7 +159,8 @@ class ErrorHandler:
 
         ids = np.array([str(a).upper() for a in traf.id], dtype=object)
 
-        cols = ['SID', 'FIR entry', 'E_dep', 'E_enroute', 'E_fir', 'ETO IAF', 'TP IAF']
+        cols = ['SID', 'FIR entry', 'E_dep', 'E_enroute', 'E_fir', 'ETO IAF', 'TP IAF',
+                'delay mach', 'short mach', 'delay adjacent', 'short adjacent']
         sub = Flights.reindex(ids)[cols]
 
         SID = sub['SID'].to_numpy(dtype=float)
@@ -161,6 +172,15 @@ class ErrorHandler:
 
         eto = sub['ETO IAF'].to_numpy(dtype=float)
         tp_iaf = sub['TP IAF'].to_numpy(dtype=float)
+
+        # If a mach/adjacent instruction has occurred, use E_fir instead of E_enroute for the enroute phase.
+        n = len(SID)
+        dm = sub['delay mach'].to_numpy(dtype=float) if 'delay mach' in sub.columns else np.full(n, np.nan)
+        sm = sub['short mach'].to_numpy(dtype=float) if 'short mach' in sub.columns else np.full(n, np.nan)
+        da = sub['delay adjacent'].to_numpy(dtype=float) if 'delay adjacent' in sub.columns else np.full(n, np.nan)
+        sa = sub['short adjacent'].to_numpy(dtype=float) if 'short adjacent' in sub.columns else np.full(n, np.nan)
+        instr_happened = (np.nan_to_num(dm) != 0.0) | (np.nan_to_num(sm) != 0.0) | (np.nan_to_num(da) != 0.0) | (np.nan_to_num(sa) != 0.0)
+        Eenr_eff = np.where(instr_happened, Efir, Eenr)
 
         t = float(simt)
 
@@ -197,7 +217,7 @@ class ErrorHandler:
 
         factor = np.ones(n, dtype=float)
         factor[dep_mask] = 1.0 - (Edep[dep_mask] / 100.0)
-        factor[enr_mask] = 1.0 - (Eenr[enr_mask] / 100.0)
+        factor[enr_mask] = 1.0 - (Eenr_eff[enr_mask] / 100.0)
         factor[fir_mask] = 1.0 - (Efir[fir_mask] / 100.0)
 
         # safety
