@@ -161,7 +161,14 @@ class ErrorHandler:
 
         cols = ['SID', 'FIR entry', 'E_dep', 'E_enroute', 'E_fir', 'ETO IAF', 'TP IAF',
                 'delay mach', 'short mach', 'delay adjacent', 'short adjacent']
-        sub = Flights.reindex(ids)[cols]
+
+        # Safe column selection: at sim start these instruction columns may not exist yet
+        sub = Flights.reindex(ids).reindex(columns=cols)
+
+        # Fill missing instruction columns with 0.0 (meaning: no past instruction)
+        for c in ('delay mach', 'short mach', 'delay adjacent', 'short adjacent'):
+            if c in sub.columns:
+                sub[c] = sub[c].fillna(0.0)
 
         SID = sub['SID'].to_numpy(dtype=float)
         FIR = sub['FIR entry'].to_numpy(dtype=float)
