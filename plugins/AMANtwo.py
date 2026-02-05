@@ -1023,15 +1023,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
                 replan_df = pd.concat(parts, axis=0)
 
-                    # if any(issubclass(wi.category, FutureWarning) for wi in w):
-                    #     print("FutureWarning in pd.concat(parts) during replan_late")
-                    #     print('replanning: ', acid)
-                    #     print(later)
-                    #     print(later.iloc[:i])
-                    #     print(row_replan_df)
-                    #     print(later.iloc[i:])
-                    #
-                    #     sim.hold()
+
                 replanned = True
                 break
             else:
@@ -1042,16 +1034,38 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             replan_df = pd.concat([later, row_replan_df], axis=0)
             replanned = True
 
-        if noswap:
-            if self.dynamic_LIV:
-                separation = float(
-                    self.LIV_separation.required_separation(last_assigned_flight, last_assigned_type, acid, row_replan['type']))
+        if noswap and (not later.empty):
+            # 1) bepaal newslot van replanned flight t.o.v. voorganger
+            if last_assigned_slot is None:
+                sep_prev = 0.0
+                newslot = float(row_replan['ETA']) - float(self.late_approach_margin)
             else:
-                separation = float(self.separation)
-            newslot = max(last_assigned_slot + separation, row_replan['ETA'] - self.late_approach_margin)
-            nextslot = replan_df.loc[1,'slot']
-            sep = replan_df.loc[1, 'slot']
-            if newslot + sep < nextslot:
+                if self.dynamic_LIV:
+                    sep_prev = float(self.LIV_separation.required_separation(
+                        last_assigned_flight, last_assigned_type, acid, row_replan['type']
+                    ))
+                else:
+                    sep_prev = float(self.separation)
+
+                newslot = max(
+                    float(last_assigned_slot) + sep_prev,
+                    float(row_replan['ETA']) - float(self.late_approach_margin)
+                )
+
+            # 2) bepaal required separation van replanned -> volgende vlucht
+            next_flight = later.index[0]
+            nextrow = later.iloc[0]
+            nextslot = float(nextrow['slot'])
+
+            if self.dynamic_LIV:
+                sep_next = float(self.LIV_separation.required_separation(
+                    acid, row_replan['type'], next_flight, nextrow['type']
+                ))
+            else:
+                sep_next = float(self.separation)
+
+            # 3) als het past: alleen replanned flight updaten; rest NIET replannen
+            if (newslot + sep_next) <= nextslot:
                 replan_df = row_replan_df
 
 
