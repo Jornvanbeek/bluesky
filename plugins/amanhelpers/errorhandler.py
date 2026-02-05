@@ -58,15 +58,40 @@ class ErrorHandler:
         - Drift starts at 'interesting window' (ETO IAF - (freezehorizon + 5 min)), not at creation.
         - Enroute error is applied immediately if SID is missing.
         - Drift TP values toward realized times using elapsed segment time.
+        - Resets drift window if TP IAF is updated (TP-update reset behavior).
         """
 
         t = float(sim.simt)
+
+        # --- bookkeeping columns for TP update reset logic ---
+        for c in ('TP IAF initial', 'TP IAF last', 'TP IAF last_update'):
+            if c not in self.Flights.columns:
+                self.Flights[c] = np.nan
 
         SID = self.Flights['SID'].astype(float)
         FIR = self.Flights['FIR entry'].astype(float)
 
         tp_iaf = self.Flights['TP IAF'].astype(float)
         eto = self.Flights['ETO IAF'].astype(float) if 'ETO IAF' in self.Flights.columns else pd.Series(np.nan, index=self.Flights.index)
+
+        # TP IAF update reset logic
+        # Set TP IAF initial once (first time a valid TP IAF is available)
+        m_init = self.Flights['TP IAF initial'].isna() & tp_iaf.notna()
+        if m_init.any():
+            self.Flights.loc[m_init, 'TP IAF initial'] = tp_iaf.loc[m_init]
+
+        # Detect TP IAF updates (value changed). On update: reset accumulated drift to 0
+        tp_last = self.Flights['TP IAF last'].astype(float)
+        m_first_last = tp_last.isna() & tp_iaf.notna()
+        if m_first_last.any():
+            self.Flights.loc[m_first_last, 'TP IAF last'] = tp_iaf.loc[m_first_last]
+            self.Flights.loc[m_first_last, 'TP IAF last_update'] = t
+
+        tp_last = self.Flights['TP IAF last'].astype(float)
+        m_changed = tp_iaf.notna() & tp_last.notna() & (tp_iaf != tp_last)
+        if m_changed.any():
+            self.Flights.loc[m_changed, 'TP IAF last'] = tp_iaf.loc[m_changed]
+            self.Flights.loc[m_changed, 'TP IAF last_update'] = t
 
         Edep = self.Flights['E_dep'].astype(float).fillna(0.0)
         Eenr = self.Flights['E_enroute'].astype(float).fillna(0.0)
@@ -86,7 +111,15 @@ class ErrorHandler:
         eto_ref = eto.where(eto.notna(), tp_iaf)
 
         # Start time of the 'interesting window'
-        start_time = eto_ref - self.errorstart
+        window_start = eto_ref - self.errorstart
+
+        # If TP IAF has been updated, accumulated drift must restart at the update time
+        # Use the later of (window_start) and (TP IAF last_update)
+        tp_upd = self.Flights['TP IAF last_update'].astype(float)
+        start_time = window_start
+        m_has_upd = tp_upd.notna() & start_time.notna()
+        if m_has_upd.any():
+            start_time.loc[m_has_upd] = np.maximum(start_time.loc[m_has_upd], tp_upd.loc[m_has_upd])
 
         # Only apply drift once we are inside the window
         in_window = start_time.notna() & (t >= start_time)
@@ -136,7 +169,7 @@ class ErrorHandler:
             if m.any():
                 self.Flights.loc[m, 'ETA'] = self.Flights.loc[m, 'TP ETA'] + drift_seconds.loc[m]
 
-        # AMAN values based on drifted TP
+        # AMAN values based on drifted ETO (TMA must remain fixed)
         self.Flights['ETA'] = self.Flights['ETO IAF'] + self.Flights['TMA']
 
         # Apply percentile_time offset (minutes -> seconds), NaN treated as 0
@@ -152,6 +185,7 @@ class ErrorHandler:
         Updated phases:
           - Error is applied starting from 5 min before freezehorizon window, anchored at ETO IAF (or TP IAF).
           - If SID is missing, enroute error is applied immediately.
+          - If TP IAF is updated, restart factor window from update time.
         """
         n = traf.ntraf
         if n == 0:
@@ -160,6 +194,7 @@ class ErrorHandler:
         ids = np.array([str(a).upper() for a in traf.id], dtype=object)
 
         cols = ['SID', 'FIR entry', 'E_dep', 'E_enroute', 'E_fir', 'ETO IAF', 'TP IAF',
+                'TP IAF last', 'TP IAF last_update',
                 'delay mach', 'short mach', 'delay adjacent', 'short adjacent']
 
         # Safe column selection: at sim start these instruction columns may not exist yet
@@ -179,6 +214,9 @@ class ErrorHandler:
 
         eto = sub['ETO IAF'].to_numpy(dtype=float)
         tp_iaf = sub['TP IAF'].to_numpy(dtype=float)
+
+        # Read TP IAF last_update for TP-update reset logic
+        tp_last_update = sub['TP IAF last_update'].to_numpy(dtype=float) if 'TP IAF last_update' in sub.columns else np.full(n, np.nan)
 
         # If a mach/adjacent instruction has occurred, use E_fir instead of E_enroute for the enroute phase.
         n = len(SID)
@@ -200,9 +238,14 @@ class ErrorHandler:
         has_eto_ref = np.isfinite(eto_ref)
 
         # Start applying error only from 5 minutes before the freeze horizon window
-        # window_start = eto_ref - (freezehorizon + 5 min)
         window_start = eto_ref - (float(self.freezehorizon) + 5.0 * 60.0)
-        active = has_eto_ref & (t >= window_start)
+
+        # Restart factor application after TP IAF update: effective start is max(window_start, tp_last_update)
+        eff_start = window_start
+        has_upd = np.isfinite(tp_last_update)
+        eff_start = np.where(has_upd, np.maximum(eff_start, tp_last_update), eff_start)
+
+        active = has_eto_ref & (t >= eff_start)
 
         # End of enroute scaling: at FIR entry if known, otherwise at eto_ref
         enr_end = np.where(has_FIR, FIR, eto_ref)
@@ -213,13 +256,13 @@ class ErrorHandler:
 
         # Enroute error:
         # - If SID exists: from SID to enr_end
-        # - If SID missing: from window_start to enr_end (i.e. use enroute error immediately)
-        enr_start = np.where(has_SID, np.maximum(SID, window_start), window_start)
+        # - If SID missing: from eff_start to enr_end (i.e. use enroute error immediately)
+        enr_start = np.where(has_SID, np.maximum(SID, eff_start), eff_start)
         enr_mask = active & (t >= enr_start) & (t < enr_end)
 
         # FIR error:
-        # - only if FIR entry exists: from max(FIR, window_start) to eto_ref
-        fir_start = np.where(has_FIR, np.maximum(FIR, window_start), np.nan)
+        # - only if FIR entry exists: from max(FIR, eff_start) to eto_ref
+        fir_start = np.where(has_FIR, np.maximum(FIR, eff_start), np.nan)
         fir_mask = active & has_FIR & (t >= fir_start) & (t < eto_ref)
 
         factor = np.ones(n, dtype=float)

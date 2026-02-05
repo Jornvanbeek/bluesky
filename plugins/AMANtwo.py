@@ -19,14 +19,12 @@ import random
 import time
 from bluesky.tools.aero import ft
 
-# voeg toe bij de imports bovenaan
+
 from plugins.amanhelpers.amanpredictionhandler import PredictionHandler
 from plugins.amanhelpers.errorhandler import ErrorHandler
 from plugins.amanhelpers.amanexport import AmanExporter
+import warnings
 
-
-#from bluesky.ui.palette import initialized
-#from plugins.trajectory_predictor_new import total_pred_signals
 
 # AMAN = None
 def init_plugin():
@@ -1013,12 +1011,27 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         replan_df = None
         row_replan_df = row_replan.to_frame().T
         row_replan_df.index = [acid]
+        noswap = False
 
         for i, (flight, row) in enumerate(later.iterrows()):
-            if ETA <= row['slot'] and not replanned:
+            if (ETA <= row['slot'] and ETA < row['ETA'] - self.late_approach_margin) and not replanned:
                 parts = [later.iloc[:i], row_replan_df, later.iloc[i:]]
-                parts = [p for p in parts if not p.empty]
+                # parts = [p for p in parts if not p.empty]
+                if len(later.iloc[:i]) == 0 or later.iloc[:i].empty:
+                    parts = [row_replan_df, later.iloc[i:]]
+                    noswap = True
+
                 replan_df = pd.concat(parts, axis=0)
+
+                    # if any(issubclass(wi.category, FutureWarning) for wi in w):
+                    #     print("FutureWarning in pd.concat(parts) during replan_late")
+                    #     print('replanning: ', acid)
+                    #     print(later)
+                    #     print(later.iloc[:i])
+                    #     print(row_replan_df)
+                    #     print(later.iloc[i:])
+                    #
+                    #     sim.hold()
                 replanned = True
                 break
             else:
@@ -1028,6 +1041,19 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         if replan_df is None:
             replan_df = pd.concat([later, row_replan_df], axis=0)
             replanned = True
+
+        if noswap:
+            if self.dynamic_LIV:
+                separation = float(
+                    self.LIV_separation.required_separation(last_assigned_flight, last_assigned_type, acid, row_replan['type']))
+            else:
+                separation = float(self.separation)
+            newslot = max(last_assigned_slot + separation, row_replan['ETA'] - self.late_approach_margin)
+            nextslot = replan_df.loc[1,'slot']
+            sep = replan_df.loc[1, 'slot']
+            if newslot + sep < nextslot:
+                replan_df = row_replan_df
+
 
         for f, r in replan_df.iterrows():
             if last_assigned_slot is None:

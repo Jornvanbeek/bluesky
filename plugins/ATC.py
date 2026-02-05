@@ -209,6 +209,7 @@ class ATC(core.Entity):
 
                     # print(f'HOLDING AT {acid} {iaf} {ttlg}')
                     stack.stack(f'ECHO HOLDING {acid} at {iaf}')
+
                     self.aman.Flights.at[acid, 'holding'] = True
 
 
