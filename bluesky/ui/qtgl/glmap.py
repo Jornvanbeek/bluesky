@@ -64,6 +64,7 @@ class Map(glh.RenderObject, layer=-100):
                 print(f'Loading texture {fname}')
                 self.map.create(vertex=mapvertices,
                                 texcoords=texcoords, texture=fname)
+                print('texture loaded')
                 break
 
     def draw(self, skipmap=False):

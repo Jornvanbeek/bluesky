@@ -175,7 +175,11 @@ class Holding(core.Entity):
         expected_tas, cas, mach = aero.vcasormach(calculation_spd, calculation_alt)
 
         # Calculate the wind correction
-        vnorth, veast = traf.wind.getdata(traf.ap.route[acid].wplat[index], traf.ap.route[acid].wplon[index], calculation_alt)
+        try:
+            vnorth, veast = traf.wind.getdata(traf.ap.route[acid].wplat[index], traf.ap.route[acid].wplon[index], calculation_alt)
+        except:
+            vnorth = 0
+            veast = 0
         windspeed, angle = np.hypot(vnorth, veast), np.rad2deg(np.arctan2(veast, vnorth)) % 360
         perpendicular_wind = np.sin(np.deg2rad(angle) - self.holdingpatterns[wpt][0]) * windspeed
         correction = np.rad2deg(np.arctan(perpendicular_wind / expected_tas))
