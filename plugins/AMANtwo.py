@@ -327,14 +327,15 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                     low_alt.append(acid)
             if low_alt:
                 self.Flights.loc[low_alt, 'planningstate'] = 'new'
-        elif plannertype == 'DELAY':
-            mask_popup = (
-                    (self.Flights['planningstate'].isin(['new']))
-                    & ((self.Flights['ETO IAF'] - sim.simt) < self.freezehorizon)
-            )
 
-            # Default: mark as POPUP
-            self.Flights.loc[mask_popup, 'planningstate'] = 'POPUP'
+            elif plannertype in ('DELAY', 'BACK'):
+                mask_popup = (
+                        (self.Flights['planningstate'].isin(['new']))
+                        & ((self.Flights['ETO IAF'] - sim.simt) < self.freezehorizon)
+                )
+
+                # Default: mark as POPUP
+                self.Flights.loc[mask_popup, 'planningstate'] = 'POPUP'
 
         mask_early = (
                 (self.Flights['planningstate'].isin(['early popup']))
@@ -415,7 +416,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
 
 
-        elif plannertype == 'DELAY':
+        elif plannertype in ('DELAY', 'BACK'):
 
             airborne_popup = (
                     (self.Flights['planningstate'] == 'POPUP')
@@ -455,7 +456,10 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 self.update_popup_entry(acid) #function for color, error at freeze etc.
             # Ensure object dtype before assignment to avoid FutureWarning
             self.Flights['planningtype'] = self.Flights['planningtype'].astype('object')
-            self.Flights.loc[airborne_popup, 'planningtype'] = 'airborne'
+            if plannertype == 'BACK':
+                self.Flights.loc[airborne_popup, 'planningtype'] = 'back of the line'
+            else:
+                self.Flights.loc[airborne_popup, 'planningtype'] = 'airborne'
 
 
     def replan_late_popup(self, acid):
@@ -1165,11 +1169,12 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
     @stack.command
     def popup_planner(self, planner: str):
-        """Set popup planner. Usage: POPUP_PLANNER FCFS|DELAY"""
+        """Set popup planner. Usage: POPUP_PLANNER FCFS|DELAY|BACK"""
         p = str(planner).strip().upper()
-        if p not in ('FCFS', 'DELAY'):
-            stack.stack("ECHO POPUPPLANNER expects 'FCFS' or 'DELAY'. Got:", planner)
+        if p not in ('FCFS', 'DELAY', 'BACK'):
+            stack.stack("ECHO POPUPPLANNER expects 'FCFS', 'DELAY', or 'BACK'. Got:", planner)
             return
+
         # Keep both the instance attribute and the settings module in sync
         self.popup_planner = p
         stack.stack(f"ECHO planner set to {self.popup_planner}")
