@@ -216,9 +216,9 @@ class PredictionHandler:
                 print('popup created, should manage dataframe entry')
 
     @stack.command
-    def usecache_aman(self):
+    def usecache_aman(self, picklename):
         if not self.aman_parent_id:
-            cache = self.open_cache()
+            cache = self.open_cache(picklename.lower())
             self.not_spawned = cache
             self.regenerate_errors()
             # print('regenerate errors?')
@@ -226,10 +226,10 @@ class PredictionHandler:
             self.use_cache = True
 
 
-    def open_cache(self):
+    def open_cache(self,picklename):
         try:
             # Open and load the predictions_cache file
-            with open('predictions_cache.pkl', 'rb') as f:
+            with open(f'prediction_cache/{picklename}.pkl', 'rb') as f:
                 predictions = pickle.load(f)
             # Open and load the commands file
         except FileNotFoundError:

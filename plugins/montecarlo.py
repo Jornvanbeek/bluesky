@@ -78,7 +78,7 @@ class monte_carlo(core.Entity):
 
 
     @stack.command
-    def montecarlo(self, scenario: str, runs:int, maxnodes:int, usecache:bool=False, startseed:int=0, maxtime='5:00:00', title=None):
+    def montecarlo(self, scenario: str, runs:int, maxnodes:int, usecache:bool=False, cachename:str='predictions_cache', startseed:int=0, maxtime='5:00:00', title=None):
         rows = []
         for i in range(int(runs)):
             rows.append({
@@ -86,6 +86,7 @@ class monte_carlo(core.Entity):
                 'run': i,
                 'seed': startseed + i,
                 'usecache': usecache,
+                'cachename': cachename,
                 'node': None,
                 'status': 'backlog',
                 'maxtime': maxtime
@@ -143,6 +144,7 @@ class monte_carlo(core.Entity):
         run = row['run']
         seed = row['seed']
         usecache = row['usecache']
+        cachename = row['cachename']
         maxtime = row['maxtime']
 
         self.batch.at[job_id, 'status'] = 'running'
@@ -156,7 +158,7 @@ class monte_carlo(core.Entity):
         stack.forward(f'SCEN {seed}_{scenario}', target_id=node_id)
         stack.forward(f'SEED {seed}', target_id=node_id)
         if usecache:
-            stack.forward(f'USECACHE {scenario}', target_id=node_id)
+            stack.forward(f'USECACHE {scenario} {cachename}', target_id=node_id)
         else:
             stack.forward(f'PCALL {scenario}', target_id=node_id)
         stack.forward(f'SCHEDULE {maxtime} MC FINISHED', target_id=node_id)

@@ -677,22 +677,22 @@ class Predictor(core.Entity):
                 stack.forward('ff', target_id=self.child_id)
 
     @stack.command
-    def usecache(self, scenario = 'scenariotest'):
+    def usecache(self, scenario = 'scenariotest', picklename = 'predictions_cache'):
         # print('usecache called')
         if not self.parent_id:
             # stack.stack('ECHO is cache used for predictions??')
             # print('i have no parent id in usecache')
-            cache = self.open_cache()
+            cache = self.open_cache(picklename.lower())
             self.predicted_ac_not_spawned = cache
             self.predictions_cache = cache
             self.use_cache = True
             # stack.stack('ECHO cache is used for predictions??')
             stack.stack(f'PCALL {scenario}')
-            stack.stack('USECACHE_AMAN')
+            stack.stack(f'USECACHE_AMAN {picklename}' )
             stack.stack('FF')
             stack.forward(f'DT {self.tp_dt}', target_id=self.child_id)
             stack.forward('FF', target_id=self.child_id)
-            self.complete()
+            self.complete(store = False)
 
     # @stack.command
     # def REMOVEWPTS(self,acid):
@@ -703,10 +703,10 @@ class Predictor(core.Entity):
     #                 traf.ap.route[idxac].delwpt(idxac, name)
 
 
-    def open_cache(self):
+    def open_cache(self, picklename):
         try:
             # Open and load the predictions_cache file
-            with open('predictions_cache.pkl', 'rb') as f:
+            with open(f'prediction_cache/{picklename}.pkl', 'rb') as f:
                 predictions = pickle.load(f)
             # Open and load the commands file
         except FileNotFoundError:
@@ -717,7 +717,7 @@ class Predictor(core.Entity):
 
 
     @stack.command
-    def complete(self):
+    def complete(self, store = True):
         self.predictions_complete = True
         stack.stack('ECHO PREDICTOR COMPLETE')
         if self.parent_id:
@@ -725,10 +725,14 @@ class Predictor(core.Entity):
             # stack.stack('HOLD')
         elif self.child_id:
             stack.stack('STOREFLIGHTS')
-            with open(r'predictions_cache.pkl', 'wb') as f:
-                pickle.dump(self.predictions_cache, f)
-            with open(r'commands.pkl', 'wb') as f:
-                pickle.dump(self.commands_per_flight, f)
+            scenname = stack.get_scenname()
+            if len(scenname) ==0:
+                scenname = 'predictions_cache'
+            if store:
+                with open(f'prediction_cache/{scenname}.pkl', 'wb') as f:
+                    pickle.dump(self.predictions_cache, f)
+                with open(r'commands.pkl', 'wb') as f:
+                    pickle.dump(self.commands_per_flight, f)
             # stack.stack('FF 3270')
 
 
