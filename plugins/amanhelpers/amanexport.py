@@ -267,6 +267,21 @@ class AmanExporter():
         s_delay_dogleg = get_num('delay dogleg')
         s_short_dogleg = get_num('short dogleg')
 
+        # --- Low-level delay absorption (LLDA) ---
+        # LLDA = delay dogleg + holding delay (if available)
+        s_holding_delay = get_num_any(['delay holding', 'holding_delay', 'holding delay'])
+
+        # If no explicit holding-delay column exists, treat it as 0 (can't sum holding in seconds from a bool)
+        if s_holding_delay.isna().all():
+            s_holding_delay = pd.Series(0.0, index=df.index)
+
+        s_llda = s_delay_dogleg.fillna(0.0) + s_holding_delay.fillna(0.0)
+
+        # --- Instruction counts: mach / adjacent ---
+        has_mach_instr = (s_delay_mach.notna()) & (s_delay_mach != 0)
+        has_adj_instr  = (s_short_adj.notna()) & (s_short_adj != 0)
+        has_mach_or_adj = has_mach_instr | has_adj_instr
+
         # Slot changes
         s_slot = get_num('slot')
         s_islot = get_num('initialslot')
@@ -284,9 +299,21 @@ class AmanExporter():
         # FH margin at freeze (optional column; multiple possible names)
         s_fh_margin_freeze = get_num('fh_margin_at_freeze')
 
-        denom = s_tw.replace(0, np.nan)
-        pct_xw = (s_xw / denom) * 100.0
-        pct_xw_clean = pct_xw.replace([np.inf, -np.inf], np.nan)
+        # --- Extrawork percentage (system-level) ---
+        # Instead of averaging per-flight percentages, compute the ratio of sums:
+        # pct = sum(extrawork) / sum(totalwork) * 100
+        sum_tw = float(s_tw.fillna(0).sum())
+        sum_xw = float(s_xw.fillna(0).sum())
+        pct_xw_system = (sum_xw / sum_tw) * 100.0 if sum_tw > 0 else np.nan
+
+        # Also compute the same ratio-of-sums for popup / non-popup subsets (if available)
+        sum_tw_popup = float(s_tw[is_popup].fillna(0).sum()) if 'is_popup' in locals() else 0.0
+        sum_xw_popup = float(s_xw[is_popup].fillna(0).sum()) if 'is_popup' in locals() else 0.0
+        pct_xw_system_popup = (sum_xw_popup / sum_tw_popup) * 100.0 if sum_tw_popup > 0 else np.nan
+
+        sum_tw_nonpopup = float(s_tw[is_nonpopup].fillna(0).sum()) if 'is_nonpopup' in locals() else 0.0
+        sum_xw_nonpopup = float(s_xw[is_nonpopup].fillna(0).sum()) if 'is_nonpopup' in locals() else 0.0
+        pct_xw_system_nonpopup = (sum_xw_nonpopup / sum_tw_nonpopup) * 100.0 if sum_tw_nonpopup > 0 else np.nan
 
         # popup masks (optional column)
         popup_col = df.get('popup')
@@ -313,7 +340,7 @@ class AmanExporter():
 
         return {
             # --- Top: extrawork percentage ---
-            'mean_pct_extrawork': float(pct_xw_clean.mean(skipna=True)),
+            'pct_extrawork': float(pct_xw_system),
 
             # --- Scenario / AMAN settings snapshot ---
             'freezehorizon': float(setting_freezehorizon) if setting_freezehorizon is not None else None,
@@ -346,9 +373,8 @@ class AmanExporter():
 
             # --- EAT_updates stats ---
             'min_EAT_updates': _min(s_eat_updates) if s_eat_updates.notna().any() else np.nan,
-            'mean_EAT_updates': _mean(s_eat_updates),
             'max_EAT_updates': _max(s_eat_updates) if s_eat_updates.notna().any() else np.nan,
-            'mean_EAT_updates_nonzero': _mean_nonzero(s_eat_updates),
+            'total_EAT_updates': float(s_eat_updates.fillna(0).sum()),
 
             # --- Swaps stats (plus sums) ---
             'min_swaps': _min(s_swaps) if s_swaps.notna().any() else np.nan,
@@ -380,6 +406,17 @@ class AmanExporter():
             'min_totalspeedup': _min(s_totalspeedup) if s_totalspeedup.notna().any() else np.nan,
             'mean_totalspeedup': _mean(s_totalspeedup),
             'mean_totalspeedup_nonzero': _mean_nonzero(s_totalspeedup),
+
+            # --- LLDA stats ---
+            'mean_LLDA': _mean(s_llda),
+            'max_LLDA': _max(s_llda) if s_llda.notna().any() else np.nan,
+            'mean_LLDA_nonzero': _mean_nonzero(s_llda),
+            'count_LLDA_nonzero': _count_nonzero(s_llda),
+
+            # --- Instruction presence counts (per flight) ---
+            'count_flights_with_mach_instr': int(has_mach_instr.sum()),
+            'count_flights_with_adjacent_instr': int(has_adj_instr.sum()),
+            'count_flights_with_mach_or_adj_instr': int(has_mach_or_adj.sum()),
 
             # short-adjacent: min, mean, mean(nonzero) and total count
             # "short adjacent" may have different column names and may only be created once nonzero values exist
@@ -415,8 +452,8 @@ class AmanExporter():
             'mean_abs_time_error_at_freeze': float(s_frz.abs().mean(skipna=True)),
 
             # --- Work / popup splits ---
-            'mean_pct_extrawork_popup': float(pct_xw_clean[is_popup].mean(skipna=True)) if is_popup.any() else np.nan,
-            'mean_pct_extrawork_nonpopup': float(pct_xw_clean[is_nonpopup].mean(skipna=True)) if is_nonpopup.any() else np.nan,
+            'pct_extrawork_popup': float(pct_xw_system_popup),
+            'pct_extrawork_nonpopup': float(pct_xw_system_nonpopup),
             'mean_minwork': float(s_mw.mean(skipna=True)),
             'mean_totalwork': float(s_tw.mean(skipna=True)),
             'mean_extrawork': float(s_xw.mean(skipna=True)),

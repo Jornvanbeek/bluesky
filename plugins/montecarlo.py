@@ -161,8 +161,13 @@ class monte_carlo(core.Entity):
     def sendscen(self,node_id):
         selected_scen = self.batch.index[self.batch['status'].eq('backlog')]
         if len(selected_scen) == 0:
+            # This can happen when maxnodes > remaining jobs (e.g. 12 scenarios but 16 nodes).
+            # In that case we must retire the surplus node, otherwise it stays in active_nodes
+            # and the completion condition (remaining==0 and len(active_nodes)==0) never triggers.
             stack.forward('RESET', target_id=node_id)
-            stack.stack('ECHO holding one of the nodes, make sure data gets stored!')
+            if node_id in self.active_nodes or node_id in self.nodes:
+                self.removenode(node_id)
+            self.start()
             return
 
         job_id = selected_scen[0]
@@ -475,8 +480,9 @@ class monte_carlo(core.Entity):
         stack.forward('MC STOPNODE', target_id=node_id)
         net.nodes.discard(node_id)
         net.node_removed.emit(node_id)
-        self.active_nodes.remove(node_id)
-        self.nodes.remove(node_id)
+        self.active_nodes.discard(node_id)
+        if node_id in self.nodes:
+            self.nodes.remove(node_id)
 
 
 
