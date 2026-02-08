@@ -61,8 +61,6 @@ class monte_carlo(core.Entity):
 
     @stack.command
     def addmultiplemc(self, *parts: str):
-        # accepteert: ADDMULTIPLEMC MONTECARLO scen 100 8 ...
-        # en maakt er weer één string commando van
         cmd = " ".join(parts).strip()
         if cmd:
             self.multiple_mc.append(cmd)
@@ -70,7 +68,7 @@ class monte_carlo(core.Entity):
     @stack.command
     def nextmc(self):
         if len(self.multiple_mc) >0:
-            com = self.multiple_mc.pop()
+            com = self.multiple_mc.pop(0)
             print(com)
             stack.stack(f'ECHO {com}')
             self.multiple_mc_called.append(com)
@@ -99,6 +97,35 @@ class monte_carlo(core.Entity):
         self.batch = pd.concat([self.batch, pd.DataFrame(rows)])
         self.maxnodes = maxnodes
         self.start()
+
+
+    @stack.command
+    def mc_scenarios(self, configuration: str, scenarios: str, amount: int, runs:int, maxnodes:int, usecache:bool=False, startseed:int=0, maxtime='5:00:00', title=None):
+        rows = []
+        gap = 1000 #seed difference between scenarios
+        for n in range(int(amount)):
+            scenario = scenarios+str(n)
+            for i in range(int(runs)):
+                rows.append({
+                    'configuration':  configuration,
+                    'scenario': scenario,
+                    'run': i,
+                    'seed': startseed + i + n * gap,
+                    'usecache': usecache,
+                    'cachename': scenario,
+                    'node': None,
+                    'status': 'backlog',
+                    'maxtime': maxtime
+                })
+            if title:
+                self.title = title
+            else:
+                self.title = f'{configuration}_{scenario}_{self.amansettings.popup_planner}_FH{int(self.amansettings.freezehorizon/60)}_S{startseed}_R{runs}'
+
+        self.batch = pd.concat([self.batch, pd.DataFrame(rows)])
+        self.maxnodes = maxnodes
+        self.start()
+
 
     def start(self):
         remaining = int(self.batch['status'].isin(['backlog']).sum())
@@ -157,6 +184,9 @@ class monte_carlo(core.Entity):
         stack.forward('MC CLAIM', target_id=node_id)
         stack.forward(f'SCEN {seed}_{scenario}', target_id=node_id)
         stack.forward(f'SEED {seed}', target_id=node_id)
+        if 'configuration' in row:
+            configuration = row['configuration']
+            stack.forward(f'PCALL {configuration}', target_id=node_id)
         if usecache:
             stack.forward(f'USECACHE {scenario} {cachename}', target_id=node_id)
         else:
