@@ -104,7 +104,7 @@ class monte_carlo(core.Entity):
         rows = []
         gap = 1000 #seed difference between scenarios
         for n in range(int(amount)):
-            scenario = scenarios+str(n)
+            scenario = scenarios+str(n+1)
             for i in range(int(runs)):
                 rows.append({
                     'configuration':  configuration,
