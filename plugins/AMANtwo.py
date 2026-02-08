@@ -296,7 +296,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         self.Flights.at[acid, 'popup'] = 'POPUP'
 
     def maskpopup(self):
-        plannertype = settings.popup_planner
+        plannertype = self.popup_planner
 
 
 
@@ -348,7 +348,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
 
     def planpopup(self):
-        plannertype = settings.popup_planner
+        plannertype = self.popup_planner
 
         if plannertype == 'FCFS':
             mask_popup = (
@@ -617,7 +617,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             # Filter frozen and preplanned flights for the current runway
             frozen_flights = self.Flights.query("planningstate == 'frozen' and runway == @runway")
 
-            if settings.popup_planner == 'DELAY':
+            if self.popup_planner == 'DELAY':
                 # Include preplanned + ground, and sort by delayed ETA
                 mask = (
                         (self.Flights['runway'] == runway)
@@ -1177,8 +1177,12 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
         # Keep both the instance attribute and the settings module in sync
         self.popup_planner = p
+
         stack.stack(f"ECHO planner set to {self.popup_planner}")
 
+    @stack.command
+    def returnplanner(self):
+        stack.stack(f"ECHO planner is {self.popup_planner}")
 
     @stack.command
     def capacity(self, per_hour):
