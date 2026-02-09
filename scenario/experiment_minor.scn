@@ -4,7 +4,7 @@
 #00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS AMANSMALL 1 16 True 0 07:00:00 one
 
 # experiment 1: effect of uncertainty on eaman
-00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS FCFS20certain sc 12 1 16 True 0 07:00:00 eaman_zero_uncertainty
+00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS FCFS20certain sc 12 3 32 True 0 07:00:00 eaman_zero_uncertainty
 00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS FCFS20nopopup sc 12 1 16 True 0 07:00:00 eaman_no_popup
 00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS FCFS20 sc 12 1 16 True 0 07:00:00 eaman_fcfs
 
