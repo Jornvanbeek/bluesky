@@ -13,7 +13,22 @@
 00:00:01.00> NEXTMC
 
 
-
+CID: KLM18SSH
+updates: 54778.0
+ttlg: -165.9180592880939
+selspd (knots): -inf
+min_casdesc / max_casdesc (knots): 223.0 / 298.0
+altitude (ft): 10436.930524934383
+selected altitude (ft): 10100.0
+current wp index: 17
+current wp name: RIVER
+IAF: RIVER
+direct_dist (nm): 2.9950109404738265
+trackmiles (nm): 2.9950109404738265
+route_len_nm (kwikdist AC->IAF): 65.356430143787
+dogleg_ratio (trackmiles/direct_dist): 1.0
+reqdist (nm) for current ttlg: -15.409670644341961
+reqspd (knots) for current ttlg: -inf
 
 
 
