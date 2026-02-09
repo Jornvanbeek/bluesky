@@ -173,7 +173,7 @@ class ErrorHandler:
         self.Flights['ETA'] = self.Flights['ETO IAF'] + self.Flights['TMA']
 
         # Apply percentile_time offset (minutes -> seconds), NaN treated as 0
-        pt = self.Flights['percentile_time'].fillna(0.0)
+        pt = self.Flights['percentile_time']#.fillna(0.0)
         self.Flights['delayed ETA'] = self.Flights['ETA'] + pt * 60.0
 
 

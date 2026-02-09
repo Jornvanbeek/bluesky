@@ -691,7 +691,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             # Ground flights with a slot that should become frozen when their *delayed* ETO IAF is inside the horizon.
             # delayed ETO IAF is derived as: (delayed ETA - TMA). If delayed ETA is missing, fall back to ETA.
             delayed_eta = runway_df['delayed ETA'] if 'delayed ETA' in runway_df.columns else runway_df['ETA']
-            delayed_eta = delayed_eta.fillna(runway_df['ETA'])
+            # delayed_eta = delayed_eta.fillna(runway_df['ETA'])
             delayed_eto_iaf = delayed_eta - runway_df['TMA']
 
             ground_to_freeze = runway_df[
