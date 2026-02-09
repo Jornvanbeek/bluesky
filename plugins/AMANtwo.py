@@ -407,6 +407,13 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                     & (self.Flights['planningstate'] == 'frozen')
                     ].sort_values(by='slot')
 
+                # Bookkeeping: FCFS popup causes a swap for all frozen flights behind it
+                if not later_df.empty:
+                    if 'swaps' not in self.Flights.columns:
+                        self.Flights['swaps'] = 0
+                    # self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
+                    self.Flights.loc[later_df.index, 'swaps'] += 1
+
 
                 last_assigned_slot = new_slot
                 last_assigned_flight = acid
@@ -520,6 +527,13 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             & (self.Flights['slot'].notna())
             & (self.Flights['slot'] > old_slot)
         ].sort_values('slot')
+
+        # Bookkeeping: all flights behind the removed popup get swaps += 1
+        if not after_df.empty:
+            if 'swaps' not in self.Flights.columns:
+                self.Flights['swaps'] = 0
+            # self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
+            self.Flights.loc[after_df.index, 'swaps'] += 1
 
         # 1) Compress the frozen chain behind the removed popup
         if was_frozen and (last_assigned_slot is not None) and (not after_df.empty):
