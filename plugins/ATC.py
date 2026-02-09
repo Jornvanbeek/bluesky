@@ -746,6 +746,8 @@ class ATC(core.Entity):
             # print('correcting new waypoint')
             error = reqdist - (disttoiaf + disttonewwp)
             corrected_reqdist = reqdist + error
+            if corrected_reqdist < 0:
+                corrected_reqdist = reqdist
             lat, lon, alpha, hypothenuse, opposing = self.determine_wpt(acid, corrected_reqdist, direct_dist, trackmiles,
                                                                         direct_qdr, acrte, iaf_index)
 

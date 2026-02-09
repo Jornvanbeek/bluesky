@@ -845,7 +845,10 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         self.update_errors()
 
         self.Flights['TMA'] = self.Flights['TP ETA'] - self.Flights['TP IAF']
-        self.Flights['to eto'] = round((self.Flights['ETO IAF'] - sim.simt) / 60, 0)
+        try:
+            self.Flights['to eto'] = round((self.Flights['ETO IAF'] - sim.simt) / 60, 0)
+        except:
+            (self.Flights['ETO IAF'] - sim.simt) / 60
         self.Flights['ttlg'] = self.Flights['EAT'] - self.Flights['ETO IAF']
         self.Flights['planning'] = self.Flights['EAT'] - self.planninghorizon
 
