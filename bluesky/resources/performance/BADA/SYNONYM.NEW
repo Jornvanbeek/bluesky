@@ -169,6 +169,7 @@ CD * C501   CESSNA              CITATION 1SP             C550__  C501 /
 CD - C510   CESSNA              CITATION MUSTANG         C510__  C510 /
 CD * C525   CESSNA              CITATION JET             C550__  C525 /
 CD * C526   CESSNA              CITATION JET 526         E50P__  C526 /
+CD * HDJT   Honda               Hondajet                 E50P__  C526 /
 CD - C550   CESSNA              CITATION II-S2           C550__  C550 /
 CD * C551   CESSNA              CITATION 2SP             C550__  C551 /
 CD - C560   CESSNA              CITATION V               C560__  C560 /
@@ -183,6 +184,7 @@ CD * CA41   CORVUS              CA-41 RACER              P28A__  CA41 /
 CD * CE43   CERVA               GUEPARD                  SR22__  CE43 /
 CD * CL2T   CANADAIR            CL-415                   SH36__  CL2T /
 CD * CL30   BOMBARDIER          Challenger 300           F2TH__  CL30 /
+CD * CL35   BOMBARDIER          Challenger 350           F2TH__  CL30 /
 CD - CL60   CANADAIR            CHALLENGER 600/601       CL60__  CL60 /
 CD * CN35   CASA                CN-235                   AT43__  CN35 /
 CD * COL4   CESSNA              COLUMBIA 400             TRIN__  COL4 /
