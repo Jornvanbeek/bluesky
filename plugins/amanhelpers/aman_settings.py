@@ -5,11 +5,11 @@
 # the reason is to change the settings easily in scenario files, or through the stack at startup
 
 
-max_dogleg_ratio = 1.4
+max_dogleg_ratio = 1.3
 # freezehorizon = 14 * 60
 # freezehorizon = 16 * 60
 freezehorizon = 20 * 60
-capacity = 34#34 #aircraft per hour, if no LIV, per runway (actual capacity +2)
+capacity = 36#34 #aircraft per hour, if no LIV, per runway (actual capacity +2)
 popup_planner ='FCFS'
 # popup_planner = 'DELAY'
 error_multiplicator = (1.0,1.0,1.0,1.0)

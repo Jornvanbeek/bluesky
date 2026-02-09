@@ -349,7 +349,11 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
     def planpopup(self):
         plannertype = self.popup_planner
-
+        # print(plannertype)
+        # self.returnplanner()
+        # print(settings.popup_planner)
+        # print(plannertype == 'FCFS')
+        # print()
         if plannertype == 'FCFS':
             mask_popup = (
                     (self.Flights['planningstate'] == 'POPUP')
@@ -1212,6 +1216,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             return
 
         self.error_multiplicator = vals
+        settings.error_multiplicator = vals
         stack.stack(f'ECHO uncertainty set to {self.error_multiplicator}')
 
 

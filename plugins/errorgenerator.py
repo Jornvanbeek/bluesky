@@ -26,11 +26,7 @@ class ErrorGenerator:
         self.cop_pdf = aman_settings.cop_pdf
         self.PDF_file = aman_settings.PDF_file
 
-        # error multiplicators (takeoff, dep_route, enroute, fir)
-        self.takeoff_multiplicator = float(aman_settings.error_multiplicator[0])
-        self.dep_route_multiplicator = float(aman_settings.error_multiplicator[1])
-        self.enroute_multiplicator = float(aman_settings.error_multiplicator[2])
-        self.fir_multiplicator = float(aman_settings.error_multiplicator[3])
+
 
         self.load_distributions(self.PDF_file)
 
@@ -128,11 +124,23 @@ class ErrorGenerator:
         enroute = self.sample(rng, self.outside_fir)
         fir = self.sample(rng, self.inside_fir)
 
-        takeoff *= self.takeoff_multiplicator
-        dep_route *= self.dep_route_multiplicator
-        enroute *= self.enroute_multiplicator
-        fir *= self.fir_multiplicator
-        percentile_takeoff *= self.takeoff_multiplicator
+        # # error multiplicators (takeoff, dep_route, enroute, fir)
+        # self.takeoff_multiplicator = float(aman_settings.error_multiplicator[0])
+        # self.dep_route_multiplicator = float(aman_settings.error_multiplicator[1])
+        # self.enroute_multiplicator = float(aman_settings.error_multiplicator[2])
+        # self.fir_multiplicator = float(aman_settings.error_multiplicator[3])
+
+        if takeoff != 0.0 and aman_settings.error_multiplicator[0] == 0.0:
+            takeoff = 0.00001
+        else:
+            takeoff *= aman_settings.error_multiplicator[0]
+        dep_route *= aman_settings.error_multiplicator[1]
+        enroute *= aman_settings.error_multiplicator[2]
+        fir *= aman_settings.error_multiplicator[3]
+        percentile_takeoff *= aman_settings.error_multiplicator[0]
+
+        # print(percentile_takeoff)
+
         return takeoff, dep_route, enroute, fir, percentile_takeoff
         # time, %,%,%
         # approx enroute/fir at handover alt
