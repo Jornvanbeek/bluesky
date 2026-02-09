@@ -1,6 +1,6 @@
 
 #experiment 3: evaluation of schedulers
-00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS delay20 sc 12 16 16 True 0 07:00:00 eaman_delay
+#00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS delay20 sc 12 16 16 True 0 07:00:00 eaman_delay
 00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS BOL20 sc 12 16 16 True 0 07:00:00 eaman_BOL
 00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS FCFS20 sc 12 16 16 True 0 07:00:00 eaman_fcfs  ## is run before
 
