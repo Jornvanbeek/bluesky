@@ -175,7 +175,7 @@ class ATC(core.Entity):
                 # print(f'{acid} needs speed up {ttlg}')
                 if abs(trackmiles - direct_dist) > 1: #essentially direct == False
                     self.dogleg(acid, ttlg)
-                elif abs(maxspd - selspd) > 1:
+                elif abs(maxspd - selspd) > 1 and to_iaf > 0.5 * self.aman.nearby_threshold:
                     self.speed(acid, ttlg)
                 else:
                     # ETA = self.reset_ETA(acid)
