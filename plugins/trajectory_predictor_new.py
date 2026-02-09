@@ -688,7 +688,7 @@ class Predictor(core.Entity):
             self.use_cache = True
             # stack.stack('ECHO cache is used for predictions??')
             stack.stack(f'PCALL {scenario}')
-            stack.stack(f'USECACHE_AMAN {picklename}' )
+            stack.stack(f'DELAY 2 USECACHE_AMAN {picklename}' )
             stack.stack('FF')
             stack.forward(f'DT {self.tp_dt}', target_id=self.child_id)
             stack.forward('FF', target_id=self.child_id)
