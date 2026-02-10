@@ -1,5 +1,5 @@
 
-00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS FCFS20certain sc 12 1 16 True 0 07:00:00 eaman_zero_uncertainty
+00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS BOL25 sc 12 16 16 True 16 07:00:00 eaman_BOL_25_higherseed
 
 #experiment 3: evaluation of schedulers
 00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS delay20 sc 12 16 16 True 32 07:00:00 eaman_delay_seed32
@@ -7,8 +7,9 @@
 #00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS FCFS20 sc 12 16 16 True 32 07:00:00 eaman_fcfs_seed32  ## is run before
 
 #extended horizon, part of 3
-00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS delay25 sc 12 16 16 True 32 07:00:00 eaman_delay_25_seed32
+
 00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS BOL25 sc 12 16 16 True 32 07:00:00 eaman_BOL_25_seed32
+00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS delay25 sc 12 16 16 True 32 07:00:00 eaman_delay_25_seed32
 #00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS FCFS25 sc 12 16 16 True 32 07:00:00 eaman_fcfs_25_seed32  ## is run before
 
 
