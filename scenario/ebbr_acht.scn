@@ -1,0 +1,23 @@
+
+
+#00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS config no_ebbr_sc 12 48 16 True 0 07:00:00 no_ebb
+
+
+
+00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS BOL20 no_ebbr_sc 12 48 16 True 0 07:00:00 no_ebbr_BOL20
+
+00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS delay20 no_ebbr_sc 12 48 16 True 0 07:00:00 no_ebbr_delay20
+
+00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS BOL25 no_ebbr_sc 12 48 16 True 0 07:00:00 no_ebbr_BOL25
+
+00:00:01.00> ADDMULTIPLEMC MC_SCENARIOS delay25 no_ebbr_sc 12 48 16 True 0 07:00:00 no_ebbr_delay25
+
+
+00:00:01.00> NEXTMC
+
+
+
+
+
+
+

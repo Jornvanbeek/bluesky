@@ -394,8 +394,9 @@ def run_experiment(title, configs):
 
     print(f"\n===== {title} =====")
     print("Configs:", configs)
-    print("\nFriedman:\n", friedman_results)
+    # print("\nFriedman:\n", friedman_results)
     # print("\nPost-hoc Wilcoxon:\n", posthoc)
+
     print("\nMean KPI comparison (raw values):\n", mean_table)
 
 
@@ -441,3 +442,4 @@ run_experiment("EXP 5 — comparing current to proposed", configs)
 configs = ["FCFS14", "delay25", "BOL25"]
 
 run_experiment("EXP 5B — comparing current to proposed long range", configs)
+
