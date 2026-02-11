@@ -1,0 +1,35 @@
+================ ATC DEBUG UPDATES =================
+ACID: KLM1164SH
+updates: 31508.0
+ttlg: -86.5692823281588
+selspd (knots): 2.0
+min_casdesc / max_casdesc (knots): 223.0 / 298.0
+altitude (ft): 24000.0
+selected altitude (ft): 24000.0
+current wp index: 5
+current wp name: KLM1164SH005
+IAF: ARTIP
+direct_dist (nm): 80.29686117961583
+trackmiles (nm): 80.30474146248672
+route_len_nm (kwikdist AC->IAF): 80.30474146248672
+dogleg_ratio (trackmiles/direct_dist): 1.0000981393637949
+reqdist (nm) for current ttlg: 69.77152352922033
+reqspd (knots) for current ttlg: 2.262331158570178
+====================================================
+================ ATC DEBUG UPDATES =================
+ACID: KLM1164SH
+updates: 31509.0
+ttlg: -86.5692823281588
+selspd (knots): 2.0
+min_casdesc / max_casdesc (knots): 223.0 / 298.0
+altitude (ft): 24000.0
+selected altitude (ft): 24000.0
+current wp index: 5
+current wp name: KLM1164SH005
+IAF: ARTIP
+direct_dist (nm): 80.29686117961583
+trackmiles (nm): 80.30474146248672
+route_len_nm (kwikdist AC->IAF): 80.30474146248672
+dogleg_ratio (trackmiles/direct_dist): 1.0000981393637949
+reqdist (nm) for current ttlg: 69.77152352922033
+reqspd (knots) for current ttlg: 2.262331158570178
