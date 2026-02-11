@@ -3,6 +3,7 @@ from bluesky import core, stack, traf, sim, HOLD, net
 from bluesky.core import plugin
 import pandas as pd
 import time
+import os
 import numpy as np
 
 from datetime import timedelta
@@ -117,8 +118,23 @@ class AmanExporter():
             </html>
             """
         scen = stack.get_scenname()
-        output_path = f"AMAN_DF/output_{scen}.html"
+        if not self.html_outputname:
+            seed = np.random.get_state()[1][0]
+            fh = int(self.freezehorizon/60)
+            planner = self.popup_planner
+            if self.error_multiplicator != (1.0,1.0,1.0,1.0):
+                mult = f'{int(self.error_multiplicator[0])}_{int(self.error_multiplicator[1])}_{int(self.error_multiplicator[2])}_{int(self.error_multiplicator[3])}'
+                output_path = f"MC_AMAN_DF/{planner}{fh}{mult}/output_{scen}/{seed}.html"
+            else:
 
+                output_path = f"MC_AMAN_DF/{planner}{fh}/output_{scen}/{seed}.html"
+        else:
+            output_path = f"AMAN_DF/output_{scen}.html"
+
+        # Ensure output directory exists
+        outdir = os.path.dirname(output_path)
+        if outdir:
+            os.makedirs(outdir, exist_ok=True)
         # Write the HTML output to a file
         with open(output_path, "w") as f:
             f.write(html_with_style)
@@ -134,7 +150,7 @@ class AmanExporter():
             # self.htmlflights()
             self.totwohtml()
 
-    @core.timed_function(dt=10)  # is approx every 10 sec in ff mode
+    @core.timed_function(dt=100)  # is approx every 10 sec in ff mode
     def autohtmlflightsff(self):
         # self.time = time.time()
         # if self.previoustime - self.time < 60:
@@ -154,15 +170,15 @@ class AmanExporter():
             self.aman_parent_id = traf.traf_parent_id
             return
         # self.printflights()
-        self.pickleflights()
-        self.Flights.to_csv('dataframe.txt', sep=',', index=True)
+        # self.pickleflights()
+        # self.Flights.to_csv('dataframe.txt', sep=',', index=True)
 
     @stack.command
     def pickleflights(self):
         if self.aman_parent_id:
             return
         scen = stack.get_scenname()
-        self.Flights.to_pickle(f'AMAN_DF/flights_{scen}.pkl')
+        # self.Flights.to_pickle(f'AMAN_DF/flights_{scen}.pkl')
         # Flights = pd.read_pickle('flights.pkl')
 
 
@@ -259,6 +275,8 @@ class AmanExporter():
         # ATC / instruction bookkeeping (optional columns)
         # "short adjacent" may have different column names and may only be created once nonzero values exist
         s_short_adj = get_num_any(['short adjacent', 'short_adjacent', 'short_adj', 'adjacent'])
+        # Delay-adjacent (optional column; different names may exist)
+        s_delay_adj = get_num_any(['delay adjacent', 'delay_adjacent', 'delay_adj', 'delay adjacent count'])
         s_totaldelay = get_num('totaldelay')
         s_totalspeedup = get_num('totalspeedup')
         s_short_speed = get_num('short speed')
@@ -266,6 +284,8 @@ class AmanExporter():
         s_delay_mach = get_num('delay mach')
         s_delay_dogleg = get_num('delay dogleg')
         s_short_dogleg = get_num('short dogleg')
+        # Holding time (seconds) (optional)
+        s_holdingtime = get_num('holdingtime')
 
         # --- Low-level delay absorption (LLDA) ---
         # LLDA = delay dogleg + holding delay (if available)
@@ -279,7 +299,9 @@ class AmanExporter():
 
         # --- Instruction counts: mach / adjacent ---
         has_mach_instr = (s_delay_mach.notna()) & (s_delay_mach != 0)
-        has_adj_instr  = (s_short_adj.notna()) & (s_short_adj != 0)
+        has_adj_del = (s_delay_adj.notna()) & (s_delay_adj != 0)
+        has_adj_sh  = (s_short_adj.notna()) & (s_short_adj != 0)
+        has_adj_instr = has_adj_sh | has_adj_sh
         has_mach_or_adj = has_mach_instr | has_adj_instr
 
         # Slot changes
@@ -306,6 +328,11 @@ class AmanExporter():
         sum_xw = float(s_xw.fillna(0).sum())
         pct_xw_system = (sum_xw / sum_tw) * 100.0 if sum_tw > 0 else np.nan
 
+        # popup masks (optional column)
+        popup_col = df.get('popup')
+        is_popup = (popup_col.astype('string').str.upper() == 'POPUP') if popup_col is not None else pd.Series(False, index=df.index)
+        is_nonpopup = ~is_popup
+
         # Also compute the same ratio-of-sums for popup / non-popup subsets (if available)
         sum_tw_popup = float(s_tw[is_popup].fillna(0).sum()) if 'is_popup' in locals() else 0.0
         sum_xw_popup = float(s_xw[is_popup].fillna(0).sum()) if 'is_popup' in locals() else 0.0
@@ -315,18 +342,23 @@ class AmanExporter():
         sum_xw_nonpopup = float(s_xw[is_nonpopup].fillna(0).sum()) if 'is_nonpopup' in locals() else 0.0
         pct_xw_system_nonpopup = (sum_xw_nonpopup / sum_tw_nonpopup) * 100.0 if sum_tw_nonpopup > 0 else np.nan
 
-        # popup masks (optional column)
-        popup_col = df.get('popup')
-        is_popup = (popup_col.astype('string').str.upper() == 'POPUP') if popup_col is not None else pd.Series(False, index=df.index)
-        is_nonpopup = ~is_popup
 
-        # holding mask (optional column)
+
         holding_col = df.get('holding')
         if holding_col is None:
             is_holding = pd.Series(False, index=df.index)
+            hold_events_total = 0.0
         else:
-            # be robust to bool/object/NA
-            is_holding = holding_col.astype('boolean').fillna(False)
+            # If 'holding' is used as a counter (numeric), sum it as number of hold events.
+            # Otherwise (bool/object), treat True as 1 event.
+            holding_num = pd.to_numeric(holding_col, errors='coerce')
+            if holding_num.notna().any() and (holding_num.fillna(0) > 1).any():
+                hold_events_total = float(holding_num.fillna(0).sum())
+                is_holding = (holding_num.fillna(0) > 0)
+            else:
+                holding_bool = holding_col.astype('boolean').fillna(False)
+                hold_events_total = float(holding_bool.sum())
+                is_holding = holding_bool
 
         # count stats split by popup / holding
         s_cnt_popup = s_cnt[is_popup] if is_popup is not None else pd.Series(np.nan, index=df.index)
@@ -337,6 +369,17 @@ class AmanExporter():
         uniq = np.sort(s_cnt.dropna().unique())
         second_highest = uniq[-2] if uniq.size >= 2 else (uniq[-1] if uniq.size == 1 else np.nan)
         max_count_acid = s_cnt.idxmax() if s_cnt.notna().any() else None
+
+        holdingtime_valid = s_holdingtime[s_holdingtime.notna()]
+        holdingtime_min = float(holdingtime_valid.min()) if holdingtime_valid.size else np.nan
+        holdingtime_mean = float(holdingtime_valid.mean()) if holdingtime_valid.size else np.nan
+        holdingtime_max = float(holdingtime_valid.max()) if holdingtime_valid.size else np.nan
+        holdingtime_total = float(holdingtime_valid.sum()) if holdingtime_valid.size else 0.0
+
+        total_count = float(s_cnt.fillna(0).sum())
+
+        has_dogleg_instr = ((s_delay_dogleg.notna()) & (s_delay_dogleg != 0))
+        count_flights_with_dogleg = int(has_dogleg_instr.sum())
 
         return {
             # --- Top: extrawork percentage ---
@@ -355,12 +398,14 @@ class AmanExporter():
             'max_count': float(max_count) if pd.notna(max_count) else np.nan,
             'second_highest_count': float(second_highest) if pd.notna(second_highest) else np.nan,
             'max_count_acid': str(max_count_acid) if max_count_acid is not None else None,
+            'total_count': float(total_count),
 
-
-            # --- Count stats: holding subset (holding == True) ---
-            'min_count_holding': _min(s_cnt_holding) if s_cnt_holding.notna().any() else np.nan,
-            'mean_count_holding': _mean(s_cnt_holding),
-            'max_count_holding': _max(s_cnt_holding) if s_cnt_holding.notna().any() else np.nan,
+            # Holding event count + holdingtime
+            'count_hold_events': float(hold_events_total),
+            'min_holdingtime': float(holdingtime_min) if pd.notna(holdingtime_min) else np.nan,
+            'mean_holdingtime': float(holdingtime_mean) if pd.notna(holdingtime_mean) else np.nan,
+            'max_holdingtime': float(holdingtime_max) if pd.notna(holdingtime_max) else np.nan,
+            'total_holdingtime': float(holdingtime_total),
 
             # --- Popup count per scenario ---
             'count_popup': int(is_popup.fillna(False).sum()) if is_popup is not None else 0,
@@ -417,6 +462,7 @@ class AmanExporter():
             'count_flights_with_mach_instr': int(has_mach_instr.sum()),
             'count_flights_with_adjacent_instr': int(has_adj_instr.sum()),
             'count_flights_with_mach_or_adj_instr': int(has_mach_or_adj.sum()),
+            'count_flights_with_dogleg_instr': int(count_flights_with_dogleg),
 
             # short-adjacent: min, mean, mean(nonzero) and total count
             # "short adjacent" may have different column names and may only be created once nonzero values exist
@@ -424,6 +470,12 @@ class AmanExporter():
             'mean_short_adjacent': _mean(s_short_adj),
             'mean_short_adjacent_nonzero': _mean_nonzero(s_short_adj),
             'count_short_adjacent_nonzero': _count_nonzero(s_short_adj),
+
+            # delay-adjacent stats
+            'min_delay_adjacent': _min(s_delay_adj) if s_delay_adj.notna().any() else np.nan,
+            'mean_delay_adjacent': _mean(s_delay_adj),
+            'mean_delay_adjacent_nonzero': _mean_nonzero(s_delay_adj),
+            'count_delay_adjacent_nonzero': _count_nonzero(s_delay_adj),
 
             # delay mach: min, mean, mean(nonzero) and total count
             'min_delay_mach': _min(s_delay_mach) if s_delay_mach.notna().any() else np.nan,

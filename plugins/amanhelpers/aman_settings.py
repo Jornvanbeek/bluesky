@@ -14,6 +14,7 @@ popup_planner ='FCFS'
 # popup_planner = 'DELAY'
 error_multiplicator = (1.0,1.0,1.0,1.0)
 # error_multiplicator = (0,0,0,0)
+html_outputname = None
 
 iafs = ['ARTIP', 'SUGOL', 'RIVER']
 firname = 'FIRNL'
@@ -26,6 +27,7 @@ visible_altitude_specific = {'EGSH': 10000, 'EGSS': 10000,'EGLC': 10000, 'EDDL':
 standard_early = 60  # seconds that ASAP plans early if there is no slot taken before the slot being planned, make negative?
 late_approach_margin = 120
 early_approach_margin = 120  # s
+replan_pull_forward = 90 #s
 instruction_margin = 20 # allowed error by ATC from expected eat
 approach_aim = 0  # 90 seconds before eat if an instruction is given is the aim (make negative)
 late_adjacent_threshold = 2 * 60  # if an aircraft is late then this is the threshold before communicating to an adjacent center
@@ -38,6 +40,7 @@ abs_minspd = 190  # knots outside of tma
 nearby_threshold = 180  # seconds before iaf, no more instructions possible
 dogleg_multiplyer = 0.99
 descent_angle = 3.0  # degrees
+eat_count_threshold = 10 #seconds, time between slots before eat update is counted
 
 max_timegain_popup = 2 *60 # if this is not possible because aircraft not spawned: replan. if airborne: normal check
 expected_delay_percentile = 75

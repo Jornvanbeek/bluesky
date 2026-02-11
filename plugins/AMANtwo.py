@@ -66,13 +66,13 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 setattr(self, k, v)
 
         # Define the column names
-        columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate', 'EAT_updates','count', 'updates','Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO','fh_margin', 'fh_margin_at_spawn', 'fh_margin_at_freeze', 'percentile_time','E_dep', 'E_enroute', 'E_fir', 'gsfactor',  'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'ttlg at freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime', 'pending_delay']
+        columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA', 'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot', 'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'popup', 'TPstate', 'EAT_updates','count', 'updates','Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc', 'min_casdesc', 'E_TO','fh_margin', 'fh_margin_at_spawn', 'fh_margin_at_freeze', 'percentile_time','E_dep', 'E_enroute', 'E_fir', 'gsfactor',  'planning', 'SID', 'FIR entry', 'Time error', 'Error at Freeze', 'ttlg at freeze', 'minwork', 'totalwork', 'extrawork', 'swaps', 'lookahead', 'holdingtime', 'pending_delay']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
         # --- explicit dtypes for non-numeric columns (prevents FutureWarning on assignment) ---
         self.obj_cols = [
-            'planningstate', 'planningtype', 'type', 'IAF', 'runway', 'origin', 'TPstate',
-            'SID', 'FIR entry', 'popup']
+            'planningstate', 'planningtype', 'type', 'IAF', 'runway', 'origin', 'popup', 'TPstate',
+            'SID', 'FIR entry']
         self.intcols = ['EAT_updates', 'count', 'updates', 'swaps']
         self.boolcols = ['dogleg', 'direct', 'holding', 'earliest']
         self.set_coltype(self.intcols, 'int64')
@@ -248,7 +248,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             slot = base
         else:
             if force_back_of_queue:
-                slot = max(float(prev_slot) + sep, (eta - self.late_approach_margin))
+                slot = max(float(prev_slot) + sep, (eta - self.replan_pull_forward))
             else:
                 slot = max(float(prev_slot) + sep, base)
 
@@ -276,8 +276,13 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
         self.Flights['EAT_updates'] = self.Flights['EAT_updates'].fillna(0).astype(int)
         old_slot = self.Flights.at[flight, 'slot']
-        if pd.notna(old_slot) and float(old_slot) != float(slot):
-            self.Flights.at[flight, 'EAT_updates'] = int(self.Flights.at[flight, 'EAT_updates']) + 1
+        # Only count as an update if the slot change exceeds a threshold (seconds)
+        thr = float(getattr(self, 'eat_count_threshold', 0.0) or 0.0)
+        if pd.notna(old_slot):
+
+            delta = abs(float(slot) - float(old_slot))
+            if delta > thr:
+                self.Flights.at[flight, 'EAT_updates'] = int(self.Flights.at[flight, 'EAT_updates']) + 1
 
     def update_popup_entry(self,acid):
         stack.stack(f"COLOR {acid} 255,128,0")
@@ -297,8 +302,6 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
     def maskpopup(self):
         plannertype = self.popup_planner
-
-
 
         # FCFS special rule: if the aircraft is already spawned but still below the visible altitude,
         # keep it as 'new' (do not treat it as popup yet).
@@ -328,14 +331,14 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             if low_alt:
                 self.Flights.loc[low_alt, 'planningstate'] = 'new'
 
-            elif plannertype in ('DELAY', 'BACK'):
-                mask_popup = (
-                        (self.Flights['planningstate'].isin(['new']))
-                        & ((self.Flights['ETO IAF'] - sim.simt) < self.freezehorizon)
-                )
+        elif plannertype in ('DELAY', 'BACK'):
+            mask_popup = (
+                    (self.Flights['planningstate'].isin(['new']))
+                    & ((self.Flights['ETO IAF'] - sim.simt) < self.freezehorizon)
+            )
 
-                # Default: mark as POPUP
-                self.Flights.loc[mask_popup, 'planningstate'] = 'POPUP'
+            # Default: mark as POPUP
+            self.Flights.loc[mask_popup, 'planningstate'] = 'POPUP'
 
         mask_early = (
                 (self.Flights['planningstate'].isin(['early popup']))
@@ -807,7 +810,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         # Define the column names (keep in sync with __init__)
         columns = ['ACID', 'planningstate', 'planningtype', 'creation', 'ETD', 'ttlg', 'to eto', 'type', 'LIV', 'ETA',
                    'delayed ETA', 'ETO IAF', 'ETO_original', 'TP IAF', 'TP ETA', 'IAF', 'runway', 'EAT', 'slot',
-                   'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'TPstate',
+                   'initialslot', 'manualslot', 'TMA', 'EAT adherence', 'LAS', 'LAf', 'origin', 'popup', 'TPstate',
                    'EAT_updates', 'count', 'updates', 'Flighttime', 'TP accuracy', 'casdesc', 'max_casdesc',
                    'min_casdesc', 'E_TO', 'fh_margin', 'fh_margin_at_spawn', 'fh_margin_at_freeze', 'percentile_time', 'E_dep', 'E_enroute', 'E_fir', 'gsfactor', 'planning', 'SID',
                    'FIR entry', 'Time error', 'Error at Freeze', 'ttlg at freeze', 'minwork', 'totalwork', 'extrawork', 'swaps',
@@ -1053,7 +1056,12 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 break
             else:
                 swaps += 1
-                row['swaps'] += 1
+
+                # Bookkeeping: this frozen flight is affected by the swap (row is a copy; write to DF instead)
+                if 'swaps' not in self.Flights.columns:
+                    self.Flights['swaps'] = 0
+                self.Flights['swaps'] = pd.to_numeric(self.Flights['swaps'], errors='coerce').fillna(0).astype(int)
+                self.Flights.at[flight, 'swaps'] += 1
 
         if replan_df is None:
             replan_df = pd.concat([later, row_replan_df], axis=0)
@@ -1063,7 +1071,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             # 1) bepaal newslot van replanned flight t.o.v. voorganger
             if last_assigned_slot is None:
                 sep_prev = 0.0
-                newslot = float(row_replan['ETA']) - float(self.late_approach_margin)
+                newslot = float(row_replan['ETA']) - float(self.replan_pull_forward)
             else:
                 if self.dynamic_LIV:
                     sep_prev = float(self.LIV_separation.required_separation(
@@ -1074,7 +1082,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
                 newslot = max(
                     float(last_assigned_slot) + sep_prev,
-                    float(row_replan['ETA']) - float(self.late_approach_margin)
+                    float(row_replan['ETA']) - float(self.replan_pull_forward)
                 )
 
             # 2) bepaal required separation van replanned -> volgende vlucht
@@ -1097,7 +1105,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         for f, r in replan_df.iterrows():
             if last_assigned_slot is None:
                 separation = 0.0
-                newslot = r['ETA'] - self.late_approach_margin
+                newslot = r['ETA'] - self.replan_pull_forward
                 prev_slot_for_bookkeep = np.nan
                 prev_flight_for_bookkeep = None
             else:
@@ -1105,7 +1113,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                     separation = float(self.LIV_separation.required_separation(last_assigned_flight, last_assigned_type, f, r['type']))
                 else:
                     separation = float(self.separation)
-                newslot = max(last_assigned_slot + separation, r['ETA'] - self.late_approach_margin)
+                newslot = max(last_assigned_slot + separation, r['ETA'] - self.replan_pull_forward)
                 prev_slot_for_bookkeep = float(last_assigned_slot)
                 prev_flight_for_bookkeep = last_assigned_flight
 
