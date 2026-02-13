@@ -331,7 +331,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             if low_alt:
                 self.Flights.loc[low_alt, 'planningstate'] = 'new'
 
-        elif plannertype in ('DELAY', 'BACK'):
+        elif plannertype in ('DELAY', 'BACK', 'EFDBACK'):
             mask_popup = (
                     (self.Flights['planningstate'].isin(['new']))
                     & ((self.Flights['ETO IAF'] - sim.simt) < self.freezehorizon)
@@ -430,7 +430,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
 
 
-        elif plannertype in ('DELAY', 'BACK'):
+        elif plannertype in ('DELAY', 'BACK', 'EFDBACK'):
 
             airborne_popup = (
                     (self.Flights['planningstate'] == 'POPUP')
@@ -470,7 +470,9 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 self.update_popup_entry(acid) #function for color, error at freeze etc.
             # Ensure object dtype before assignment to avoid FutureWarning
             self.Flights['planningtype'] = self.Flights['planningtype'].astype('object')
-            if plannertype == 'BACK':
+            if plannertype == 'EFDBACK':
+                self.Flights.loc[airborne_popup, 'planningtype'] = 'efdback'
+            elif plannertype == 'BACK':
                 self.Flights.loc[airborne_popup, 'planningtype'] = 'back of the line'
             else:
                 self.Flights.loc[airborne_popup, 'planningtype'] = 'airborne'
@@ -618,8 +620,19 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 continue  # Not in traf yet
 
             # Check altitude in feet
-            alt_ft = round(traf.alt[idxac] / ft)
+
             origin = self.Flights.loc[acid, 'origin']
+
+            # For DELAY / BACK / EFDBACK: do not use altitude-gating for becoming preplanned.
+            # This prevents fast-spawned aircraft from becoming POPUP before reaching FL100.
+            if self.popup_planner in ('DELAY', 'EFDBACK'):
+                self.Flights.at[acid, 'planningstate'] = 'preplanned'
+                stack.stack(f"COLOR {acid} 0,150,255")
+                continue
+
+            # Default behaviour (FCFS): altitude gate
+            alt_ft = round(traf.alt[idxac] / ft)
+
             if origin in self.visible_altitude_specific.keys():
                 if alt_ft >= self.visible_altitude_specific[origin]:
                     self.Flights.at[acid, 'planningstate'] = 'preplanned'
@@ -1198,10 +1211,10 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
     @stack.command
     def popup_planner(self, planner: str):
-        """Set popup planner. Usage: POPUP_PLANNER FCFS|DELAY|BACK"""
+        """Set popup planner. Usage: POPUP_PLANNER FCFS|DELAY|BACK|EFDBACK"""
         p = str(planner).strip().upper()
-        if p not in ('FCFS', 'DELAY', 'BACK'):
-            stack.stack("ECHO POPUPPLANNER expects 'FCFS', 'DELAY', or 'BACK'. Got:", planner)
+        if p not in ('FCFS', 'DELAY', 'BACK', 'EFDBACK'):
+            stack.stack("ECHO POPUPPLANNER expects 'FCFS', 'DELAY', 'BACK', or 'EFDBACK'. Got:", planner)
             return
 
         # Keep both the instance attribute and the settings module in sync
