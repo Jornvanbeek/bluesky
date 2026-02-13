@@ -538,7 +538,7 @@ def run_experiment(title, configs):
 
     print(f"\n===== {title} =====")
     print("Configs:", configs)
-    # print("\nFriedman:\n", friedman_results)
+    print("\nFriedman:\n", friedman_results)
     # print("\nPost-hoc Wilcoxon:\n", posthoc)
 
     # Print KPI labels first (easy to read)
@@ -621,14 +621,14 @@ run_experiment("EXP 2 — effect of horizon extension", configs)
 # EXP 3 — different schedulers (same horizon, compare)
 # =====================================================
 
-configs = ["eaman_delay", "eaman_fcfs", "eaman_BOL"]
+configs = ["delay20", "eaman_fcfs", "eaman_BOL"]
 run_experiment("EXP 3 — different schedulers", configs)
 
 
 # EXP 4 — schedulers with extra-extended horizon
 # ====================================================================
 
-configs = ["eaman_delay_25", "eaman_fcfs_25", "eaman_BOL_25"]
+configs = ["delay25", "eaman_fcfs_25", "eaman_BOL_25"]
 
 run_experiment("EXP 4 — schedulers with extra-extended horizon", configs)
 
@@ -636,13 +636,18 @@ run_experiment("EXP 4 — schedulers with extra-extended horizon", configs)
 # EXP 5 — comparing current to proposed
 # ====================================================================
 
-configs = ["standard_aman", "eaman_delay", "eaman_BOL"]
+configs = ["standard_aman", "delay20", "eaman_BOL"]
 
 run_experiment("EXP 5 — comparing current to proposed", configs)
 
 
+configs = ["standard_aman", "delay20", "eaman_BOL", "EFDBOL20"]
 
-configs = ["standard_aman", "eaman_delay_25", "eaman_BOL_25"]
+run_experiment("EXP 5A — comparing current to proposed", configs)
+
+
+
+configs = ["standard_aman", "delay25", "eaman_BOL_25", "EFDBOL25"]
 run_experiment("EXP 5B — comparing current to proposed long range", configs)
 
 
