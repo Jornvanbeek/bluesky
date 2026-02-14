@@ -633,9 +633,9 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
             origin = self.Flights.loc[acid, 'origin']
 
-            # For DELAY / BACK / EFDBACK: do not use altitude-gating for becoming preplanned.
+            # For DELAY  / EFDBACK: do not use altitude-gating for becoming preplanned.
             # This prevents fast-spawned aircraft from becoming POPUP before reaching FL100.
-            if self.popup_planner in ('DELAY', 'EFDBACK'):
+            if self.popup_planner in ('DELAY', 'EFDBACK', 'EFDFCFS'):
                 self.Flights.at[acid, 'planningstate'] = 'preplanned'
                 stack.stack(f"COLOR {acid} 0,150,255")
                 continue
