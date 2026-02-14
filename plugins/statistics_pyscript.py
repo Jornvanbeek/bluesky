@@ -672,7 +672,7 @@ configs = ["standard_aman", "eaman_BOL",'no_ebbr_BOL20','no_ebbr_BOL25', 'no_ebb
 run_experiment_if_available("EXP 6 — NO-EBBR impact", configs)
 
 
-configs = ["standard_aman", "eaman_BOL",'no_ebbr_delay20']#, "eaman_BOL_25_no_ebbr"]
+configs = ["standard_aman", "eaman_BOL",'no_ebbr_BOL20', 'EFDBOL20', "no_ebbr_EFDBOL20", 'EFDBOL25', "no_ebbr_EFDBOL25"]
 
 
 run_experiment_if_available("EXP 7 — NO-EBBR impact", configs)

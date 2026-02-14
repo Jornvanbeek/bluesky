@@ -331,6 +331,16 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             if low_alt:
                 self.Flights.loc[low_alt, 'planningstate'] = 'new'
 
+        elif plannertype == 'EFDFCFS':
+            # EFDFCFS behaves like FCFS for sequencing, but does NOT use altitude-gating for popup visibility.
+            mask_popup = (
+                    (self.Flights['planningstate'].isin(['new']))
+                    & ((self.Flights['ETO IAF'] - sim.simt) < self.freezehorizon)
+            )
+            self.Flights.loc[mask_popup, 'planningstate'] = 'POPUP'
+
+
+
         elif plannertype in ('DELAY', 'BACK', 'EFDBACK'):
             mask_popup = (
                     (self.Flights['planningstate'].isin(['new']))
@@ -357,7 +367,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         # print(settings.popup_planner)
         # print(plannertype == 'FCFS')
         # print()
-        if plannertype == 'FCFS':
+        if plannertype in ('FCFS', 'EFDFCFS'):
             mask_popup = (
                     (self.Flights['planningstate'] == 'POPUP')
                     & ((self.Flights['ETO IAF'] - sim.simt) < self.freezehorizon)
@@ -426,7 +436,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
             # Ensure object dtype before assignment to avoid FutureWarning
             self.Flights['planningtype'] = self.Flights['planningtype'].astype('object')
-            self.Flights.loc[mask_popup, 'planningtype'] = 'FCFS'
+            self.Flights.loc[mask_popup, 'planningtype'] = 'EFDFCFS' if plannertype == 'EFDFCFS' else 'FCFS'
 
 
 
@@ -1211,10 +1221,10 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
 
     @stack.command
     def popup_planner(self, planner: str):
-        """Set popup planner. Usage: POPUP_PLANNER FCFS|DELAY|BACK|EFDBACK"""
+        """Set popup planner. Usage: POPUP_PLANNER FCFS|DELAY|BACK|EFDBACK|EFDFCFS"""
         p = str(planner).strip().upper()
-        if p not in ('FCFS', 'DELAY', 'BACK', 'EFDBACK'):
-            stack.stack("ECHO POPUPPLANNER expects 'FCFS', 'DELAY', 'BACK', or 'EFDBACK'. Got:", planner)
+        if p not in ('FCFS', 'DELAY', 'BACK', 'EFDBACK', 'EFDFCFS'):
+            stack.stack("ECHO POPUPPLANNER expects 'FCFS', 'DELAY', 'BACK', 'EFDBACK', or 'EFDFCFS'. Got:", planner)
             return
 
         # Keep both the instance attribute and the settings module in sync
