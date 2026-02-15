@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import matplotlib
 from typing import Dict
+from pathlib import Path
+import re
 
 import matplotlib.pyplot as plt
 from scipy import stats
@@ -319,7 +321,7 @@ def wilcoxon_posthoc(df, seed_col, config_col, configs, measures,
         for j in range(i + 1, len(configs)):
             c1 = configs[i]
             c2 = configs[j]
-            colname = f"significant_{c1}_vs_{c2}"
+            colname = f"significant_{display_config_name(c1)}_vs_{display_config_name(c2)}"
 
             sig_series = posthoc.loc[
                 (posthoc["A"] == c1) & (posthoc["B"] == c2),
@@ -349,9 +351,9 @@ def mean_comparison_table(df, condition_col, conditions, measures):
         if m not in d.columns:
             row = {"measure": m, "kpi": kpi_label}
             for c in conditions:
-                row[f"mean_{c}"] = np.nan
+                row[f"mean_{display_config_name(c)}"] = np.nan
             for c in conditions[1:]:
-                row[f"diff_{c}_minus_{conditions[0]}"] = np.nan
+                row[f"diff_{display_config_name(c)}_minus_{display_config_name(conditions[0])}"] = np.nan
             rows.append(row)
             continue
 
@@ -368,10 +370,10 @@ def mean_comparison_table(df, condition_col, conditions, measures):
         row = {"measure": m, "kpi": kpi_label}
 
         for c in conditions:
-            row[f"mean_{c}"] = means.loc[c]
+            row[f"mean_{display_config_name(c)}"] = means.loc[c]
 
         for c in conditions[1:]:
-            row[f"diff_{c}_minus_{conditions[0]}"] = means.loc[c] - base
+            row[f"diff_{display_config_name(c)}_minus_{display_config_name(conditions[0])}"] = means.loc[c] - base
 
         rows.append(row)
 
@@ -480,6 +482,7 @@ MEASURES = [
 
     # taskload
     "total_count",
+    'count_popup',
 ]
 
 MEASURE_DISPLAY_NAMES: Dict[str, str] = {
@@ -496,10 +499,35 @@ MEASURE_DISPLAY_NAMES: Dict[str, str] = {
     "count_hold_events": "Holdings [ac]",
 
     "total_count": "Instruction count [-]",
+    'count_popup': "Pop-ups [-]",
 }
+
+# =========================
+# EASY EDIT: configuration display names
+# =========================
+CONFIG_DISPLAY_NAMES: Dict[str, str] = {
+    "standard_aman": "Baseline AMAN",
+    "eaman_fcfs": "E-AMAN FCFS",
+    "eaman_BOL": "E-AMAN Back-of-Line",
+    "delay20": "Delay Scheduler (20)",
+    "delay25": "Delay Scheduler (25)",
+    "EFDBOL20": "EFD Back-of-Line (20)",
+    "EFDBOL25": "EFD Back-of-Line (25)",
+
+    # NO-EBBR varianten (optioneel)
+    "no_ebbr_BOL20": "BOL20 (no EBBR)",
+    "no_ebbr_BOL25": "BOL25 (no EBBR)",
+}
+
+
+
 
 def display_name(key: str) -> str:
     return MEASURE_DISPLAY_NAMES.get(key, key)
+
+
+def display_config_name(key: str) -> str:
+    return CONFIG_DISPLAY_NAMES.get(key, key)
 # Pairing / grouping columns (edit once)
 # Use normalized columns so variants like no_ebbr_sc1 can be paired with sc1
 SEED_COL = "scenario_norm"       # paired unit
@@ -515,6 +543,95 @@ MAKE_ABSORPTION_PLOTS = False
 MAKE_VIOLIN_PLOTS = False
 
 P_CORR = "bonferroni"
+
+# =========================
+# LaTeX table export options
+# =========================
+EXPORT_LATEX_TABLES = True  # zet True om .tex output te schrijven
+LATEX_TABLE_DIR = Path("latex_tables")
+LATEX_CAPTION_PREFIX = ""    # bv. "Results: " als je dat wil
+# Make tables smaller / more compact
+# Examples: "\\small", "\\footnotesize", "\\scriptsize"
+LATEX_FONT_CMD = "\\footnotesize"
+LATEX_TABCOLSEP_PT = 3      # default ~6pt; lager = smaller columns
+LATEX_ARRAYSTRETCH = 1.0    # default ~1.0; lager = compact rows (bv 0.95)
+
+_LATEX_ESCAPE_RE = re.compile(r"([\\%&_#{}$])")
+
+def latex_escape(s: object) -> str:
+    if s is None:
+        return ""
+    s = str(s)
+    s = s.replace("\\", r"\\")
+    return _LATEX_ESCAPE_RE.sub(r"\\\1", s)
+
+def df_to_latex_table(
+    df: pd.DataFrame,
+    caption: str,
+    label: str,
+    notes: str | None = None,
+    float_spec: str = "htbp",
+    col_align: str = "c",
+    index: bool = False,
+    float_format: str = "{:.3f}",
+) -> str:
+    if index:
+        use_df = df.reset_index()
+    else:
+        use_df = df.copy()
+
+    def fmt_cell(x):
+        if x is None or (isinstance(x, float) and np.isnan(x)):
+            return ""
+        if isinstance(x, (int, np.integer)):
+            return str(int(x))
+        if isinstance(x, (float, np.floating)):
+            try:
+                return float_format.format(float(x))
+            except Exception:
+                return str(x)
+        return str(x)
+
+    cols = [latex_escape(c) for c in use_df.columns]
+    ncol = len(cols)
+    spec = "|" + "|".join([col_align] * ncol) + "|"
+
+    lines = []
+    lines.append(f"\\begin{{table}}[{float_spec}]")
+    lines.append(f"\\caption{{{latex_escape(caption)}}}")
+    lines.append("\\begin{center}")
+    # Compact styling
+    if LATEX_FONT_CMD:
+        lines.append(LATEX_FONT_CMD)
+    if LATEX_TABCOLSEP_PT is not None:
+        lines.append(f"\\setlength{{\\tabcolsep}}{{{int(LATEX_TABCOLSEP_PT)}pt}}")
+    if LATEX_ARRAYSTRETCH is not None:
+        lines.append(f"\\renewcommand{{\\arraystretch}}{{{float(LATEX_ARRAYSTRETCH):.3f}}}")
+    lines.append(f"\\begin{{tabular}}{{{spec}}}")
+    lines.append("\\hline")
+
+    # Header row (bold)
+    header = " & ".join([f"\\textbf{{{c}}}" for c in cols]) + r" \\"
+    lines.append(header)
+    lines.append("\\hline")
+
+    # Body
+    for _, row in use_df.iterrows():
+        vals = [latex_escape(fmt_cell(v)) for v in row.tolist()]
+        lines.append(" & ".join(vals) + r" \\")
+        lines.append("\\hline")
+
+    # Optional footnote line (right aligned)
+    if notes:
+        lines.append(f"\\multicolumn{{{ncol}}}{{r}}{{{latex_escape(notes)}}}\\\\")
+        # geen extra hline in jouw guide na footnote; laat dit zo
+
+    lines.append("\\end{tabular}")
+    lines.append(f"\\label{{{latex_escape(label)}}}")
+    lines.append("\\end{center}")
+    lines.append("\\end{table}")
+
+    return "\n".join(lines)
 
 
 # Helper function for running experiments
@@ -537,7 +654,7 @@ def run_experiment(title, configs):
     posthoc, mean_table = wilcoxon_posthoc(df, seed_col, config_col, configs, measures, use_zscores=USE_ZSCORES, alpha=0.05)
 
     print(f"\n===== {title} =====")
-    print("Configs:", configs)
+    print("Configs:", [display_config_name(c) for c in configs])
     print("\nFriedman:\n", friedman_results)
     # print("\nPost-hoc Wilcoxon:\n", posthoc)
 
@@ -550,8 +667,32 @@ def run_experiment(title, configs):
 
     print("\nMean KPI comparison (raw values):\n", display_table)
 
+    # Optional LaTeX export (style-guide compliant)
+    if EXPORT_LATEX_TABLES:
+        LATEX_TABLE_DIR.mkdir(parents=True, exist_ok=True)
 
+        # Gebruik de tabel die je ook print (kpi eerst) voor leesbaarheid
+        latex_df = display_table.copy() if "display_table" in locals() else mean_table.copy()
 
+        safe_title = re.sub(r"[^A-Za-z0-9_-]+", "_", str(title)).strip("_")
+        tex_path = LATEX_TABLE_DIR / f"{safe_title}.tex"
+
+        caption = f"{LATEX_CAPTION_PREFIX}{title}" if LATEX_CAPTION_PREFIX else str(title)
+        label = f"tab:{safe_title.lower()}"
+
+        tex = df_to_latex_table(
+            latex_df,
+            caption=caption,
+            label=label,
+            notes=None,
+            float_spec="htbp",
+            col_align="c",
+            index=False,
+            float_format="{:.3f}",
+        )
+
+        tex_path.write_text(tex, encoding="utf-8")
+        print(f"LaTeX table written: {tex_path}")
 
 # ----------------------------
 # Violin plots (KPI distributions per config)
@@ -583,7 +724,7 @@ def plot_violin_distributions(df, unit_col, config_col, configs, measures, title
         for cfg in configs:
             vals = d_agg.loc[d_agg[config_col] == cfg, m].dropna()
             data.append(vals.to_numpy())
-            labels.append(str(cfg))
+            labels.append(display_config_name(str(cfg)))
 
         # Skip empty
         if not any(len(x) for x in data):
@@ -676,6 +817,25 @@ configs = ["standard_aman", "eaman_BOL",'no_ebbr_BOL20', 'EFDBOL20', "no_ebbr_EF
 
 
 run_experiment_if_available("EXP 7 — NO-EBBR impact", configs)
+
+
+
+
+configs = ["standard_aman", 'EFDFCFS14', 'EFDFCFS20', 'eaman_fcfs', 'eaman_BOL']
+
+
+run_experiment_if_available("EXP 8 — FCFS EFD", configs)
+
+
+
+
+
+
+
+
+
+
+
 
 # Helper: run an experiment on a subset (e.g., only *_no_ebbr configs)
 def run_experiment_subset(title, configs_include=None, configs_exclude=None):
