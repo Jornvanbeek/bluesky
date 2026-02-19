@@ -425,6 +425,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                     if 'swaps' not in self.Flights.columns:
                         self.Flights['swaps'] = 0
                     # self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
+                    self.Flights['swaps'] = pd.to_numeric(self.Flights['swaps'], errors='coerce').fillna(0).astype(int)
                     self.Flights.loc[later_df.index, 'swaps'] += 1
 
 
@@ -548,6 +549,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
             if 'swaps' not in self.Flights.columns:
                 self.Flights['swaps'] = 0
             # self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
+            self.Flights['swaps'] = pd.to_numeric(self.Flights['swaps'], errors='coerce').fillna(0).astype(int)
             self.Flights.loc[after_df.index, 'swaps'] += 1
 
         # 1) Compress the frozen chain behind the removed popup
@@ -840,7 +842,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                    'lookahead', 'holdingtime', 'pending_delay']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
-        self.set_coltype(self.intcols, 'int64')
+        self.set_coltype(self.intcols, 'Int64')
         self.set_coltype(self.obj_cols, 'object')
         self.set_coltype(self.boolcols, 'bool')
 

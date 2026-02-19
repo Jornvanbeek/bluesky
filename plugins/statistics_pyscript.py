@@ -4,13 +4,19 @@ import matplotlib
 from typing import Dict
 from pathlib import Path
 import re
-
+import math
 import matplotlib.pyplot as plt
 from scipy import stats
 
 from pathlib import Path
 import pickle
+from pathlib import Path  # als die er nog niet staat
 
+ZPLOT_DIR = Path("zscore_plots")
+ZPLOT_DPI = 300
+
+ABS_PLOT_DIR = Path("absorption_plots")
+ABS_PLOT_DPI = 300
 
 plt.close("all")
 pd.set_option("display.max_columns", None)
@@ -91,11 +97,16 @@ def make_paired_wide(df, unit_col, condition_col, conditions, measure, zscore_wi
 # ----------------------------
 # 1) Z-scores + boxplots
 # ----------------------------
-def zscores_and_boxplots(df, seed_col, config_col, configs, measures, make_plots=True):
+def zscores_and_boxplots(df, seed_col, config_col, configs, measures, make_plots=True, plot_prefix=None):
     """
     Returns:
-      d_z: long df filtered to paired seeds with <measure>_z columns
+      d_z: (unused) long df filtered to paired seeds with <measure>_z columns
       wide_tables: dict {measure: wide_z_table}
+
+    Notes:
+      - Boxplots are shown with display names for configs and KPIs.
+      - Each figure includes Friedman ANOVA summary for that KPI:
+        chi2, p, significant, Kendall's W, and n.
     """
     d = df[df[config_col].isin(configs)].copy()
     d[seed_col] = d[seed_col].astype(str)
@@ -128,14 +139,75 @@ def zscores_and_boxplots(df, seed_col, config_col, configs, measures, make_plots
         wide_tables[m] = wide
 
         if make_plots:
+            # Data per config
             groups = [wide[c].to_numpy() for c in wide.columns]
-            plt.figure(figsize=(12, 4))
-            plt.boxplot(groups, tick_labels=list(wide.columns), showmeans=True)
+
+            # Friedman stats on the shown data
+            try:
+                chi2, p = stats.friedmanchisquare(*groups)
+            except Exception:
+                chi2, p = np.nan, np.nan
+
+            n, k = wide.shape
+            W = (chi2 / (n * (k - 1))) if (np.isfinite(chi2) and n > 0 and k > 1) else np.nan
+            significant = bool(np.isfinite(p) and (p <= 0.05))
+            ZPLOT_DIR.mkdir(parents=True, exist_ok=True)
+
+            plt.figure(figsize=(6.5, 3.6))  # smaller figure
+            ax = plt.gca()
+
+            plt.boxplot(
+                groups,
+                tick_labels=[display_config_name(c) for c in wide.columns],
+                showmeans=True
+            )
+
+            plt.margins(x=0.02)  # reduce horizontal whitespace
             plt.axhline(0.0, linestyle="--")
-            plt.title(f"{m} (z-scores within seed)")
+
+            # plt.title(display_name(m))  # only KPI as title
             plt.ylabel("z-score [-]")
-            plt.xticks(rotation=35, ha="right")
-            plt.tight_layout()
+            plt.ylim(-2, 2)
+
+
+            plt.xticks(rotation=30)
+
+            # Friedman annotation text (placed OUTSIDE the plot area, in the top margin)
+            ann = (
+                "ANOVA: \n"
+                + r"$\chi^2$" + f"={chi2:.3f}  "
+                + f"p={p:.3g}  "
+                + f"Sig.={significant}  "
+                + f"W={W:.3f}  "
+                + f"n={n}"
+            )
+
+            # Leave extra room at the top for the annotation
+            plt.tight_layout(pad=0.5, rect=[-0.1, 0.0, 1.0, 0.86])
+
+            # Put the annotation in the reserved top margin (figure coordinates)
+            fig = plt.gcf()
+            fig.text(
+                0.02, 0.98, ann,
+                ha="left", va="top",
+                fontsize=10,
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.90, linewidth=0.5),
+            )
+
+            # Save AFTER adding the annotation so it is included in the PNG
+            safe_kpi = re.sub(r"[^A-Za-z0-9_-]+", "_", display_name(m)).strip("_")
+            safe_cfgs = re.sub(
+                r"[^A-Za-z0-9_-]+", "_",
+                "_".join([display_config_name(c) for c in wide.columns])
+            ).strip("_")
+
+            if plot_prefix:
+                safe_prefix = re.sub(r"[^A-Za-z0-9_-]+", "_", str(plot_prefix)).strip("_")
+                out_path = ZPLOT_DIR / f"{safe_prefix}__zscore_{safe_kpi}.png"
+            else:
+                out_path = ZPLOT_DIR / f"zscore_{safe_kpi}__{safe_cfgs}.png"
+
+            plt.savefig(out_path, dpi=ZPLOT_DPI, bbox_inches="tight")
             plt.show()
             plt.close()
 
@@ -146,7 +218,56 @@ def zscores_and_boxplots(df, seed_col, config_col, configs, measures, make_plots
 # Extra plots (report-friendly)
 # ----------------------------
 
+def save_boxplot_grid(
+    wide_tables: dict,           # {measure: wide_df} zoals in zscores_and_boxplots
+    measures: list[str],         # volgorde
+    title: str,                  # bestandsnaam prefix
+    out_dir: Path,
+    ncols: int = 2,              # 2 naast elkaar in paper werkt vaak goed
+    ylim=(-2, 2),
+    dpi: int = 300
+):
+    out_dir.mkdir(parents=True, exist_ok=True)
 
+    n = len(measures)
+    nrows = int(math.ceil(n / ncols))
+
+    # compacte figuur; schaal mee met aantal rijen
+    fig_w = 6.6 * ncols/2                 # ~2 kolomsbreedte-achtig; pas aan naar jouw template
+    fig_h = 2.2 * nrows
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(fig_w, fig_h), sharey=True)
+    axes = np.atleast_1d(axes).reshape(nrows, ncols)
+
+    for i, m in enumerate(measures):
+        r, c = divmod(i, ncols)
+        ax = axes[r, c]
+
+        wide = wide_tables[m]
+        groups = [wide[col].to_numpy() for col in wide.columns]
+        labels = [display_config_name(col) for col in wide.columns]
+
+        ax.boxplot(groups, tick_labels=labels, showmeans=True, widths = 0.7)
+        ax.axhline(0.0, linestyle="--", linewidth=0.7)
+        ax.set_title(display_name(m))
+        ax.set_ylim(*ylim)
+        ax.tick_params(axis="x", rotation=25)
+
+        if c == 0:
+            ax.set_ylabel("z-score [-]")
+
+    # lege subplots uitzetten
+    for j in range(n, nrows * ncols):
+        r, c = divmod(j, ncols)
+        axes[r, c].axis("off")
+
+    fig.tight_layout(pad=0.4)
+
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", str(title)).strip("_")
+    out_path = out_dir / f"{safe}__zscore_grid.png"
+    fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+
+    return out_path
 def plot_cumulative_delay_absorption(df, config_col, configs, title_prefix=None):
     """
     Cumulative delay absorption mechanism breakdown (stacked means):
@@ -154,6 +275,10 @@ def plot_cumulative_delay_absorption(df, config_col, configs, title_prefix=None)
     - mean_delay_mach
     - mean_delay_dogleg
     - mean_delay_holding
+
+    Updates vs. previous version:
+    - Uses display names consistent with the rest of the report (configs + KPI labels).
+    - Saves the figure to ABS_PLOT_DIR as a PNG.
     """
     d = df[df[config_col].isin(configs)].copy()
 
@@ -167,24 +292,45 @@ def plot_cumulative_delay_absorption(df, config_col, configs, title_prefix=None)
 
     means = d.groupby(config_col)[existing].mean(numeric_only=True).reindex(configs)
 
-    # stacked bar (cumulative)
+    # Pretty labels for legend (prefer your global KPI naming where available)
+    abs_labels = {
+        "mean_delay_speed": MEASURE_DISPLAY_NAMES.get("mean_delay_speed", "Speed control [s/ac]"),
+        "mean_delay_mach": MEASURE_DISPLAY_NAMES.get("mean_delay_mach", "Mach control [s/ac]"),
+        "mean_delay_dogleg": MEASURE_DISPLAY_NAMES.get("mean_delay_dogleg", "Vectoring (dogleg) [s/ac]"),
+        "mean_delay_holding": MEASURE_DISPLAY_NAMES.get("mean_delay_holding", "Holding [s/ac]"),
+    }
+
+    # Stacked bar (cumulative)
     x = np.arange(len(configs))
     bottom = np.zeros(len(configs), dtype=float)
 
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(7.2, 2.8))
     for c in existing:
         vals = means[c].to_numpy(dtype=float)
-        plt.bar(x, vals, bottom=bottom, label=c)
+        plt.bar(x, vals, bottom=bottom, label=abs_labels.get(c, c))
         bottom = bottom + np.nan_to_num(vals)
 
-    plt.xticks(x, [str(c) for c in configs], rotation=35, ha="right")
-    plt.ylabel("Mean absorbed delay")
-    if title_prefix:
-        plt.title(f"{title_prefix} — Cumulative delay absorption by mechanism")
-    else:
-        plt.title("Cumulative delay absorption by mechanism")
-    plt.legend()
-    plt.tight_layout()
+    plt.xticks(x, [display_config_name(str(c)) for c in configs], rotation=25, ha="right")
+    plt.ylabel("Mean absorbed delay [s/ac]")
+
+    # Keep title minimal and consistent with the rest
+    # if title_prefix:
+    #     plt.title(str(title_prefix))
+    plt.grid()
+    plt.ylim(0,100)
+    plt.legend(
+        fontsize=8,
+        loc="upper left",
+        bbox_to_anchor=(0.02, 1.0),
+        borderaxespad=0.0
+    )
+    plt.tight_layout(pad=0.4, rect=[0, 0, 0.82, 1])
+
+    # Save figure
+    ABS_PLOT_DIR.mkdir(parents=True, exist_ok=True)
+    safe_title = re.sub(r"[^A-Za-z0-9_-]+", "_", str(title_prefix) if title_prefix else "absorption").strip("_")
+    out_path = ABS_PLOT_DIR / f"{safe_title}__cumulative_delay_absorption.png"
+    plt.savefig(out_path, dpi=ABS_PLOT_DPI, bbox_inches="tight")
     plt.show()
     plt.close()
 
@@ -238,8 +384,19 @@ def friedman_anova(df, seed_col, config_col, configs, measures, use_zscores=True
 # 3) Wilcoxon post-hoc (pairwise)
 # ----------------------------
 def wilcoxon_posthoc(df, seed_col, config_col, configs, measures,
-                     use_zscores=True, alpha=0.05):
-    pairs = [(configs[i], configs[j]) for i in range(len(configs)) for j in range(i + 1, len(configs))]
+                     use_zscores=True, alpha=0.05, pairs=None):
+    # Pair selection: allow passing an explicit subset of pairs.
+    # Expected format: pairs=[("cfgA","cfgB"), ...]
+    if pairs is None:
+        pairs = [(configs[i], configs[j]) for i in range(len(configs)) for j in range(i + 1, len(configs))]
+    else:
+        # Basic validation + keep only pairs that are in the requested configs
+        pairs = [(a, b) for (a, b) in pairs if (a in configs and b in configs)]
+
+    # Always keep a baseline-vs-rest pair set available (used for starred KPI tables)
+    baseline = configs[0] if configs else None
+    baseline_pairs = [(baseline, c) for c in configs[1:]] if baseline else []
+
     n_pairs = len(pairs)
 
     rows = []
@@ -281,6 +438,45 @@ def wilcoxon_posthoc(df, seed_col, config_col, configs, measures,
     posthoc["alpha"] = float(alpha_corr)
     posthoc["significant"] = posthoc["p_raw"] <= alpha_corr
 
+    # Also compute baseline-vs-rest tests if the user requested a different subset of pairs.
+    # This is used to add "*" markers in the mean KPI table.
+    if baseline_pairs:
+        missing_baseline_pairs = [(a, b) for (a, b) in baseline_pairs
+                                 if not (((posthoc["A"] == a) & (posthoc["B"] == b)).any())]
+        if missing_baseline_pairs:
+            extra_rows = []
+            for m in measures:
+                wide = make_paired_wide(
+                    df, unit_col=seed_col, condition_col=config_col,
+                    conditions=configs, measure=m, zscore_within_unit=use_zscores
+                )
+                for a, b in missing_baseline_pairs:
+                    x = wide[a].to_numpy()
+                    y = wide[b].to_numpy()
+                    diff = x - y
+                    if np.all(np.isfinite(diff)) and np.allclose(diff, 0.0):
+                        stat, p = 0.0, 1.0
+                    else:
+                        try:
+                            stat, p = stats.wilcoxon(x, y)
+                        except Exception:
+                            stat, p = np.nan, np.nan
+                    extra_rows.append({
+                        "measure": m,
+                        "A": a,
+                        "B": b,
+                        "stat": float(stat) if stat is not None else np.nan,
+                        "p_raw": float(p) if p is not None else np.nan,
+                        "n": int(len(x)),
+                        "median_diff": float(np.nanmedian(diff)),
+                        "mean_diff": float(np.nanmean(diff)),
+                        "used_zscores": bool(use_zscores),
+                        "alpha": float(alpha_corr),
+                        "significant": bool(np.isfinite(p) and (p <= alpha_corr)),
+                    })
+            if extra_rows:
+                posthoc = pd.concat([posthoc, pd.DataFrame(extra_rows)], ignore_index=True)
+
     # ---- Attach raw mean values to the posthoc table (per measure, per condition) ----
     # This helps interpret the Wilcoxon result: mean_A, mean_B, and diff_B_minus_A.
     d = df[df[config_col].isin(configs)].copy()
@@ -304,7 +500,6 @@ def wilcoxon_posthoc(df, seed_col, config_col, configs, measures,
 
     posthoc["mean_A"] = posthoc.apply(lambda r: _lookup_mean(r["measure"], r["A"]), axis=1)
     posthoc["mean_B"] = posthoc.apply(lambda r: _lookup_mean(r["measure"], r["B"]), axis=1)
-    posthoc["diff_B_minus_A"] = posthoc["mean_B"] - posthoc["mean_A"]
 
     # ---- Build the clear mean KPI comparison table and attach significance from posthoc ----
     mean_table = mean_comparison_table(
@@ -315,31 +510,55 @@ def wilcoxon_posthoc(df, seed_col, config_col, configs, measures,
     )
     mean_table["alpha_corr"] = float(alpha_corr)
 
-    # ---- Add pairwise significance columns for ALL config pairs ----
-    # Column naming: config1/config2, config2/config3, config1/config3
-    for i in range(len(configs)):
-        for j in range(i + 1, len(configs)):
-            c1 = configs[i]
-            c2 = configs[j]
-            colname = f"significant_{display_config_name(c1)}_vs_{display_config_name(c2)}"
+    # ---- Create a starred mean table (compare every config to the first/baseline) ----
+    # Star rule: for each KPI row, append "*" to mean values that differ significantly from baseline.
+    baseline_disp = display_config_name(baseline) if baseline else None
 
-            sig_series = posthoc.loc[
-                (posthoc["A"] == c1) & (posthoc["B"] == c2),
-                ["measure", "significant"]
-            ].set_index("measure")["significant"]
+    # Map: (measure, config) -> significant (baseline vs config)
+    sig_map = {}
+    if baseline:
+        for _, r in posthoc.iterrows():
+            if r.get("A") == baseline and r.get("B") in configs:
+                sig_map[(r.get("measure"), r.get("B"))] = bool(r.get("significant"))
 
-            mean_table[colname] = mean_table["measure"].map(sig_series).fillna(False).astype(bool)
+    mean_table_star = mean_table.copy()
 
-    return posthoc.sort_values(["measure", "p_raw"]), mean_table
+    def _fmt_star(val, add_star: bool):
+        if val is None or (isinstance(val, float) and np.isnan(val)):
+            return ""
+        try:
+            s = f"{float(val):.3f}" if isinstance(val, (float, np.floating, int, np.integer)) else str(val)
+        except Exception:
+            s = str(val)
+        return s + ("*" if add_star else "")
+
+    if baseline:
+        for c in configs:
+            col = f"mean_{display_config_name(c)}"
+            if col not in mean_table_star.columns:
+                continue
+            if c == baseline:
+                mean_table_star[col] = mean_table_star[col].apply(lambda v: _fmt_star(v, False))
+                continue
+            mean_table_star[col] = mean_table_star.apply(
+                lambda r: _fmt_star(r[col], sig_map.get((r.get("measure"), c), False)),
+                axis=1,
+            )
+
+    # Drop pairwise significance columns; stars encode baseline significance
+    drop_sig_cols = [c for c in mean_table_star.columns if str(c).startswith("significant_")]
+    mean_table_star = mean_table_star.drop(columns=drop_sig_cols, errors="ignore")
+
+    return posthoc.sort_values(["measure", "p_raw"]), mean_table_star
 
 # Helper: mean KPI comparison table
 def mean_comparison_table(df, condition_col, conditions, measures):
     """
     Clear, descriptive table (raw values):
     - mean_<condition> for each condition
-    - diff_<condition>_minus_<baseline> where baseline is conditions[0]
 
     `kpi` is a display label only. Edit MEASURE_DISPLAY_NAMES below.
+    This function returns numeric means (stars applied later).
     """
     rows = []
 
@@ -352,8 +571,6 @@ def mean_comparison_table(df, condition_col, conditions, measures):
             row = {"measure": m, "kpi": kpi_label}
             for c in conditions:
                 row[f"mean_{display_config_name(c)}"] = np.nan
-            for c in conditions[1:]:
-                row[f"diff_{display_config_name(c)}_minus_{display_config_name(conditions[0])}"] = np.nan
             rows.append(row)
             continue
 
@@ -366,14 +583,9 @@ def mean_comparison_table(df, condition_col, conditions, measures):
                .reindex(conditions)
         )
 
-        base = means.iloc[0]
         row = {"measure": m, "kpi": kpi_label}
-
         for c in conditions:
             row[f"mean_{display_config_name(c)}"] = means.loc[c]
-
-        for c in conditions[1:]:
-            row[f"diff_{display_config_name(c)}_minus_{display_config_name(conditions[0])}"] = means.loc[c] - base
 
         rows.append(row)
 
@@ -441,6 +653,16 @@ else:
 # Normalize config: optionally append suffix if scenario indicates a variant
 df["config_norm"] = df["config"].astype(str)
 
+# Merge variants into one config label (e.g., seed32/higherseed runs)
+df["config_norm"] = (
+    df["config_norm"]
+      .str.replace(r"(_seed\d+)$", "", regex=True)   # removes _seed32, _seed16, etc.
+      .str.replace(r"(_higherseed)$", "", regex=True)
+)
+
+# Optional: also merge other similar suffix patterns if you have them
+# df["config_norm"] = df["config_norm"].str.replace(r"(_lowerseed)$", "", regex=True)
+
 mask_no_ebbr = df["scenario"].astype(str).str.startswith("no_ebbr_") if "scenario" in df.columns else False
 if isinstance(mask_no_ebbr, (pd.Series, np.ndarray)):
     needs_suffix = mask_no_ebbr & (~df["config_norm"].str.contains("no_ebbr", na=False))
@@ -473,16 +695,16 @@ MEASURES = [
     # accuracy
     "pct_extrawork",
     "mean_totaldelay",      # rename this in display map if you want “mean delay”
-    "mean_totalspeedup",    # if you want it shown separately
+    # "mean_totalspeedup",    # if you want it shown separately
     "mean_LLDA",
     "count_LLDA_nonzero",
-    "mean_delay_mach",
-    "mean_delay_speed",
-    "count_hold_events",
+    # "mean_delay_mach",
+    # "mean_delay_speed",
+    # "count_hold_events",
 
     # taskload
     "total_count",
-    'count_popup',
+    # 'count_popup',
 ]
 
 MEASURE_DISPLAY_NAMES: Dict[str, str] = {
@@ -493,30 +715,65 @@ MEASURE_DISPLAY_NAMES: Dict[str, str] = {
     "mean_totaldelay": "Mean total delay [s/ac]",
     "mean_totalspeedup": "Mean totalspeedup [s/ac]",
     "mean_LLDA": "Mean vectoring delay [s/ac]",
-    "count_LLDA_nonzero": "Nonzero vectoring delay [ac]",
+    "count_LLDA_nonzero": "Vectored flights [ac]",
     "mean_delay_mach": "Mean mach delay [s/ac]",
     "mean_delay_speed": "Mean delay speed [s/ac]",
-    "count_hold_events": "Holdings [ac]",
+    "count_hold_events": "Total hold events [ac]",
 
     "total_count": "Instruction count [-]",
-    'count_popup': "Pop-ups [-]",
+    'count_popup': "Pop-ups [ac]",
 }
 
 # =========================
 # EASY EDIT: configuration display names
 # =========================
 CONFIG_DISPLAY_NAMES: Dict[str, str] = {
-    "standard_aman": "Baseline AMAN",
-    "eaman_fcfs": "E-AMAN FCFS",
-    "eaman_BOL": "E-AMAN Back-of-Line",
-    "delay20": "Delay Scheduler (20)",
-    "delay25": "Delay Scheduler (25)",
-    "EFDBOL20": "EFD Back-of-Line (20)",
-    "EFDBOL25": "EFD Back-of-Line (25)",
 
-    # NO-EBBR varianten (optioneel)
-    "no_ebbr_BOL20": "BOL20 (no EBBR)",
-    "no_ebbr_BOL25": "BOL25 (no EBBR)",
+    # --- Baseline / Standard AMAN ---
+    "standard_aman": "FCFS14",
+
+    # --- E-AMAN FCFS ---
+    "eaman_fcfs": "FCFS20",
+    "eaman_fcfs_25": "FCFS25",
+
+    # --- E-AMAN BOL ---
+    "eaman_BOL": "BOL20",
+    "eaman_BOL_25": "BOL25",
+
+    # --- Delay Scheduler ---
+    "delay20": "Delay20",
+    "delay25": "Delay25",
+
+    # --- EFD Variants ---
+    "EFDFCFS14": "EFD_FCFS14",
+    "EFDFCFS20": "EFD_FCFS20",
+    "EFDFCFS25": "EFD_FCFS25",
+
+    "EFDBOL20": "EFD_BOL20",
+    "EFDBOL25": "EFD_BOL25",
+
+    # --- Uncertainty Ablations ---
+    "eaman_zero_uncertainty": "FCFS20 no uncertainty",
+    "eaman_no_popup": "FCFS20 no pop-ups",
+
+    "NOTP20": "FCFS20 no TP uncertainty",
+    "NO_ENROUTE20": "FCFS20 no enroute",
+
+    # --- No-EBBR Variants ---
+    "no_ebbr_BOL20": "BOL20_no_ebbr",
+    "no_ebbr_BOL25": "BOL25_no_ebbr",
+
+    "no_ebbr_delay20": "Delay20_no_ebbr",
+    "no_ebbr_delay25": "Delay25_no_ebbr",
+
+    "no_ebbr_EFDBOL20": "EFD_BOL20_no_ebbr",
+    "no_ebbr_EFDBOL25": "EFD_BOL25_no_ebbr",
+
+    "no_ebbr_EFDFCFS20": "EFD_FCFS20_no_ebbr",
+
+    "no_ebbr_FCFS14": "FCFS14_no_ebbr",
+    "no_ebbr_FCFS20": "FCFS20_no_ebbr",
+    "no_ebbr_FCFS25": "FCFS25_no_ebbr",
 }
 
 
@@ -528,6 +785,153 @@ def display_name(key: str) -> str:
 
 def display_config_name(key: str) -> str:
     return CONFIG_DISPLAY_NAMES.get(key, key)
+
+# -------------------------
+# Header helpers for LaTeX KPI tables
+# -------------------------
+_CONFIG_FH_RE = re.compile(r"(\d{2})")
+
+# Known special suffixes (keep order: most specific first)
+_KNOWN_SPECIALS = [
+    "no_ebbr",
+    "no_popup",
+    "zero_uncertainty",
+    "no_tp",
+    "no_enroute_tp",
+]
+
+def split_config_components(cfg_display: str) -> tuple[str, str, str]:
+    """
+    Split a displayed config name into (planner, FH, special).
+
+    Examples:
+      - "FCFS14" -> ("FCFS", "14", "")
+      - "BOL20_no_ebbr" -> ("BOL", "20", "no_ebbr")
+      - "EFD_BOL25" -> ("EFD_BOL", "25", "")
+      - "FCFS20_zero_uncertainty" -> ("FCFS", "20", "zero_uncertainty")
+    """
+    s = str(cfg_display)
+
+    # Special: detect known suffix (after last underscore)
+    special = ""
+    for sp in _KNOWN_SPECIALS:
+        if s.endswith("_" + sp):
+            special = sp
+            s = s[: -(len(sp) + 1)]
+            break
+
+    # FH: first 2-digit block (14/20/25)
+    m = _CONFIG_FH_RE.search(s)
+    fh = m.group(1) if m else ""
+
+    # Planner: strip FH digits from the remainder (keep underscores like EFD_BOL)
+    planner = s
+    if fh:
+        planner = planner.replace(fh, "")
+    planner = planner.strip("_")
+
+    return planner, fh, special
+
+
+def build_kpi_header_rows(cols: list[str]) -> list[list[str]]:
+    """
+    Build three extra header rows for KPI mean/significance tables:
+      1) Planner
+      2) FH
+      3) Special
+
+    For mean columns: use the config name after 'mean_'.
+    For significance columns: show 'A vs B' for each component.
+    """
+    planner_row: list[str] = []
+    fh_row: list[str] = []
+    special_row: list[str] = []
+
+    for col in cols:
+        c = str(col)
+
+        # Left-most label column
+        if c in ("kpi", "KPI"):
+            planner_row.append("Planner")
+            fh_row.append("Freeze Horizon")
+            special_row.append("Special")
+            continue
+
+        # Mean columns
+        if c.startswith("mean_"):
+            cfg = c[len("mean_"):]
+            p, fh, sp = split_config_components(cfg)
+            planner_row.append(p)
+            fh_row.append(fh)
+            special_row.append(sp)
+            continue
+
+        # Significance columns: significant_A_vs_B
+        if c.startswith("significant_") and "_vs_" in c:
+            rest = c[len("significant_"):]
+            a, b = rest.split("_vs_", 1)
+            pa, fha, spa = split_config_components(a)
+            pb, fhb, spb = split_config_components(b)
+
+            def fmt_pair(x, y):
+                s = f"{x} vs {y}".strip()
+                if len(s) > 10:
+                    return rf"\shortstack{{{x} vs\\{y}}}"
+                return s
+
+            planner_row.append(fmt_pair(pa, pb))
+            fh_row.append(fmt_pair(fha, fhb))
+            special_row.append(fmt_pair(spa, spb))
+            continue
+
+        # Everything else (alpha_corr etc.)
+        planner_row.append("")
+        fh_row.append("")
+        special_row.append("")
+
+    return [planner_row, fh_row, special_row]
+
+# -------------------------
+# Apply config display names inside generated table column headers
+# (mean_*, diff_*_minus_*, significant_*_vs_*)
+# -------------------------
+_MEAN_COL_RE = re.compile(r"^mean_(.+)$")
+_DIFF_COL_RE = re.compile(r"^diff_(.+)_minus_(.+)$")
+_SIG_COL_RE  = re.compile(r"^significant_(.+)_vs_(.+)$")
+
+def prettify_result_columns(cols: list[str]) -> list[str]:
+    out: list[str] = []
+    for col in cols:
+        col = str(col)
+
+        m = _MEAN_COL_RE.match(col)
+        if m:
+            cfg = m.group(1)
+            out.append(f"mean_{display_config_name(cfg)}")
+            continue
+
+        m = _DIFF_COL_RE.match(col)
+        if m:
+            a, b = m.group(1), m.group(2)
+            out.append(f"diff_{display_config_name(a)}_minus_{display_config_name(b)}")
+            continue
+
+        m = _SIG_COL_RE.match(col)
+        if m:
+            a, b = m.group(1), m.group(2)
+            out.append(f"significant_{display_config_name(a)}_vs_{display_config_name(b)}")
+            continue
+
+        out.append(col)
+
+    return out
+
+def with_pretty_result_columns(df_in: pd.DataFrame) -> pd.DataFrame:
+    df_out = df_in.copy()
+    df_out.columns = prettify_result_columns([str(c) for c in df_out.columns])
+    return df_out
+
+
 # Pairing / grouping columns (edit once)
 # Use normalized columns so variants like no_ebbr_sc1 can be paired with sc1
 SEED_COL = "scenario_norm"       # paired unit
@@ -535,11 +939,11 @@ COND_COL = "config_norm"         # condition column you compare
 VIOLIN_UNIT_COL = "seed"     # show violin distributions using individual seeds (optional)
 
 # Common knobs
-USE_ZSCORES = False
+USE_ZSCORES = True
 
 # Plot toggles
-MAKE_PLOTS = False          # z-score boxplots
-MAKE_ABSORPTION_PLOTS = False
+MAKE_PLOTS = True        # z-score boxplots
+MAKE_ABSORPTION_PLOTS = True
 MAKE_VIOLIN_PLOTS = False
 
 P_CORR = "bonferroni"
@@ -574,6 +978,7 @@ def df_to_latex_table(
     col_align: str = "c",
     index: bool = False,
     float_format: str = "{:.3f}",
+    extra_header_rows: list[list[str]] | None = None,
 ) -> str:
     if index:
         use_df = df.reset_index()
@@ -583,6 +988,9 @@ def df_to_latex_table(
     def fmt_cell(x):
         if x is None or (isinstance(x, float) and np.isnan(x)):
             return ""
+        # bool is subclass of int -> eerst afvangen, anders krijg je 1/0
+        if isinstance(x, (bool, np.bool_)):
+            return "True" if bool(x) else "False"
         if isinstance(x, (int, np.integer)):
             return str(int(x))
         if isinstance(x, (float, np.floating)):
@@ -592,7 +1000,22 @@ def df_to_latex_table(
                 return str(x)
         return str(x)
 
-    cols = [latex_escape(c) for c in use_df.columns]
+    # Column headers may intentionally contain LaTeX (e.g., $\chi^2$).
+    # Only escape headers that look like plain text.
+    def _latex_escape_header(x: object) -> str:
+        s = "" if x is None else str(x)
+        # If the header already contains LaTeX math or commands, keep it raw.
+        if ("$" in s) or ("\\" in s):
+            return s
+        return latex_escape(s)
+
+    def _latex_escape_cell(s: object) -> str:
+        t = "" if s is None else str(s)
+        if ("$" in t) or ("\\" in t):
+            return t
+        return latex_escape(t)
+
+    cols = [_latex_escape_header(c) for c in use_df.columns]
     ncol = len(cols)
     spec = "|" + "|".join([col_align] * ncol) + "|"
 
@@ -610,10 +1033,20 @@ def df_to_latex_table(
     lines.append(f"\\begin{{tabular}}{{{spec}}}")
     lines.append("\\hline")
 
-    # Header row (bold)
-    header = " & ".join([f"\\textbf{{{c}}}" for c in cols]) + r" \\"
-    lines.append(header)
-    lines.append("\\hline")
+    # Optional extra header rows (e.g., Planner / FH / Special)
+    if extra_header_rows:
+        for row in extra_header_rows:
+            # Ensure correct width
+            if len(row) != ncol:
+                raise ValueError(f"extra_header_rows width mismatch: expected {ncol}, got {len(row)}")
+            row_cells = [_latex_escape_cell(x) for x in row]
+            lines.append(" & ".join(row_cells) + r" \\")
+            lines.append("\\hline")
+
+    # # Header row (bold)
+    # header = " & ".join([f"\\textbf{{{c}}}" for c in cols]) + r" \\"
+    # lines.append(header)
+    # lines.append("\\hline")
 
     # Body
     for _, row in use_df.iterrows():
@@ -622,8 +1055,9 @@ def df_to_latex_table(
         lines.append("\\hline")
 
     # Optional footnote line (right aligned)
+    # NOTE: do NOT LaTeX-escape `notes` because it may intentionally contain LaTeX math (e.g., $\alpha$).
     if notes:
-        lines.append(f"\\multicolumn{{{ncol}}}{{r}}{{{latex_escape(notes)}}}\\\\")
+        lines.append(f"\\multicolumn{{{ncol}}}{{r}}{{{str(notes)}}}\\\\")
         # geen extra hline in jouw guide na footnote; laat dit zo
 
     lines.append("\\end{tabular}")
@@ -634,14 +1068,110 @@ def df_to_latex_table(
     return "\n".join(lines)
 
 
+
+def format_friedman_table(friedman_results: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """
+    Compact Friedman output table:
+    Columns: KPI, chi2, p, W, Sig.
+    Meta (n,k,df,alpha) returned separately for a single footnote line.
+    """
+    if friedman_results is None or friedman_results.empty:
+        return pd.DataFrame(), {}
+
+    def _mode_or_none(series_like):
+        s = pd.to_numeric(series_like, errors="coerce")
+        s = s.dropna()
+        if s.empty:
+            return None
+        return s.mode().iloc[0]
+
+    meta = {
+        "n": _mode_or_none(friedman_results.get("n", pd.Series(dtype=float))),
+        "k": _mode_or_none(friedman_results.get("k", pd.Series(dtype=float))),
+        "df": _mode_or_none(friedman_results.get("df", pd.Series(dtype=float))),
+        "alpha": _mode_or_none(friedman_results.get("alpha", pd.Series(dtype=float))),
+    }
+
+    out = friedman_results.copy()
+
+    # KPI display names (same mapping as your KPI table)
+    out["KPI"] = out["measure"].apply(display_name)
+
+    # Keep only what you want
+    out = out[["KPI", "chi2", "p", "kendall_W", "significant"]].rename(
+        columns={
+            "chi2": r"$\chi^2$",
+            "kendall_W": "W",
+            "significant": "Sig.",
+        }
+    )
+
+    # Replace bools by Yes/No (cleaner in paper tables)
+    out["Sig."] = out["Sig."].map(lambda x: "Yes" if bool(x) else "No")
+
+    # Ensure numeric types for formatting
+    out[r"$\chi^2$"] = pd.to_numeric(out[r"$\chi^2$"], errors="coerce")
+    out["p"] = pd.to_numeric(out["p"], errors="coerce")
+    out["W"] = pd.to_numeric(out["W"], errors="coerce")
+
+    return out, meta
+
+
+def friedman_table_to_latex(
+    friedman_results: pd.DataFrame,
+    caption: str,
+    label: str,
+    float_spec: str = "htbp",
+    float_format: str = "{:.3f}",
+) -> str:
+    """
+    LaTeX table (style-guide-ish):
+    - Minimal columns
+    - One footnote line with n,k,df,alpha (no repeated columns)
+    """
+    tbl, meta = format_friedman_table(friedman_results)
+    if tbl.empty:
+        return ""
+
+    parts = []
+    if meta.get("n") is not None:
+        parts.append(f"n={int(meta['n'])}")
+    if meta.get("k") is not None:
+        parts.append(f"k={int(meta['k'])}")
+    if meta.get("df") is not None:
+        parts.append(f"df={int(meta['df'])}")
+    if meta.get("alpha") is not None:
+        parts.append(rf"$\alpha$={float(meta['alpha']):.3f}")
+
+    notes = "; ".join(parts) if parts else None
+
+    return df_to_latex_table(
+        tbl,
+        caption=caption,
+        label=label,
+        notes=notes,
+        float_spec=float_spec,
+        col_align="c",
+        index=False,
+        float_format=float_format,
+    )
+
 # Helper function for running experiments
-def run_experiment(title, configs):
+def run_experiment(title, configs, pairs=None):
     seed_col = SEED_COL
     config_col = COND_COL
     measures = MEASURES
 
-    _, _ = zscores_and_boxplots(df, seed_col, config_col, configs, measures, make_plots=MAKE_PLOTS)
-
+    _, wide_tables = zscores_and_boxplots(df, seed_col, config_col, configs, measures, make_plots=False, plot_prefix=title)
+    save_boxplot_grid(
+        wide_tables=wide_tables,
+        measures=MEASURES,
+        title=title,
+        out_dir=ZPLOT_DIR,
+        ncols=2,
+        ylim=(-2, 2),
+        dpi=ZPLOT_DPI
+    )
     if MAKE_ABSORPTION_PLOTS:
         plot_cumulative_delay_absorption(df, config_col, configs, title_prefix=title)
 
@@ -651,7 +1181,16 @@ def run_experiment(title, configs):
         plot_violin_distributions(df, VIOLIN_UNIT_COL, config_col, configs, violin_measures, title_prefix=title)
 
     friedman_results, _ = friedman_anova(df, seed_col, config_col, configs, measures, use_zscores=USE_ZSCORES)
-    posthoc, mean_table = wilcoxon_posthoc(df, seed_col, config_col, configs, measures, use_zscores=USE_ZSCORES, alpha=0.05)
+    posthoc, mean_table = wilcoxon_posthoc(
+        df,
+        seed_col,
+        config_col,
+        configs,
+        measures,
+        use_zscores=USE_ZSCORES,
+        alpha=0.05,
+        pairs=pairs,
+    )
 
     print(f"\n===== {title} =====")
     print("Configs:", [display_config_name(c) for c in configs])
@@ -660,8 +1199,8 @@ def run_experiment(title, configs):
 
     # Print KPI labels first (easy to read)
     if "kpi" in mean_table.columns:
-        other_cols = [c for c in mean_table.columns if c not in ("measure", "kpi")]
-        display_table = mean_table[["kpi"] + other_cols]
+        keep_cols = [c for c in mean_table.columns if c == "kpi" or str(c).startswith("mean_") or c == "alpha_corr"]
+        display_table = mean_table[keep_cols]
     else:
         display_table = mean_table
 
@@ -673,12 +1212,15 @@ def run_experiment(title, configs):
 
         # Gebruik de tabel die je ook print (kpi eerst) voor leesbaarheid
         latex_df = display_table.copy() if "display_table" in locals() else mean_table.copy()
+        latex_df = with_pretty_result_columns(latex_df)
 
         safe_title = re.sub(r"[^A-Za-z0-9_-]+", "_", str(title)).strip("_")
         tex_path = LATEX_TABLE_DIR / f"{safe_title}.tex"
 
         caption = f"{LATEX_CAPTION_PREFIX}{title}" if LATEX_CAPTION_PREFIX else str(title)
         label = f"tab:{safe_title.lower()}"
+
+        extra_rows = build_kpi_header_rows([str(c) for c in latex_df.columns])
 
         tex = df_to_latex_table(
             latex_df,
@@ -689,11 +1231,24 @@ def run_experiment(title, configs):
             col_align="c",
             index=False,
             float_format="{:.3f}",
+            extra_header_rows=extra_rows,
         )
 
         tex_path.write_text(tex, encoding="utf-8")
         print(f"LaTeX table written: {tex_path}")
 
+    # --- Friedman table export (compact) ---
+    friedman_tex = friedman_table_to_latex(
+        friedman_results,
+        caption=f"{title} — Friedman ANOVA summary",
+        label=f"tab:{safe_title.lower()}_friedman",
+        float_spec="htbp",
+        float_format="{:.3f}",
+    )
+    if friedman_tex:
+        friedman_path = LATEX_TABLE_DIR / f"{safe_title}_friedman.tex"
+        friedman_path.write_text(friedman_tex, encoding="utf-8")
+        print(f"LaTeX table written: {friedman_path}")
 # ----------------------------
 # Violin plots (KPI distributions per config)
 # ----------------------------
@@ -737,63 +1292,19 @@ def plot_violin_distributions(df, unit_col, config_col, configs, measures, title
         plt.ylabel(display_name(m))
 
         if title_prefix:
-            plt.title(f"{title_prefix} — Violin distribution: {m}")
+            plt.title(f"{title_prefix} — Violin distribution: {display_name(m)}")
         else:
-            plt.title(f"Violin distribution: {m}")
+            plt.title(f"Violin distribution: {display_name(m)}")
 
         plt.tight_layout()
         plt.show()
         plt.close()
 
-# EXP 1 — effect of uncertainty (compare configs)
-# =============================================
 
-configs = ["eaman_zero_uncertainty", "eaman_no_popup", "eaman_fcfs"]
-run_experiment("EXP 1 — effect of uncertainty", configs)
-
-
-# EXP 2 — effect of horizon extension (compare horizons)
-# =====================================================
-
-configs = ["eaman_fcfs", "eaman_fcfs_25", "standard_aman"]
-run_experiment("EXP 2 — effect of horizon extension", configs)
-
-
-# EXP 3 — different schedulers (same horizon, compare)
-# =====================================================
-
-configs = ["delay20", "eaman_fcfs", "eaman_BOL"]
-run_experiment("EXP 3 — different schedulers", configs)
-
-
-# EXP 4 — schedulers with extra-extended horizon
-# ====================================================================
-
-configs = ["delay25", "eaman_fcfs_25", "eaman_BOL_25"]
-
-run_experiment("EXP 4 — schedulers with extra-extended horizon", configs)
-
-
-# EXP 5 — comparing current to proposed
-# ====================================================================
-
-configs = ["standard_aman", "delay20", "eaman_BOL"]
-
-run_experiment("EXP 5 — comparing current to proposed", configs)
-
-
-configs = ["standard_aman", "delay20", "eaman_BOL", "EFDBOL20"]
-
-run_experiment("EXP 5A — comparing current to proposed", configs)
-
-
-
-configs = ["standard_aman", "delay25", "eaman_BOL_25", "EFDBOL25"]
-run_experiment("EXP 5B — comparing current to proposed long range", configs)
 
 
 # Helper: only run an experiment if ALL requested configs exist in the loaded data
-def run_experiment_if_available(title: str, configs: list[str]):
+def run_experiment_if_available(title: str, configs: list[str], pairs=None):
     available = set(pd.Series(df[COND_COL].unique()).dropna().astype(str))
     missing = [c for c in configs if c not in available]
     if missing:
@@ -802,38 +1313,7 @@ def run_experiment_if_available(title: str, configs: list[str]):
         print("Missing configs:", missing)
         print("Available configs (first 50):", sorted(list(available))[:50])
         return
-    run_experiment(title, configs)
-
-
-# EXP 6 — NO-EBBR comparison set (keep EXP1–EXP5B unchanged)
-# Compares baseline vs no_ebbr variants side-by-side.
-configs = ["standard_aman", "eaman_BOL",'no_ebbr_BOL20','no_ebbr_BOL25', 'no_ebbr_FCFS25',"eaman_fcfs", "eaman_BOL_25"]#, "eaman_BOL_25_no_ebbr"]
-
-
-run_experiment_if_available("EXP 6 — NO-EBBR impact", configs)
-
-
-configs = ["standard_aman", "eaman_BOL",'no_ebbr_BOL20', 'EFDBOL20', "no_ebbr_EFDBOL20", 'EFDBOL25', "no_ebbr_EFDBOL25"]
-
-
-run_experiment_if_available("EXP 7 — NO-EBBR impact", configs)
-
-
-
-
-configs = ["standard_aman", 'EFDFCFS14', 'EFDFCFS20', 'eaman_fcfs', 'eaman_BOL']
-
-
-run_experiment_if_available("EXP 8 — FCFS EFD", configs)
-
-
-
-
-
-
-
-
-
+    run_experiment(title, configs, pairs=pairs)
 
 
 
@@ -851,3 +1331,108 @@ def run_experiment_subset(title, configs_include=None, configs_exclude=None):
 
 # Example: compare only the no-EBBR variant runs (independent from the rest)
 # run_experiment_subset("NO-EBBR only", configs_include=[r"no_ebbr$", r"_no_ebbr$"])
+
+
+
+
+
+
+
+
+
+
+
+
+
+configs = ["standard_aman","eaman_fcfs", "eaman_fcfs_25" ]
+
+run_experiment("EXP 1 — effect of horizon extension", configs)
+
+
+# EXP 1 — effect of uncertainty (compare configs)
+# =============================================
+
+configs = ["eaman_zero_uncertainty", "eaman_no_popup", "NOTP20", "NO_ENROUTE20", "eaman_fcfs"]
+
+
+run_experiment("EXP 2 — effect of uncertainty", configs)
+
+# configs = ["standard_aman", "eaman_fcfs", "eaman_BOL", "delay20"]
+configs = [ "eaman_fcfs", "eaman_BOL", "delay20"] # use for z scores
+
+run_experiment("EXP 3 — effect of scheduler", configs)
+#
+
+# configs = ["standard_aman", "eaman_fcfs_25", "eaman_BOL_25", "delay25"]
+configs = ["eaman_fcfs_25", "eaman_BOL_25", "delay25"]
+
+run_experiment("EXP 3B — schedulers with extra-extended horizon", configs)
+
+# EXP 2 — effect of horizon extension (compare horizons)
+# =====================================================
+configs = ["standard_aman", "eaman_BOL", "delay20"]
+
+run_experiment("Baseline AMAN in comparison to Back-of-the-line E-AMAN", configs)
+
+
+
+# # EXP 3A — different schedulers (same horizon, compare)
+# # =====================================================
+#
+# configs = ["delay20", "eaman_fcfs", "eaman_BOL"]
+# run_experiment("EXP 3 — different schedulers", configs)
+
+
+
+## EXP 3B — schedulers with extra-extended horizon
+# # ====================================================================
+#
+# configs = ["delay25", "eaman_fcfs_25", "eaman_BOL_25"]
+#
+# run_experiment("EXP 3A — schedulers with extra-extended horizon", configs)
+
+#
+# # EXP 4A — different schedulers (same horizon, compare)
+# # =====================================================
+#
+# configs = ["delay20", "eaman_fcfs", "eaman_BOL"]
+# run_experiment("EXP 3 — different schedulers", configs)
+#
+#
+# # EXP 5 — comparing current to proposed
+# # ====================================================================
+#
+# configs = ["standard_aman", "delay20", "eaman_BOL"]
+#
+# run_experiment("EXP 5 — comparing current to proposed", configs)
+#
+#
+# configs = ["standard_aman", "delay20", "eaman_BOL", "EFDBOL20"]
+#
+# run_experiment("EXP 5A — comparing current to proposed", configs)
+#
+#
+#
+# configs = ["standard_aman", "delay25", "eaman_BOL_25", "EFDBOL25"]
+# run_experiment("EXP 5B — comparing current to proposed long range", configs)
+#
+# # EXP 6 — NO-EBBR comparison set (keep EXP1–EXP5B unchanged)
+# # Compares baseline vs no_ebbr variants side-by-side.
+# configs = ["standard_aman", "eaman_BOL",'no_ebbr_BOL20','no_ebbr_BOL25', 'no_ebbr_FCFS25',"eaman_fcfs", "eaman_BOL_25"]#, "eaman_BOL_25_no_ebbr"]
+#
+#
+# run_experiment_if_available("EXP 6 — NO-EBBR impact", configs)
+#
+#
+# configs = ["standard_aman", "eaman_BOL",'no_ebbr_BOL20', 'EFDBOL20', "no_ebbr_EFDBOL20", 'EFDBOL25', "no_ebbr_EFDBOL25"]
+#
+#
+# run_experiment_if_available("EXP 7 — NO-EBBR impact", configs)
+#
+#
+#
+#
+# configs = ["standard_aman", 'EFDFCFS14', 'EFDFCFS20', 'eaman_fcfs', 'eaman_BOL']
+#
+#
+# run_experiment_if_available("EXP 8 — FCFS EFD", configs)
