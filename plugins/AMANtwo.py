@@ -278,12 +278,19 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         old_slot = self.Flights.at[flight, 'slot']
         # Only count as an update if the slot change exceeds a threshold (seconds)
         thr = float(getattr(self, 'eat_count_threshold', 0.0) or 0.0)
+
+        cur = self.Flights.at[flight, 'EAT_updates']
+        if pd.isna(cur):
+            cur = 0
+
         if pd.notna(old_slot):
 
             delta = abs(float(slot) - float(old_slot))
             if delta > thr:
-                self.Flights.at[flight, 'EAT_updates'] = int(self.Flights.at[flight, 'EAT_updates']) + 1
+                # self.Flights.at[flight, 'EAT_updates'] = int(self.Flights.at[flight, 'EAT_updates']) + 1
+                self.Flights.at[flight, 'EAT_updates'] = int(cur) + 1
 
+                
     def update_popup_entry(self,acid):
         stack.stack(f"COLOR {acid} 255,128,0")
         self.Flights.at[acid, 'planningstate'] = 'frozen'
@@ -424,8 +431,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                 if not later_df.empty:
                     if 'swaps' not in self.Flights.columns:
                         self.Flights['swaps'] = 0
-                    # self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
-                    self.Flights['swaps'] = pd.to_numeric(self.Flights['swaps'], errors='coerce').fillna(0).astype(int)
+                    self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
                     self.Flights.loc[later_df.index, 'swaps'] += 1
 
 
@@ -548,8 +554,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
         if not after_df.empty:
             if 'swaps' not in self.Flights.columns:
                 self.Flights['swaps'] = 0
-            # self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
-            self.Flights['swaps'] = pd.to_numeric(self.Flights['swaps'], errors='coerce').fillna(0).astype(int)
+            self.Flights['swaps'] = self.Flights['swaps'].fillna(0).astype(int)
             self.Flights.loc[after_df.index, 'swaps'] += 1
 
         # 1) Compress the frozen chain behind the removed popup
@@ -842,7 +847,7 @@ class ArrivalManager(PredictionHandler, ErrorHandler,AmanExporter, core.Entity):
                    'lookahead', 'holdingtime', 'pending_delay']
         self.Flights = pd.DataFrame(columns = columns)
         self.Flights.set_index('ACID', inplace=True)
-        self.set_coltype(self.intcols, 'Int64')
+        self.set_coltype(self.intcols, 'int64')
         self.set_coltype(self.obj_cols, 'object')
         self.set_coltype(self.boolcols, 'bool')
 
