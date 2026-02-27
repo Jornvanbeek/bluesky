@@ -217,7 +217,137 @@ def zscores_and_boxplots(df, seed_col, config_col, configs, measures, make_plots
 
 # Extra plots (report-friendly)
 # ----------------------------
+def save_clustered_zscore_boxplots(
+    wide_tables: dict,          # {measure: wide_df(index=unit, columns=config) met z-scores}
+    measures: list[str],
+    configs: list[str],
+    title: str,
+    out_path: Path,
+    xlim=(-2, 2),
+    dpi: int = 300,
+):
+    """
+    One compact figure:
+      - x-axis = KPIs
+      - y-axis = z-score
+      - per KPI: one boxplot per config with small horizontal offsets
+    """
+    # Filter to measures that exist
+    used_measures = [m for m in measures if m in wide_tables]
+    if not used_measures:
+        return None
 
+    # Layout
+    n_kpi = len(used_measures)
+    n_cfg = len(configs)
+
+    # Figure height scales mildly with #KPIs (tune as needed)
+    fig_h = max(2.5, 0.55 * n_kpi + 1.2)
+    plt.figure(figsize=(7.2, fig_h))
+    ax = plt.gca()
+
+    # Color palette per config
+    cmap = plt.get_cmap("tab10")
+    cfg_colors = {cfg: cmap(i % 10) for i, cfg in enumerate(configs)}
+
+    # Base x positions for KPIs (left to right)
+    # Increase spacing as number of configs grows to prevent overlap.
+    step = 1.1 + 0.1 * max(0, n_cfg - 3)
+    base_x = np.arange(n_kpi) * step
+
+    # Offsets per config within each KPI column (centered around base_x)
+    # Keep the full offset range bounded so it does not collide with the next KPI column.
+    if n_cfg > 1:
+        offset_span = min(0.28 + 0.06 * (n_cfg - 3), 0.55)  # cap span
+        offsets = np.linspace(-offset_span, offset_span, n_cfg)
+    else:
+        offsets = np.array([0.0])
+
+    # Narrower boxes when many configs (prevents overlap within the KPI column)
+    box_w = 0.28 if n_cfg <= 3 else (0.22 if n_cfg == 4 else 0.18)
+
+    # Draw
+    for j, cfg in enumerate(configs):
+        data = []
+        positions = []
+        for i, m in enumerate(used_measures):
+            wide = wide_tables[m].reindex(columns=configs)
+            if cfg not in wide.columns:
+                continue
+            vals = wide[cfg].dropna().to_numpy()
+            data.append(vals)
+            positions.append(base_x[i] + offsets[j])
+
+        if data:
+            bp = ax.boxplot(
+                data,
+                positions=positions,
+                vert=True,
+                widths=box_w,
+                showmeans=False,
+                manage_ticks=False,
+                patch_artist=True,
+                flierprops=dict(marker="o", markersize=3, markeredgewidth=0.5),
+            )
+
+            # Apply color to this config's boxes
+            color = cfg_colors.get(cfg, "gray")
+            for patch in bp["boxes"]:
+                patch.set_facecolor(color)
+                patch.set_alpha(0.5)
+            for median in bp["medians"]:
+                median.set_color(color)
+            for whisker in bp["whiskers"]:
+                whisker.set_color(color)
+            for cap in bp["caps"]:
+                cap.set_color(color)
+            for flier in bp["fliers"]:
+                flier.set_markerfacecolor(color)
+                flier.set_markeredgecolor(color)
+
+    # X tick labels at KPI centers
+    ax.set_xticks(base_x)
+    ax.set_xticklabels([display_name(m) for m in used_measures], rotation=25, ha="right")
+
+    ax.axhline(0.0, linestyle="--", linewidth=0.8)
+    ax.set_ylabel("z-score [-]")
+    ax.set_ylim(*xlim)
+
+    # “Legenda” als tekst bovenaan (zonder kleur-coding)
+    # Zet gewoon de volgorde erbij, matcht offsets links->rechts
+    cfg_label = " | ".join([display_config_name(c) for c in configs])
+    ax.set_title(f"{title}\n{cfg_label}", fontsize=10)
+
+    # -------------------------
+    # Configuration legend (outside left)
+    # -------------------------
+    from matplotlib.patches import Patch
+
+    config_handles = [
+        Patch(
+            facecolor=cfg_colors[c],
+            edgecolor=cfg_colors[c],
+            alpha=0.5,
+            label=display_config_name(c),
+        )
+        for c in configs
+    ]
+
+    ax.legend(
+        handles=config_handles,
+        title="Configuration",
+        loc="lower right",
+        # bbox_to_anchor=(0.835, 0.225),  # slightly outside plot area
+        fontsize=8,
+        title_fontsize=9,
+        borderaxespad=0.0,
+    )
+
+    plt.tight_layout(pad=0.4)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
+    plt.close()
+    return out_path
 def save_boxplot_grid(
     wide_tables: dict,           # {measure: wide_df} zoals in zscores_and_boxplots
     measures: list[str],         # volgorde
@@ -1163,15 +1293,18 @@ def run_experiment(title, configs, pairs=None):
     measures = MEASURES
 
     _, wide_tables = zscores_and_boxplots(df, seed_col, config_col, configs, measures, make_plots=False, plot_prefix=title)
-    save_boxplot_grid(
-        wide_tables=wide_tables,
-        measures=MEASURES,
-        title=title,
-        out_dir=ZPLOT_DIR,
-        ncols=2,
-        ylim=(-2, 2),
-        dpi=ZPLOT_DPI
-    )
+    # save_boxplot_grid(
+    #     wide_tables=wide_tables,
+    #     measures=MEASURES,
+    #     title=title,
+    #     out_dir=ZPLOT_DIR,
+    #     ncols=2,
+    #     ylim=(-2, 2),
+    #     dpi=ZPLOT_DPI
+    # )
+
+    out_path = ZPLOT_DIR / (re.sub(r"[^A-Za-z0-9_-]+", "_", title).strip("_") + "__zscore_clustered.png")
+    save_clustered_zscore_boxplots(wide_tables, MEASURES, configs, title, out_path, xlim=(-2, 2), dpi=ZPLOT_DPI)
     if MAKE_ABSORPTION_PLOTS:
         plot_cumulative_delay_absorption(df, config_col, configs, title_prefix=title)
 
@@ -1344,7 +1477,7 @@ def run_experiment_subset(title, configs_include=None, configs_exclude=None):
 
 
 
-configs = ["standard_aman","eaman_fcfs", "eaman_fcfs_25" ]
+configs = ["FCFS14","FCFS20", "FCFS25" ]
 
 run_experiment("EXP 1 — effect of horizon extension", configs)
 
@@ -1352,28 +1485,32 @@ run_experiment("EXP 1 — effect of horizon extension", configs)
 # EXP 1 — effect of uncertainty (compare configs)
 # =============================================
 
-configs = ["eaman_zero_uncertainty", "eaman_no_popup", "NOTP20", "NO_ENROUTE20", "eaman_fcfs"]
+configs = ["nouncertainty20", "nopopup20", "NOTP20", "NO_ENROUTE20", "FCFS20"]
 
 
 run_experiment("EXP 2 — effect of uncertainty", configs)
 
 # configs = ["standard_aman", "eaman_fcfs", "eaman_BOL", "delay20"]
-configs = [ "eaman_fcfs", "eaman_BOL", "delay20"] # use for z scores
+configs = [ "FCFS20", "BOL20", "DELAY20"] # use for z scores
 
 run_experiment("EXP 3 — effect of scheduler", configs)
 #
 
 # configs = ["standard_aman", "eaman_fcfs_25", "eaman_BOL_25", "delay25"]
-configs = ["eaman_fcfs_25", "eaman_BOL_25", "delay25"]
+configs = ["FCFS25", "BOL25", "DELAY25"]
 
 run_experiment("EXP 3B — schedulers with extra-extended horizon", configs)
 
 # EXP 2 — effect of horizon extension (compare horizons)
 # =====================================================
-configs = ["standard_aman", "eaman_BOL", "delay20"]
+configs = [ "FCFS14", "BOL20", "DELAY20"]
 
 run_experiment("Baseline AMAN in comparison to Back-of-the-line E-AMAN", configs)
 
+
+configs = [ "FCFS14", "BOL20", "no_ebbr_BOL20","EFDBOL20"]
+
+run_experiment("Baseline AMAN in comparison to bol ebbr and efdbol", configs)
 
 
 # # EXP 3A — different schedulers (same horizon, compare)
