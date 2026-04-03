@@ -1,0 +1,34 @@
+\begin{table}[htbp]
+\caption{EXP 4A FCFS EFD and EBBR}
+\begin{center}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.000}
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+Planner & FCFS & FCFS, Planning at T/O enabled & FCFS Excl. EBBR & FCFS Excl. EBBR, Planning at T/O enabled &  \\
+\hline
+Freeze Horizon & 20 & 20 & 20 & 20 &  \\
+\hline
+Special &  &  &  &  &  \\
+\hline
+\textbf{kpi} & \textbf{mean\_FCFS20} & \textbf{mean\_FCFS20, Planning at T/O enabled} & \textbf{mean\_FCFS20 Excl. EBBR} & \textbf{mean\_FCFS20 Excl. EBBR, Planning at T/O enabled} & \textbf{alpha\_corr} \\
+\hline
+EAT Revisions [-] & 13.215 & 10.280* & 8.186* & 5.594* & 0.008 \\
+\hline
+Sequence Position Changes [-] & 12.694 & 8.920* & 6.198* & 2.858* & 0.008 \\
+\hline
+Delay energy cost [\%] & 0.191 & 0.182 & 0.167 & 0.161 & 0.008 \\
+\hline
+Mean total delay [s/ac] & 111.682 & 109.154 & 112.486 & 109.793 & 0.008 \\
+\hline
+Mean vectoring delay [s/ac] & 10.370 & 9.677* & 9.860 & 9.096 & 0.008 \\
+\hline
+Vectored flights [ac] & 14.552 & 13.651* & 13.842 & 12.854 & 0.008 \\
+\hline
+Instruction count [-] & 147.220 & 142.627 & 145.163 & 140.234 & 0.008 \\
+\hline
+\end{tabular}
+\label{tab:exp\_4a\_fcfs\_efd\_and\_ebbr}
+\end{center}
+\end{table}

@@ -8,8 +8,7 @@ the measured states of the aircraft back to the other simulation, where this oth
 interface what the future states of the aircraft will be. The main simulation is run in the parent node, and the
 fast-forwarded simulation is run in the child node.
 
-In the Bluesky Python files, the comment '# PREDICTOR' is added where changes in code are made for the trajectory
-predictor to function.
+
 """
 import csv
 import re
@@ -35,8 +34,7 @@ from bluesky.tools.aero import casormach2tas, fpm, kts, ft, g0, Rearth, nm, tas2
                          vatmos,  vtas2cas, vtas2mach, vcasormach
 from bluesky.tools import areafilter
 
-from bluesky.core import Signal
-from bluesky.traffic import Traffic
+
 
 
 def init_plugin():
@@ -98,6 +96,8 @@ class Route(Route):
             self.wptime.insert(wpidx, -999.0)
             self.wptpredutc.insert(wpidx, -999.0)
 
+
+        # below is aman specific code.
         if wpname in ['ARTIP', 'SUGOL', 'RIVER']:
             self.iaf = wpname
             stack.stack(f'{self.acid} AT {self.iaf} DO TMA_CROSS {self.acid}')
@@ -120,6 +120,7 @@ class Route(Route):
 
     def addwpt_data(self, overwrt, wpidx, wpname, wplat, wplon, wptype, wpalt, wpspd):
         """Upon adding waypoint data, triggers a prediction for the waypoint crossing."""
+        #for aman purposes this is only for IAF and runway. this can be changed if required
         if wpname in ['ARTIP', 'SUGOL', 'RIVER'] or 'EHAM/RW' in wpname:
             stack.stack(f'{self.acid} AT {wpname} DO PREDICTOR WPTCROSS {self.acid} {wpname}')
             if len(self.wpname) > 0 and self.wpname[0] in ['EBBR', 'EDDL']:
@@ -184,20 +185,10 @@ class Predictor(core.Entity):
         stack.stack('IMPLEMENTATION Route Route')
         self._t0_by_acid = {}
 
-    @stack.command
-    def printattrib(self, attrib):
 
-        try:
-            print(getattr(self, attrib))
-        except AttributeError:
-            print(f"Attribute '{attrib}' does not exist.")
-
-    @stack.command
-    def print_wpnames(self,acid):
-        idxac = traf.id2idx(acid)
-        print(traf.ap.route[idxac].wpname)
 
     @signal.subscriber(topic='stack-changed')
+    #some legacy code to check if an aircraft has received a command. likely still works
     def on_stack_changed(self, cmdline):
         """ Handles changes in the command stack, filtering commands. Every stack whether a stack command or a command
         from a scenerio file is published through the signal. Therefore, it is also important to ensure that commands.
@@ -258,9 +249,6 @@ class Predictor(core.Entity):
             if self.predictions_complete and cmd_checks:
                 stack.stack('PREDICTOR UPDATE '+self.acid_in_cmdline(cmdline))
                 # print('predictor started? ', cmdline, self.parent_id, self.child_id)
-
-
-
 
         if wptcross_check(cmdline):
             self.wptcrosscount +=1
@@ -694,13 +682,6 @@ class Predictor(core.Entity):
             stack.forward('FF', target_id=self.child_id)
             self.complete(store = False)
 
-    # @stack.command
-    # def REMOVEWPTS(self,acid):
-    #     if self.parent_id:
-    #         idxac = traf.id2idx(acid)
-    #         if idxac >=0:
-    #             for name in traf.ap.route[idxac].wpname:
-    #                 traf.ap.route[idxac].delwpt(idxac, name)
 
 
     def open_cache(self, picklename):
@@ -747,15 +728,6 @@ class Predictor(core.Entity):
 
         if self.predictions_count_required and self.predictions_count_required == self.predictions:
             self.complete()
-
-            # 26: 00:00 > STOREFLIGHTS
-            # 26: 00:01 > ECHO
-            # PREDICTIONS
-            # SHOULD
-            # BE
-            # COMPLETE, HOLDING
-            # 26: 00:02 > COMPLETE
-            # 26: 00:02 > HOLD
 
     @stack.command
     def amount_aircraft(self, n):
@@ -875,23 +847,6 @@ class Predictor(core.Entity):
         sim.hold()
         stack.forward('HOLD',target_id=self.child_id)
 
-    @stack.command
-    def speedtest(self):
-        t = time.time()
-        if self.parent_id:
-            id = self.parent_id
-        else:
-            id = self.child_id
-        net.send('SPEEDTEST',t, id)
-        stack.forward(f'STCKSPEEDTEST {t}', id)
-
-    @network.subscriber(topic='SPEEDTEST')
-    def speedtest_subscriber(self, t):
-        print('net.send  PING: -----', (time.time() - t))
-
-    @stack.command
-    def STCKSPEEDTEST(self, t):
-        print('STACK PING: -----', (time.time - t))
 
     @timed_function(dt=10)
     def _check_fir_entry(self, areaname='FIRNL'):
@@ -944,19 +899,6 @@ class Predictor(core.Entity):
                                     traf.ap.orig[idx], traf.work[idx], None),
                      self.parent_id)
 
-    # @predictor.subcommand
-    # def crossover(self, acid: str):
-    #     """Handles aircraft waypoint crossing."""
-    #     idxac = traf.id2idx(acid)
-    #     createtime = traf.ap.route[idxac].createtime
-    #     # print('crossover subcommand called')
-    #     if self.parent_id:
-    #         # net.send('PREDICTION', (acid, 'CROSSOVER', sim.simt, sim.simt-createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac]), GROUPID_SIM)
-    #
-    #         net.send('PREDICTION', (acid, 'CROSSOVER', sim.simt, sim.simt - createtime, sim.utc.timestamp(), self.parent_id, traf.type[idxac]),
-    #          self.parent_id)
-
-
 
     @network.subscriber(topic='PREDICTION')#, to_group=GROUPID_SIM)
     def on_prediction_received(self, acid, wpt, wptime, flighttime, wptpredutc, parent_id, type, origin, work, t0):
@@ -991,14 +933,6 @@ class Predictor(core.Entity):
 
             except:
                 pass
-
-            #     stack.stack('ECHO ERROR IN PREDICTION RECEIVEMENT, CHECK COMMANDLINE FOR SPECIFICS')
-            #     print(acid, wptime, wpt)
-            #     print(traf.ap.route[idxac].wpname)
-            #     print('parent: ', self.parent_id)
-            #     print('child: ', self.child_id)
-            #     stack.forward(f'PRINT_WPNAMES {acid}', target_id=self.child_id)
-            #scr.echo(f'Prediction received: {acid} reached {wpt} at {datetime.fromtimestamp(wptpredutc, tz=None)} seconds, stored in traf')
 
 
     @network.subscriber(topic='INITRESET')
@@ -1100,59 +1034,6 @@ class Predictor(core.Entity):
                     return acid
 
         return False
-
-    @stack.command
-    def printfromtp(self, acid):
-        print(self.filter_per_aircraft(acid.upper()))
-
-    @stack.command
-    def printtraf(self, attrib):
-        arr = getattr(traf, attrib, None)
-        if arr is None:
-            stack.stack(f"ECHO Attribute {attrib} not found")
-        else:
-
-            stack.stack(f"ECHO {arr}")
-            print(arr)
-
-
-
-    @stack.command
-    def printconditionals(self, acid: str = None):
-        """Print all conditionals in this node. Optional filter by ACID."""
-        cond = traf.cond
-
-        if getattr(cond, "ncond", 0) == 0 or len(getattr(cond, "id", [])) == 0:
-            print("[TP] No conditionals in this node")
-            return
-
-        acid_f = acid.upper() if isinstance(acid, str) and acid.strip() else None
-
-        if acid_f is None:
-            idxs = list(range(len(cond.id)))
-        else:
-            idxs = [i for i, cid in enumerate(cond.id) if str(cid).upper() == acid_f]
-
-        if not idxs:
-            print(f"[TP] No conditionals for {acid_f} in this node")
-            return
-
-        print("=============== TP CONDITIONALSES ===============")
-        print(f"ncond: {cond.ncond} | printing: {len(idxs)}")
-        if acid_f:
-            print(f"filter: {acid_f}")
-        print("idx | id | type | target | lastdif | posdata | cmd")
-
-        for i in idxs:
-            cid = cond.id[i]
-            ctype = int(cond.condtype[i])
-            targ = float(cond.target[i])
-            ldif = float(cond.lastdif[i])
-            pos = cond.posdata[i]
-            cmd = cond.cmd[i]
-            print(f"{i:4d} | {cid} | {ctype} | {targ} | {ldif} | {pos} | {cmd}")
-
-        print("===============================================")
 
 
 

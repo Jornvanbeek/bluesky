@@ -1,0 +1,324 @@
+
+            <html>
+            <head>
+            <style>
+                .container {
+                    display: flex;
+                    gap: 10px;
+                    flex-wrap: nowrap;
+                    overflow-x: auto; /* Allow scrolling for the container if content overflows */
+                }
+                .table-container {
+                    flex: 0 0 auto;  /* Prevent container from compressing */
+                    overflow-x: auto; /* Enable horizontal scrolling for each table container */
+                }
+                .table {
+                    border-collapse: collapse;
+                    font-size: 12px;
+                    white-space: nowrap; /* Prevent cell content from wrapping */
+                }
+                .table th {
+                    position: sticky;
+                    top: 0;
+                    background: #f1f1f1;
+                }
+                .table th, .table td {
+                    border: 1px solid black;
+                    padding: 4px;
+                    text-align: left;
+                }
+            </style>
+            </head>
+            <body>
+            <div class="container">
+                
+                    <div class="table-container">
+                        <h3>Runway RWY36R  simtime: 00:23:10, elapsedtime: 0:23:52</h3>
+                        <table border="1" class="dataframe table table-bordered">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>planningstate</th>
+      <th>planningtype</th>
+      <th>creation</th>
+      <th>ETD</th>
+      <th>ttlg</th>
+      <th>to eto</th>
+      <th>type</th>
+      <th>LIV</th>
+      <th>ETA</th>
+      <th>delayed ETA</th>
+      <th>ETO IAF</th>
+      <th>ETO_original</th>
+      <th>TP IAF</th>
+      <th>TP ETA</th>
+      <th>IAF</th>
+      <th>rwy</th>
+      <th>EAT</th>
+      <th>slot</th>
+      <th>initialslot</th>
+      <th>manualslot</th>
+      <th>TMA</th>
+      <th>EAT adherence</th>
+      <th>LAS</th>
+      <th>LAf</th>
+      <th>origin</th>
+      <th>popup</th>
+      <th>TPstate</th>
+      <th>EAT_updates</th>
+      <th>count</th>
+      <th>updates</th>
+      <th>Flighttime</th>
+      <th>TP accuracy</th>
+      <th>casdesc</th>
+      <th>max_casdesc</th>
+      <th>min_casdesc</th>
+      <th>E_TO</th>
+      <th>fh_margin</th>
+      <th>fh_margin_at_spawn</th>
+      <th>fh_margin_at_freeze</th>
+      <th>percentile_time</th>
+      <th>E_dep</th>
+      <th>E_enroute</th>
+      <th>E_fir</th>
+      <th>gsfactor</th>
+      <th>planning</th>
+      <th>SID</th>
+      <th>FIR entry</th>
+      <th>Time error</th>
+      <th>Error at Freeze</th>
+      <th>ttlg at freeze</th>
+      <th>minwork</th>
+      <th>totalwork</th>
+      <th>extrawork</th>
+      <th>swaps</th>
+      <th>lookahead</th>
+      <th>holdingtime</th>
+      <th>pending_delay</th>
+      <th>instruction</th>
+      <th>selspd</th>
+      <th>dogleg</th>
+      <th>direct</th>
+      <th>holding</th>
+      <th>earliest</th>
+      <th>TP IAF initial</th>
+      <th>TP IAF last</th>
+      <th>TP IAF last_update</th>
+    </tr>
+    <tr>
+      <th>ACID</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>AEE624SH</th>
+      <td>new</td>
+      <td>NaN</td>
+      <td>00:14:52</td>
+      <td>None</td>
+      <td>0</td>
+      <td>46</td>
+      <td>A20N</td>
+      <td>NaN</td>
+      <td>01:19:27</td>
+      <td>None</td>
+      <td>01:09:01</td>
+      <td>01:09:01</td>
+      <td>01:09:01</td>
+      <td>01:19:27</td>
+      <td>ARTIP</td>
+      <td>36R</td>
+      <td>None</td>
+      <td>None</td>
+      <td>None</td>
+      <td>0</td>
+      <td>626</td>
+      <td>NaN</td>
+      <td>None</td>
+      <td></td>
+      <td>LGAV</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>0.0</td>
+      <td>NaN</td>
+      <td>3875.0</td>
+      <td>NaN</td>
+      <td>272.0</td>
+      <td>297</td>
+      <td>222</td>
+      <td>0.0</td>
+      <td>NaN</td>
+      <td>2041</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>0.0</td>
+      <td>5.526673</td>
+      <td>-0.338301</td>
+      <td>1.0</td>
+      <td>None</td>
+      <td>None</td>
+      <td>01:00:32</td>
+      <td>0.0</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>28439714719.863331</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>-34</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>4141.0</td>
+      <td>4141.0</td>
+      <td>900.0</td>
+    </tr>
+    <tr>
+      <th>KLM82GSH</th>
+      <td>new</td>
+      <td>NaN</td>
+      <td>00:19:15</td>
+      <td>None</td>
+      <td>0</td>
+      <td>44</td>
+      <td>E75L</td>
+      <td>NaN</td>
+      <td>01:18:06</td>
+      <td>None</td>
+      <td>01:07:45</td>
+      <td>01:07:45</td>
+      <td>01:07:45</td>
+      <td>01:18:06</td>
+      <td>ARTIP</td>
+      <td>36R</td>
+      <td>None</td>
+      <td>None</td>
+      <td>None</td>
+      <td>0</td>
+      <td>621</td>
+      <td>NaN</td>
+      <td>None</td>
+      <td></td>
+      <td>ENTO</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>0.0</td>
+      <td>NaN</td>
+      <td>3531.0</td>
+      <td>NaN</td>
+      <td>273.0</td>
+      <td>298</td>
+      <td>223</td>
+      <td>0.0</td>
+      <td>NaN</td>
+      <td>1695</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>-8.701074</td>
+      <td>2.719696</td>
+      <td>1.408746</td>
+      <td>1.0</td>
+      <td>None</td>
+      <td>None</td>
+      <td>00:56:55</td>
+      <td>0.0</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>16271692009.778402</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>-28</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>NaN</td>
+      <td>4065.0</td>
+      <td>4065.0</td>
+      <td>1170.0</td>
+    </tr>
+  </tbody>
+</table>
+                    </div>
+                    
+            </div>
+            </body>
+            </html>
+            

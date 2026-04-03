@@ -315,8 +315,8 @@ def save_clustered_zscore_boxplots(
 
     # “Legenda” als tekst bovenaan (zonder kleur-coding)
     # Zet gewoon de volgorde erbij, matcht offsets links->rechts
-    cfg_label = " | ".join([display_config_name(c) for c in configs])
-    ax.set_title(f"{title}\n{cfg_label}", fontsize=10)
+    # cfg_label = " | ".join([display_config_name(c) for c in configs])
+    # ax.set_title(f"{title}\n{cfg_label}", fontsize=10)
 
     # -------------------------
     # Configuration legend (outside left)
@@ -875,12 +875,12 @@ CONFIG_DISPLAY_NAMES: Dict[str, str] = {
     "delay25": "Delay25",
 
     # --- EFD Variants ---
-    "EFDFCFS14": "EFD_FCFS14",
-    "EFDFCFS20": "EFD_FCFS20",
-    "EFDFCFS25": "EFD_FCFS25",
+    "EFDFCFS14": "FCFS14, Planning at T/O enabled",
+    "EFDFCFS20": "FCFS20, Planning at T/O enabled",
+    "EFDFCFS25": "FCFS25, Planning at T/O enabled",
 
-    "EFDBOL20": "EFD_BOL20",
-    "EFDBOL25": "EFD_BOL25",
+    "EFDBOL20": "BOL20, Planning at T/O enabled",
+    "EFDBOL25": "BOL25, Planning at T/O enabled",
 
     # --- Uncertainty Ablations ---
     "eaman_zero_uncertainty": "FCFS20 no uncertainty",
@@ -890,20 +890,20 @@ CONFIG_DISPLAY_NAMES: Dict[str, str] = {
     "NO_ENROUTE20": "FCFS20 no enroute",
 
     # --- No-EBBR Variants ---
-    "no_ebbr_BOL20": "BOL20_no_ebbr",
-    "no_ebbr_BOL25": "BOL25_no_ebbr",
+    "no_ebbr_BOL20": "BOL20 Excl. EBBR",
+    "no_ebbr_BOL25": "BOL25 Excl. EBBR",
 
-    "no_ebbr_delay20": "Delay20_no_ebbr",
-    "no_ebbr_delay25": "Delay25_no_ebbr",
+    "no_ebbr_delay20": "Delay20 Excl. EBBR",
+    "no_ebbr_delay25": "Delay25 Excl. EBBR",
 
-    "no_ebbr_EFDBOL20": "EFD_BOL20_no_ebbr",
-    "no_ebbr_EFDBOL25": "EFD_BOL25_no_ebbr",
+    "no_ebbr_EFDBOL20": "BOL20 Excl. EBBR, Planning at T/O enabled",
+    "no_ebbr_EFDBOL25": "BOL25 Excl. EBBR, Planning at T/O enabled",
 
-    "no_ebbr_EFDFCFS20": "EFD_FCFS20_no_ebbr",
+    "no_ebbr_EFDFCFS20": "FCFS20 Excl. EBBR, Planning at T/O enabled",
 
-    "no_ebbr_FCFS14": "FCFS14_no_ebbr",
-    "no_ebbr_FCFS20": "FCFS20_no_ebbr",
-    "no_ebbr_FCFS25": "FCFS25_no_ebbr",
+    "no_ebbr_FCFS14": "FCFS14 Excl. EBBR",
+    "no_ebbr_FCFS20": "FCFS20 Excl. EBBR",
+    "no_ebbr_FCFS25": "FCFS25 Excl. EBBR",
 }
 
 
@@ -1109,6 +1109,7 @@ def df_to_latex_table(
     index: bool = False,
     float_format: str = "{:.3f}",
     extra_header_rows: list[list[str]] | None = None,
+    include_header: bool = True,
 ) -> str:
     if index:
         use_df = df.reset_index()
@@ -1173,10 +1174,11 @@ def df_to_latex_table(
             lines.append(" & ".join(row_cells) + r" \\")
             lines.append("\\hline")
 
-    # # Header row (bold)
-    # header = " & ".join([f"\\textbf{{{c}}}" for c in cols]) + r" \\"
-    # lines.append(header)
-    # lines.append("\\hline")
+    # Header row (bold)
+    if include_header:
+        header = " & ".join([f"\\textbf{{{c}}}" for c in cols]) + r" \\"
+        lines.append(header)
+        lines.append("\\hline")
 
     # Body
     for _, row in use_df.iterrows():
@@ -1280,10 +1282,11 @@ def friedman_table_to_latex(
         caption=caption,
         label=label,
         notes=notes,
-        float_spec=float_spec,
+        float_spec="!t",
         col_align="c",
         index=False,
         float_format=float_format,
+        include_header=True,
     )
 
 # Helper function for running experiments
@@ -1312,8 +1315,8 @@ def run_experiment(title, configs, pairs=None):
         # Keep the number of figures reasonable for reports
         violin_measures = [m for m in ("pct_extrawork", "mean_count", "mean_LLDA", "mean_totaldelay", "amount_of_swaps", "total_EAT_updates") if m in measures]
         plot_violin_distributions(df, VIOLIN_UNIT_COL, config_col, configs, violin_measures, title_prefix=title)
-
-    friedman_results, _ = friedman_anova(df, seed_col, config_col, configs, measures, use_zscores=USE_ZSCORES)
+    if len(configs) >=3:
+        friedman_results, _ = friedman_anova(df, seed_col, config_col, configs, measures, use_zscores=USE_ZSCORES)
     posthoc, mean_table = wilcoxon_posthoc(
         df,
         seed_col,
@@ -1327,7 +1330,8 @@ def run_experiment(title, configs, pairs=None):
 
     print(f"\n===== {title} =====")
     print("Configs:", [display_config_name(c) for c in configs])
-    print("\nFriedman:\n", friedman_results)
+    if len(configs) >= 3:
+        print("\nFriedman:\n", friedman_results)
     # print("\nPost-hoc Wilcoxon:\n", posthoc)
 
     # Print KPI labels first (easy to read)
@@ -1371,19 +1375,226 @@ def run_experiment(title, configs, pairs=None):
         print(f"LaTeX table written: {tex_path}")
 
     # --- Friedman table export (compact) ---
-    friedman_tex = friedman_table_to_latex(
-        friedman_results,
-        caption=f"{title} — Friedman ANOVA summary",
-        label=f"tab:{safe_title.lower()}_friedman",
-        float_spec="htbp",
-        float_format="{:.3f}",
-    )
-    if friedman_tex:
-        friedman_path = LATEX_TABLE_DIR / f"{safe_title}_friedman.tex"
-        friedman_path.write_text(friedman_tex, encoding="utf-8")
-        print(f"LaTeX table written: {friedman_path}")
+    if len(configs) >= 3:
+        friedman_tex = friedman_table_to_latex(
+            friedman_results,
+            caption=f"{title} — Friedman ANOVA Summary",
+            label=f"tab:{safe_title.lower()}_friedman",
+            float_spec="!t",
+            float_format="{:.3f}",
+        )
+        if friedman_tex:
+            friedman_path = LATEX_TABLE_DIR / f"{safe_title}_friedman.tex"
+            friedman_path.write_text(friedman_tex, encoding="utf-8")
+            print(f"LaTeX table written: {friedman_path}")
+
+    return {
+        "title": title,
+        "configs": list(configs),
+        "posthoc": posthoc.copy(),
+        "mean_table": mean_table.copy(),
+        "friedman_results": friedman_results.copy() if len(configs) >= 3 else None,
+    }
 # ----------------------------
 # Violin plots (KPI distributions per config)
+
+def build_experiment_summary_table(
+    experiment_results: list[dict],
+    zero_threshold_rel: float = 0.05,
+) -> pd.DataFrame:
+    """
+    Build one large qualitative summary table across multiple experiments.
+
+    Per experiment:
+    - the first config is the reference
+    - every other config is compared to that reference
+
+    Output columns:
+    - Experiment
+    - Reference
+    - Configuration
+    - one column per KPI display name
+    """
+    rows = []
+
+    for result in experiment_results:
+        if not result:
+            continue
+
+        title = result["title"]
+        configs = result["configs"]
+        mean_table = result["mean_table"].copy()
+        posthoc = result["posthoc"].copy()
+
+        if not configs or len(configs) < 2:
+            continue
+
+        baseline = configs[0]
+        baseline_disp = display_config_name(baseline)
+        baseline_col = f"mean_{display_config_name(baseline)}"
+
+        for cfg in configs[1:]:
+            cfg_disp = display_config_name(cfg)
+            cfg_col = f"mean_{cfg_disp}"
+
+            out = {
+                "Experiment": title,
+                "Reference": baseline_disp,
+                "Configuration": cfg_disp,
+            }
+
+            for _, row in mean_table.iterrows():
+                measure = row["measure"]
+                kpi_label = row["kpi"]
+
+                base_val = row.get(baseline_col, np.nan)
+                other_val = row.get(cfg_col, np.nan)
+
+                hit = posthoc[
+                    (posthoc["measure"] == measure) &
+                    (posthoc["A"] == baseline) &
+                    (posthoc["B"] == cfg)
+                ]
+                significant = bool(hit["significant"].iloc[0]) if len(hit) else False
+
+                out[kpi_label] = _qualitative_symbol(
+                    base_val=base_val,
+                    other_val=other_val,
+                    significant=significant,
+                    lower_is_better=(measure in LOWER_IS_BETTER_MEASURES),
+                    zero_threshold_rel=zero_threshold_rel,
+                )
+
+            rows.append(out)
+
+    summary_df = pd.DataFrame(rows)
+
+    fixed_cols = ["Experiment", "Reference", "Configuration"]
+    kpi_cols = [display_name(m) for m in MEASURES]
+    present_kpi_cols = [c for c in kpi_cols if c in summary_df.columns]
+
+    ordered_cols = fixed_cols + present_kpi_cols
+    summary_df = summary_df.reindex(columns=ordered_cols)
+    return summary_df
+
+
+
+def export_experiment_summary_table_to_latex(
+    summary_df: pd.DataFrame,
+    caption: str,
+    label: str,
+    out_path: Path,
+) -> Path:
+    """
+    Export one large cross-experiment qualitative summary table to LaTeX.
+
+    Layout:
+    - one full-width table* for two-column papers
+    - for each experiment, one compact section row:
+      "<experiment title> (reference: <reference>)"
+    - below that, one row per configuration
+    - no separate Experiment / Reference columns in the body
+    """
+
+    def _esc_cell(x: object) -> str:
+        s = "" if x is None else str(x)
+        return latex_escape(s)
+
+    def _stack_words(s: str) -> str:
+        txt = str(s).strip()
+        if not txt:
+            return ""
+        parts = txt.split()
+        if len(parts) <= 1:
+            return latex_escape(txt)
+        return r"\shortstack[l]{" + r"\\".join(latex_escape(p) for p in parts) + "}"
+
+    def _stack_header_label(s: str) -> str:
+        """
+        Make long KPI headers multi-line inside the header cell.
+        Break at spaces and keep bracketed units on the last line when possible.
+        """
+        txt = str(s).strip()
+        if not txt:
+            return ""
+
+        if " [" in txt and txt.endswith("]"):
+            main, unit = txt.rsplit(" [", 1)
+            unit = "[" + unit
+            parts = main.split()
+            if len(parts) >= 2:
+                return r"\shortstack[c]{" + r"\\".join(latex_escape(p) for p in parts[:-1]) + r"\\" + latex_escape(parts[-1] + " " + unit) + "}"
+            return r"\shortstack[c]{" + latex_escape(main) + r"\\" + latex_escape(unit) + "}"
+
+        parts = txt.split()
+        if len(parts) <= 1:
+            return latex_escape(txt)
+        return r"\shortstack[c]{" + r"\\".join(latex_escape(p) for p in parts) + "}"
+
+    fixed_cols = ["Experiment", "Reference", "Configuration"]
+    kpi_cols = [c for c in summary_df.columns if c not in fixed_cols]
+
+    # Only one descriptive column on the left, then KPI columns
+    col_spec = r"|p{4.6cm}|" + "".join([r"p{1.45cm}|" for _ in kpi_cols])
+
+    lines = []
+    lines.append(r"\begin{table*}[htbp]")
+    lines.append(rf"\caption{{{latex_escape(caption)}}}")
+    lines.append(r"\begin{center}")
+    if LATEX_FONT_CMD:
+        lines.append(LATEX_FONT_CMD)
+    lines.append(r"\setlength{\tabcolsep}{1.5pt}")
+    lines.append(r"\renewcommand{\arraystretch}{1.08}")
+    lines.append(rf"\begin{{tabular}}{{{col_spec}}}")
+    lines.append(r"\hline")
+
+    header_cells = [r"\textbf{Configuration}"] + [rf"\textbf{{{_stack_header_label(c)}}}" for c in kpi_cols]
+    lines.append(" & ".join(header_cells) + r" \\")
+    lines.append(r"\hline")
+
+    prev_experiment = None
+    prev_reference = None
+    total_cols = 1 + len(kpi_cols)
+
+    for _, row in summary_df.iterrows():
+        experiment = str(row.get("Experiment", ""))
+        reference = str(row.get("Reference", ""))
+        configuration = str(row.get("Configuration", ""))
+
+        # Add one section row per experiment block
+        if experiment != prev_experiment or reference != prev_reference:
+            if prev_experiment is not None:
+                lines.append(r"\hline\hline")
+            section_text = f"{experiment} (reference: {reference})"
+            lines.append(
+                rf"\multicolumn{{{total_cols}}}{{|l|}}{{\textbf{{{latex_escape(section_text)}}}}} \\"
+            )
+            lines.append(r"\hline")
+
+        vals = [latex_escape(configuration)]
+        for c in kpi_cols:
+            v = row.get(c, "")
+            vals.append("" if pd.isna(v) else str(v))
+
+        lines.append(" & ".join(vals) + r" \\")
+        lines.append(r"\hline")
+
+        prev_experiment = experiment
+        prev_reference = reference
+
+    lines.append(
+        rf"\multicolumn{{{total_cols}}}{{r}}{{{{\footnotesize ++ / --: significant improvement / deterioration relative to the reference; + / -: non-significant but meaningful difference; 0: minimal difference.}}}}\\"
+    )
+    lines.append(r"\end{tabular}")
+    lines.append(rf"\label{{{latex_escape(label)}}}")
+    lines.append(r"\end{center}")
+    lines.append(r"\end{table*}")
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"LaTeX experiment summary table written: {out_path}")
+    return out_path
 # ----------------------------
 def plot_violin_distributions(df, unit_col, config_col, configs, measures, title_prefix=None):
     """
@@ -1436,6 +1647,213 @@ def plot_violin_distributions(df, unit_col, config_col, configs, measures, title
 
 
 
+
+
+# ----------------------------
+# 4) Qualitative summary table (+ / - / 0 / ++ / --)
+# ----------------------------
+
+LOWER_IS_BETTER_MEASURES = {
+    "total_EAT_updates",
+    "amount_of_swaps",
+    "pct_extrawork",
+    "mean_totaldelay",
+    "mean_LLDA",
+    "count_LLDA_nonzero",
+    "total_count",
+    "mean_delay_mach",
+    "mean_delay_speed",
+    "count_hold_events",
+    "count_popup",
+}
+
+
+def _parse_numeric_cell(value):
+    """
+    Convert table cells like 13.215* back to float.
+    Returns np.nan if conversion is not possible.
+    """
+    if pd.isna(value):
+        return np.nan
+
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return float(value)
+
+    s = str(value).strip()
+    s = s.replace("*", "")
+    s = s.replace(",", ".")
+
+    try:
+        return float(s)
+    except Exception:
+        return np.nan
+
+def _qualitative_symbol(base_val, other_val, significant, lower_is_better=True, zero_threshold_rel=0.05):
+    """
+    Map difference to one of: ++, +, 0, -, --
+
+    Rules:
+    - 0  : abs(relative difference) < zero_threshold_rel
+    - +  : improvement, not significant
+    - ++ : improvement, significant
+    - -  : deterioration, not significant
+    - -- : deterioration, significant
+    """
+    base_val = _parse_numeric_cell(base_val)
+    other_val = _parse_numeric_cell(other_val)
+
+    if pd.isna(base_val) or pd.isna(other_val):
+        return ""
+
+    denom = max(abs(base_val), 1e-9)
+    rel_change = (other_val - base_val) / denom
+
+    if abs(rel_change) < zero_threshold_rel:
+        return "0"
+
+    improved = (rel_change < 0) if lower_is_better else (rel_change > 0)
+
+    if improved:
+        return "++" if significant else "+"
+    return "--" if significant else "-"
+
+
+def build_qualitative_summary_table(
+    df,
+    seed_col,
+    config_col,
+    configs,
+    measures,
+    use_zscores=True,
+    alpha=0.05,
+    zero_threshold_rel=0.05,
+    pairs=None,
+):
+    """
+    Build a qualitative comparison table against the first config in `configs`.
+
+    Output:
+    - measure
+    - kpi
+    - baseline
+    - one column per non-baseline config with symbols: ++, +, 0, -, --
+    """
+    baseline = configs[0]
+
+    posthoc, _ = wilcoxon_posthoc(
+        df,
+        seed_col=seed_col,
+        config_col=config_col,
+        configs=configs,
+        measures=measures,
+        use_zscores=use_zscores,
+        alpha=alpha,
+        pairs=pairs,
+    )
+
+    mean_table = mean_comparison_table(
+        df,
+        condition_col=config_col,
+        conditions=configs,
+        measures=measures,
+    )
+
+    rows = []
+    baseline_disp = display_config_name(baseline)
+    baseline_col = f"mean_{baseline_disp}"
+
+    for _, row in mean_table.iterrows():
+        measure = row["measure"]
+        out = {
+            "measure": measure,
+            "kpi": row["kpi"],
+            "baseline": baseline_disp,
+        }
+
+        base_val = row.get(baseline_col, np.nan)
+        lower_is_better = measure in LOWER_IS_BETTER_MEASURES
+
+        for cfg in configs[1:]:
+            cfg_disp = display_config_name(cfg)
+            cfg_col = f"mean_{cfg_disp}"
+            other_val = row.get(cfg_col, np.nan)
+
+            hit = posthoc[
+                (posthoc["measure"] == measure) &
+                (posthoc["A"] == baseline) &
+                (posthoc["B"] == cfg)
+            ]
+            significant = bool(hit["significant"].iloc[0]) if len(hit) else False
+
+            out[cfg_disp] = _qualitative_symbol(
+                base_val=base_val,
+                other_val=other_val,
+                significant=significant,
+                lower_is_better=lower_is_better,
+                zero_threshold_rel=zero_threshold_rel,
+            )
+
+        rows.append(out)
+
+    return pd.DataFrame(rows)
+
+
+def qualitative_summary_to_latex(
+    summary_df,
+    caption,
+    label,
+    out_path,
+    baseline_label="Reference",
+):
+    """
+    Export the qualitative summary table to LaTeX.
+    """
+    display_df = summary_df.copy()
+
+    if "measure" in display_df.columns:
+        display_df = display_df.drop(columns=["measure"])
+
+    if "baseline" in display_df.columns:
+        display_df = display_df.rename(columns={"baseline": baseline_label, "kpi": "KPI"})
+    else:
+        display_df = display_df.rename(columns={"kpi": "KPI"})
+
+    col_headers = list(display_df.columns)
+    align = "l" + "c" * (len(col_headers) - 1)
+
+    lines = []
+    lines.append("\\begin{table}[htbp]")
+    lines.append("\\caption{" + caption + "}")
+    lines.append("\\label{" + label + "}")
+    lines.append("\\centering")
+    lines.append("\\begin{tabular}{" + align + "}")
+    lines.append("\\hline")
+    lines.append(" & ".join(col_headers) + r" \\")
+    lines.append("\\hline")
+
+    for _, r in display_df.iterrows():
+        vals = [str(v) if not pd.isna(v) else "" for v in r.tolist()]
+        lines.append(" & ".join(vals) + r" \\")
+
+    lines.append("\\hline")
+    lines.append("\\end{tabular}")
+    lines.append(r"\\[2pt]")
+    lines.append(
+        r"{\footnotesize ++ / --: significant improvement / deterioration relative to the reference; "
+        r"+ / -: non-significant but meaningful difference; 0: minimal difference.}"
+    )
+    lines.append("\\end{table}")
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"LaTeX qualitative summary table written: {out_path}")
+    return out_path
+
+
+
+
+
 # Helper: only run an experiment if ALL requested configs exist in the loaded data
 def run_experiment_if_available(title: str, configs: list[str], pairs=None):
     available = set(pd.Series(df[COND_COL].unique()).dropna().astype(str))
@@ -1477,41 +1895,41 @@ def run_experiment_subset(title, configs_include=None, configs_exclude=None):
 
 
 
-configs = ["FCFS14","FCFS20", "FCFS25" ]
 
-run_experiment("EXP 1 — effect of horizon extension", configs)
+EXPERIMENT_SPECS = [
+    ("EXP 1 — effect of horizon extension", ["FCFS14", "FCFS20", "FCFS25"]),
+    ("EXP 2 — effect of uncertainty", ["nouncertainty20", "nopopup20", "NOTP20", "NO_ENROUTE20", "FCFS20"]),
+    ("EXP 3 — effect of scheduler", ["FCFS20", "BOL20", "DELAY20"]),
+    ("EXP 3B — schedulers with extra-extended horizon", ["FCFS25", "BOL25", "DELAY25"]),
+    ("Baseline AMAN in comparison to Back-of-the-line E-AMAN", ["FCFS14", "BOL20", "DELAY20"]),
+    ("EXP 4A FCFS EFD and EBBR", ["FCFS20", "EFDFCFS20", "no_ebbr_FCFS20", "no_ebbr_EFDFCFS20"]),
+    ("EXP 4B BOL EFD and EBBR", ["BOL20", "EFDBOL20", "no_ebbr_BOL20", "no_ebbr_EFDBOL20"]),
+    ("EXP 5 BOL vs no ebbr en efd", ["FCFS20", "BOL20", "no_ebbr_EFDFCFS20"]),
+    ("EXP6 BOL vs no ebbr en efd", ["FCFS14", "EFDFCFS14", "no_ebbr_EFDFCFS20"]),
+]
 
+all_experiment_results = []
 
-# EXP 1 — effect of uncertainty (compare configs)
-# =============================================
+for experiment_title, configs in EXPERIMENT_SPECS:
+    result = run_experiment(experiment_title, configs)
+    all_experiment_results.append(result)
 
-configs = ["nouncertainty20", "nopopup20", "NOTP20", "NO_ENROUTE20", "FCFS20"]
+summary_df = build_experiment_summary_table(
+    all_experiment_results,
+    zero_threshold_rel=0.02,
+)
 
+print("\n===== OVERALL QUALITATIVE SUMMARY =====")
+print(summary_df)
 
-run_experiment("EXP 2 — effect of uncertainty", configs)
-
-# configs = ["standard_aman", "eaman_fcfs", "eaman_BOL", "delay20"]
-configs = [ "FCFS20", "BOL20", "DELAY20"] # use for z scores
-
-run_experiment("EXP 3 — effect of scheduler", configs)
-#
-
-# configs = ["standard_aman", "eaman_fcfs_25", "eaman_BOL_25", "delay25"]
-configs = ["FCFS25", "BOL25", "DELAY25"]
-
-run_experiment("EXP 3B — schedulers with extra-extended horizon", configs)
-
-# EXP 2 — effect of horizon extension (compare horizons)
-# =====================================================
-configs = [ "FCFS14", "BOL20", "DELAY20"]
-
-run_experiment("Baseline AMAN in comparison to Back-of-the-line E-AMAN", configs)
-
-
-configs = [ "FCFS14", "BOL20", "no_ebbr_BOL20","EFDBOL20"]
-
-run_experiment("Baseline AMAN in comparison to bol ebbr and efdbol", configs)
-
+if EXPORT_LATEX_TABLES:
+    export_experiment_summary_table_to_latex(
+        summary_df,
+        caption="Qualitative summary of all experiments relative to the reference configuration within each experiment.",
+        label="tab:overall_experiment_summary",
+        out_path=LATEX_TABLE_DIR / "overall_experiment_summary.tex",
+    )
+#conclusie: EFD op FCFS 14 biedt al flinke voordelen eigenlijk
 
 # # EXP 3A — different schedulers (same horizon, compare)
 # # =====================================================
@@ -1573,3 +1991,18 @@ run_experiment("Baseline AMAN in comparison to bol ebbr and efdbol", configs)
 #
 #
 # run_experiment_if_available("EXP 8 — FCFS EFD", configs)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
