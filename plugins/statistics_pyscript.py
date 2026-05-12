@@ -18,6 +18,9 @@ ZPLOT_DPI = 300
 ABS_PLOT_DIR = Path("absorption_plots")
 ABS_PLOT_DPI = 300
 
+SIMPLE_PLOT_DIR = Path("simple_kpi_boxplots")
+SIMPLE_PLOT_DPI = 300
+
 plt.close("all")
 pd.set_option("display.max_columns", None)
 pd.set_option("display.width", 0)          # 0 = auto, gebruik volledige notebook-breedte
@@ -348,6 +351,584 @@ def save_clustered_zscore_boxplots(
     plt.savefig(out_path, dpi=dpi, bbox_inches="tight")
     plt.close()
     return out_path
+
+
+# ----------------------------
+# Simple grouped z-score boxplots (one per KPI group)
+# ----------------------------
+def save_grouped_simple_zscore_boxplots(
+    wide_tables: dict,
+    configs: list[str],
+    title: str,
+    out_dir: Path = SIMPLE_PLOT_DIR,
+    dpi: int = SIMPLE_PLOT_DPI,
+    ylim=(-2, 2),
+):
+    """
+    Create simplified clustered z-score boxplots split by KPI group:
+      - Stability
+      - Planning effectiveness
+      - Taskload
+
+    The style matches the existing clustered z-score plots, but each group is saved
+    as a separate, cleaner figure.
+    """
+    kpi_groups = {
+        "Stability": [
+            "total_EAT_updates",
+            "amount_of_swaps",
+        ],
+        "Planning effectiveness": [
+            "pct_extrawork",
+            "mean_totaldelay",
+            "mean_LLDA",
+            "count_LLDA_nonzero",
+        ],
+        "Taskload": [
+            "total_count",
+            "amount_of_swaps",
+        ],
+    }
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    n_cfg = len(configs)
+    cmap = plt.get_cmap("tab10")
+    cfg_colors = {cfg: cmap(i % 10) for i, cfg in enumerate(configs)}
+
+    from matplotlib.patches import Patch
+
+    written_paths = []
+
+    for group_name, group_measures in kpi_groups.items():
+        used_measures = [m for m in group_measures if m in wide_tables]
+        if not used_measures:
+            continue
+
+        n_kpi = len(used_measures)
+        fig_w = max(5.6, 1.65 * n_kpi + 2.2)
+        fig_h = 3.2
+
+        fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+
+        base_x = np.arange(n_kpi)
+        if n_cfg > 1:
+            offset_span = min(0.22 + 0.05 * max(0, n_cfg - 3), 0.45)
+            offsets = np.linspace(-offset_span, offset_span, n_cfg)
+        else:
+            offsets = np.array([0.0])
+
+        box_w = 0.22 if n_cfg <= 3 else 0.18
+
+        for j, cfg in enumerate(configs):
+            data = []
+            positions = []
+
+            for i, measure in enumerate(used_measures):
+                wide = wide_tables[measure].reindex(columns=configs)
+                if cfg not in wide.columns:
+                    continue
+
+                vals = wide[cfg].dropna().to_numpy()
+                if len(vals) == 0:
+                    continue
+
+                data.append(vals)
+                positions.append(base_x[i] + offsets[j])
+
+            if not data:
+                continue
+
+            color = cfg_colors.get(cfg, "gray")
+            bp = ax.boxplot(
+                data,
+                positions=positions,
+                vert=True,
+                widths=box_w,
+                showmeans=False,
+                manage_ticks=False,
+                patch_artist=True,
+                flierprops=dict(marker="o", markersize=2.5, markeredgewidth=0.4),
+            )
+
+            for patch in bp["boxes"]:
+                patch.set_facecolor(color)
+                patch.set_alpha(0.5)
+            for median in bp["medians"]:
+                median.set_color(color)
+                median.set_linewidth(1.1)
+            for whisker in bp["whiskers"]:
+                whisker.set_color(color)
+            for cap in bp["caps"]:
+                cap.set_color(color)
+            for flier in bp["fliers"]:
+                flier.set_markerfacecolor(color)
+                flier.set_markeredgecolor(color)
+                flier.set_alpha(0.7)
+
+        ax.set_xticks(base_x)
+        ax.set_xticklabels([display_name(m) for m in used_measures], rotation=20, ha="right")
+        ax.axhline(0.0, linestyle="--", linewidth=0.8)
+        ax.set_ylabel("z-score [-]")
+        ax.set_ylim(*ylim)
+        ax.grid(axis="y", linewidth=0.4, alpha=0.35)
+
+        handles = [
+            Patch(
+                facecolor=cfg_colors[cfg],
+                edgecolor=cfg_colors[cfg],
+                alpha=0.5,
+                label=display_config_name(cfg),
+            )
+            for cfg in configs
+        ]
+        ax.legend(
+            handles=handles,
+            title="Configuration",
+            loc="best",
+            fontsize=8,
+            title_fontsize=9,
+            framealpha=0.9,
+        )
+
+        safe_title = re.sub(r"[^A-Za-z0-9_-]+", "_", str(title)).strip("_")
+        safe_group = re.sub(r"[^A-Za-z0-9_-]+", "_", group_name).strip("_")
+        out_path = out_dir / f"{safe_title}__{safe_group.lower()}_zscore_boxplot.png"
+
+        fig.tight_layout(pad=0.45)
+        fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
+        plt.close(fig)
+        written_paths.append(out_path)
+
+    return written_paths
+
+def save_grouped_simple_raw_kpi_boxplots(
+
+    df,
+
+    config_col,
+
+    configs,
+
+    measures,
+
+    title,
+
+    out_dir: Path,
+
+    dpi: int = 300,
+
+    unit_col: str = "scenario_norm",
+
+    kpi_groups_override: dict[str, list[str]] | None = None,
+
+):
+    """
+    Create simplified RAW-VALUE boxplots split by KPI group.
+
+    Layout:
+      - one figure per KPI group
+      - one shared axes per figure
+      - all measurements in that KPI group are shown together
+      - configs are grouped within each measurement
+      - configuration legend is placed on the left
+
+    The statistical unit is one value per scenario per config.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    default_kpi_groups = {
+        "Stability": [
+            "total_EAT_updates",
+            "amount_of_swaps",
+        ],
+        "Planning effectiveness": [
+            "pct_extrawork",
+            "mean_totaldelay",
+            "mean_LLDA",
+            "count_LLDA_nonzero",
+        ],
+        "Taskload": [
+            "total_count",
+            "amount_of_swaps",
+        ],
+    }
+
+    kpi_groups = kpi_groups_override if kpi_groups_override is not None else default_kpi_groups
+
+    def legend_label_settings(title: str, configs: list[str]) -> tuple[str, list[str], str | None]:
+        """
+        Return a context-specific legend title, legend labels, and optional note.
+        The note is placed below the legend.
+        """
+        title_l = str(title).lower()
+        cfg_display = [display_config_name(cfg) for cfg in configs]
+
+        if (
+            "exp 1" in title_l
+            or "freeze horizon" in title_l
+            or "effect_of_horizon_extension" in title_l
+            or "effect of horizon extension" in title_l
+        ):
+            return (
+                "Freeze horizon",
+                ["14 minutes", "20 minutes", "25 minutes"],
+                None,
+            )
+
+        if (
+            "exp 2" in title_l
+            or "uncertainty" in title_l
+            or "effect_of_uncertainty" in title_l
+            or "effect of uncertainty" in title_l
+        ):
+            uncertainty_labels = []
+            for cfg in configs:
+                cfg_l = str(cfg).lower()
+                disp_l = display_config_name(cfg).lower()
+
+                if "nouncertainty" in cfg_l or "zero_uncertainty" in cfg_l or "no uncertainty" in disp_l:
+                    uncertainty_labels.append("None")
+                elif "notp" in cfg_l or "no tp" in disp_l:
+                    uncertainty_labels.append("Pop-ups")
+                elif "nopopup" in cfg_l or "no pop" in disp_l:
+                    uncertainty_labels.append("Trajectory Prediction")
+                elif "no_enroute" in cfg_l or "no enroute" in disp_l:
+                    uncertainty_labels.append("Pop-ups and Departure Route")
+                elif "fcfs20" in cfg_l or disp_l == "fcfs20":
+                    uncertainty_labels.append("All")
+                else:
+                    uncertainty_labels.append(display_config_name(cfg))
+            return "Uncertainty", uncertainty_labels, "FH = 20 minutes"
+
+        if "exp 3" in title_l and "mega" in title_l:
+            return (
+                "Configuration",
+                [
+                    "FCFS14",
+                    "FCFS20",
+                    "BOL20",
+                    "FCFS20 excluding Brussels\nand earlier planning",
+                    "BOL20 excluding Brussels\nand earlier planning",
+                    "BOL20 earlier planning",
+                    "FCFS14 earlier planning",
+                ],
+                None,
+            )
+
+        if "exp 4" in title_l and "scheduler" in title_l:
+            return (
+                "Scheduler",
+                [
+                    "FCFS14",
+                    "FCFS20",
+                    "Back-of-the-line",
+                    "Delayed slot",
+                ],
+                None,
+            )
+
+        if "exp 5" in title_l and "alternatives" in title_l:
+            return (
+                "Alternative",
+                [
+                    "FCFS14",
+                    "BOL20",
+                    "BOL20 earlier planning",
+                    "FCFS20 excluding Brussels\nand earlier planning",
+                ],
+                None,
+            )
+
+        if "exp 6" in title_l and "current" in title_l:
+            return (
+                "Current horizon",
+                [
+                    "FCFS14",
+                    "FCFS14 earlier planning",
+                ],
+                "FH = 14 minutes",
+            )
+
+        if (
+                "mitigation strategies at fh20" in title_l
+                or "effect_of_scheduler" in title_l
+                or "effect of scheduler" in title_l
+        ):
+            scheduler_labels = []
+            for cfg in configs:
+                disp = display_config_name(cfg)
+                disp_l = disp.lower()
+
+                if "fcfs" in disp_l:
+                    scheduler_labels.append("First-come first-serve")
+                elif "bol" in disp_l:
+                    scheduler_labels.append("Back-of-the-line")
+                elif "delay" in disp_l:
+                    scheduler_labels.append("Delayed slot")
+                else:
+                    scheduler_labels.append(disp)
+
+            return "Scheduler", scheduler_labels, "FH = 20 minutes"
+
+        if "schedulers_with_extra-extended_horizon" in title_l or "schedulers with extra-extended horizon" in title_l:
+            scheduler_labels = []
+            for cfg in configs:
+                disp = display_config_name(cfg)
+                disp_l = disp.lower()
+
+                if "fcfs" in disp_l:
+                    scheduler_labels.append("First-come first-serve")
+                elif "bol" in disp_l:
+                    scheduler_labels.append("Back-of-the-line")
+                elif "delay" in disp_l:
+                    scheduler_labels.append("Delayed slot")
+                else:
+                    scheduler_labels.append(disp)
+
+            return "Scheduler", scheduler_labels, "FH = 25 minutes"
+
+        if "exp 4" in title_l or "baseline versus extended horizon" in title_l:
+            return (
+                "Mitigation strategy",
+                ["FCFS14", "FCFS20", "BOL20"],
+                None,
+            )
+
+        if "exp 5" in title_l or "earlier planning at fh14" in title_l:
+            return (
+                "Planning method",
+                ["FCFS14", "FCFS14 earlier planning"],
+                "FH = 14 minutes",
+            )
+
+        if "exp 6a" in title_l or "bol versus earlier planning" in title_l:
+            return (
+                "Mitigation strategy",
+                [
+                    "FCFS14",
+                    "BOL20",
+                    "FCFS20 earlier planning\nand excluding Brussels",
+                ],
+                None,
+            )
+
+        if "exp 6b" in title_l or "bol earlier planning versus fcfs earlier planning" in title_l:
+            return (
+                "Mitigation strategy",
+                [
+                    "BOL20 earlier planning\nand excluding Brussels",
+                    "FCFS20 earlier planning\nand excluding Brussels",
+                ],
+                None,
+            )
+        return "Configuration", cfg_display, None
+
+    safe_title = re.sub(r"[^A-Za-z0-9_-]+", "_", str(title)).strip("_")
+    d = df[df[config_col].isin(configs)].copy()
+
+    # One value per scenario per config.
+    if unit_col in d.columns:
+        d[unit_col] = d[unit_col].astype(str)
+
+        common_units = set.intersection(*[
+            set(d.loc[d[config_col] == cfg, unit_col]) for cfg in configs
+        ])
+        d = d[d[unit_col].isin(common_units)].copy()
+
+        numeric_measures = [m for m in measures if m in d.columns]
+        for m in numeric_measures:
+            d[m] = pd.to_numeric(d[m], errors="coerce")
+
+        d = (
+            d.groupby([unit_col, config_col], as_index=False)[numeric_measures]
+            .mean(numeric_only=True)
+        )
+    else:
+        print(f"Warning: unit_col '{unit_col}' not found. Raw boxplots use unaggregated rows.")
+
+    n_cfg = len(configs)
+    cmap = plt.get_cmap("tab10")
+    cfg_colors = {cfg: cmap(i % 10) for i, cfg in enumerate(configs)}
+
+    from matplotlib.patches import Patch
+
+    written_paths = []
+
+    for group_name, group_measures in kpi_groups.items():
+        used_measures = [m for m in group_measures if m in measures and m in d.columns]
+        if not used_measures:
+            continue
+
+        n_kpi = len(used_measures)
+        legend_title, legend_labels, legend_note = legend_label_settings(title, configs)
+        max_legend_label_len = max([len(str(x)) for x in legend_labels] + [len(legend_title)])
+
+        # Reserve a fixed physical legend area so wide figures do not get a huge gap.
+        legend_area_in = min(2.35, max(1.35, 0.055 * max_legend_label_len + 0.85))
+
+        # One figure, but one subplot/y-axis per KPI. This keeps all selected KPIs
+        # together in one output file while avoiding incompatible y-scales on one axis.
+        fig_w = max(6.8, 2.05 * n_kpi + 2.7 + 0.40 * legend_area_in)
+        fig_h = 3.35
+
+        legend_width = legend_area_in / fig_w
+        plot_left = min(0.34, legend_width + 0.035)
+
+        fig, axes = plt.subplots(
+            nrows=1,
+            ncols=n_kpi,
+            figsize=(fig_w, fig_h),
+            sharey=False,
+            squeeze=False,
+        )
+        axes = axes.ravel()
+
+        if n_cfg > 1:
+            offset_span = min(0.24 + 0.07 * max(0, n_cfg - 3), 0.52)
+            offsets = np.linspace(-offset_span, offset_span, n_cfg)
+        else:
+            offsets = np.array([0.0])
+
+        if n_cfg <= 3:
+            box_w = 0.22
+        elif n_cfg == 4:
+            box_w = 0.17
+        else:
+            box_w = 0.13
+
+        x_margin = max(0.58, offset_span + box_w + 0.08) if n_cfg > 1 else 0.58
+
+        def split_label_and_unit(label: str) -> tuple[str, str]:
+            """Split 'Mean delay [s/ac]' into ('Mean delay', 's/ac')."""
+            match = re.match(r"^(.*?)\s*\[([^\]]+)\]\s*$", str(label))
+            if match:
+                return match.group(1).strip(), match.group(2).strip()
+            return str(label), ""
+
+        for ax, measure in zip(axes, used_measures):
+            all_vals_for_ylim = []
+
+            for j, cfg in enumerate(configs):
+                vals = pd.to_numeric(
+                    d.loc[d[config_col] == cfg, measure],
+                    errors="coerce",
+                ).dropna()
+
+                if len(vals) == 0:
+                    continue
+
+                color = cfg_colors.get(cfg, "gray")
+                pos = offsets[j]
+                all_vals_for_ylim.append(vals.to_numpy())
+
+                bp = ax.boxplot(
+                    [vals.to_numpy()],
+                    positions=[pos],
+                    vert=True,
+                    widths=box_w,
+                    showmeans=False,
+                    manage_ticks=False,
+                    patch_artist=True,
+                    flierprops=dict(marker="o", markersize=2.5, markeredgewidth=0.4),
+                )
+
+                for patch in bp["boxes"]:
+                    patch.set_facecolor(color)
+                    patch.set_alpha(0.5)
+                    patch.set_edgecolor(color)
+
+                for median in bp["medians"]:
+                    median.set_color(color)
+                    median.set_linewidth(1.1)
+
+                for whisker in bp["whiskers"]:
+                    whisker.set_color(color)
+
+                for cap in bp["caps"]:
+                    cap.set_color(color)
+
+                for flier in bp["fliers"]:
+                    flier.set_markerfacecolor(color)
+                    flier.set_markeredgecolor(color)
+                    flier.set_alpha(0.7)
+
+            label, unit = split_label_and_unit(display_name(measure))
+
+            ax.set_xticks([0])
+            ax.set_xticklabels([label], rotation=0, ha="center")
+            ax.set_xlim(-x_margin, x_margin)
+            ax.grid(axis="y", linewidth=0.4, alpha=0.35)
+            ax.set_ylabel(
+                unit if unit else "Value",
+                rotation=0,
+                ha="right",
+                va="center",
+                labelpad=30,
+            )
+            ax.yaxis.set_label_coords(-0.25 if n_kpi > 1 else -0.18, 0.5)
+
+            if all_vals_for_ylim:
+                all_vals = np.concatenate(all_vals_for_ylim)
+                ymin = np.nanmin(all_vals)
+                ymax = np.nanmax(all_vals)
+
+                if np.isfinite(ymin) and np.isfinite(ymax):
+                    if np.isclose(ymin, ymax):
+                        margin = 1.0 if np.isclose(ymin, 0.0) else abs(ymin) * 0.1
+                    else:
+                        margin = 0.08 * (ymax - ymin)
+                    ax.set_ylim(ymin - margin, ymax + margin)
+            else:
+                ax.axis("off")
+
+        handles = [
+            Patch(
+                facecolor=cfg_colors[cfg],
+                edgecolor=cfg_colors[cfg],
+                alpha=0.5,
+                label=legend_label,
+            )
+            for cfg, legend_label in zip(configs, legend_labels)
+        ]
+
+        legend_x = max(0.01, plot_left - legend_width - 0.012)
+        fig.legend(
+            handles=handles,
+            title=legend_title,
+            loc="center left",
+            bbox_to_anchor=(legend_x, 0.56),
+            fontsize=8,
+            title_fontsize=9,
+            framealpha=0.9,
+        )
+
+        if legend_note:
+            fig.text(
+                legend_x + 0.01,
+                0.20,
+                legend_note,
+                ha="left",
+                va="center",
+                fontsize=8,
+            )
+
+        safe_group = re.sub(r"[^A-Za-z0-9_-]+", "_", group_name).strip("_")
+        out_path = out_dir / f"{safe_title}__{safe_group.lower()}_raw_boxplot.png"
+
+        fig.subplots_adjust(
+            left=plot_left,
+            right=0.985,
+            bottom=0.22,
+            top=0.96,
+            wspace=0.70 if n_kpi > 1 else 0.35,
+        )
+        fig.savefig(out_path, dpi=dpi, bbox_inches="tight", pad_inches=0.04)
+        plt.close(fig)
+        written_paths.append(out_path)
+
+    return written_paths
+
 def save_boxplot_grid(
     wide_tables: dict,           # {measure: wide_df} zoals in zscores_and_boxplots
     measures: list[str],         # volgorde
@@ -858,6 +1439,17 @@ MEASURE_DISPLAY_NAMES: Dict[str, str] = {
 # EASY EDIT: configuration display names
 # =========================
 CONFIG_DISPLAY_NAMES: Dict[str, str] = {
+    # --- Names already used directly by the current pickle files ---
+    "FCFS14": "FCFS14",
+    "FCFS20": "FCFS20",
+    "FCFS25": "FCFS25",
+    "BOL20": "BOL20",
+    "BOL25": "BOL25",
+    "DELAY20": "Delay20",
+    "DELAY25": "Delay25",
+    "nopopup20": "FCFS20 no pop-ups",
+    "nouncertainty20": "FCFS20 no uncertainty",
+    "opnieuwnouncertainty": "FCFS20 no uncertainty",
 
     # --- Baseline / Standard AMAN ---
     "standard_aman": "FCFS14",
@@ -1290,15 +1882,15 @@ def friedman_table_to_latex(
     )
 
 # Helper function for running experiments
-def run_experiment(title, configs, pairs=None):
+def run_experiment(title, configs, pairs=None, measures_override=None, kpi_groups_override=None):
     seed_col = SEED_COL
     config_col = COND_COL
-    measures = MEASURES
+    measures = measures_override if measures_override is not None else MEASURES
 
     _, wide_tables = zscores_and_boxplots(df, seed_col, config_col, configs, measures, make_plots=False, plot_prefix=title)
     # save_boxplot_grid(
     #     wide_tables=wide_tables,
-    #     measures=MEASURES,
+    #     measures=measures,
     #     title=title,
     #     out_dir=ZPLOT_DIR,
     #     ncols=2,
@@ -1307,7 +1899,31 @@ def run_experiment(title, configs, pairs=None):
     # )
 
     out_path = ZPLOT_DIR / (re.sub(r"[^A-Za-z0-9_-]+", "_", title).strip("_") + "__zscore_clustered.png")
-    save_clustered_zscore_boxplots(wide_tables, MEASURES, configs, title, out_path, xlim=(-2, 2), dpi=ZPLOT_DPI)
+    save_clustered_zscore_boxplots(wide_tables, measures, configs, title, out_path, xlim=(-2, 2), dpi=ZPLOT_DPI)
+
+    # Only make the split simple KPI boxplots using raw values.
+    # Keep the z-score variant available above, but do not generate it here.
+    # save_grouped_simple_zscore_boxplots(
+    #     wide_tables=wide_tables,
+    #     configs=configs,
+    #     title=title,
+    #     out_dir=SIMPLE_PLOT_DIR,
+    #     dpi=SIMPLE_PLOT_DPI,
+    #     ylim=(-2, 2),
+    # )
+
+    save_grouped_simple_raw_kpi_boxplots(
+        df=df,
+        config_col=config_col,
+        configs=configs,
+        measures=measures,
+        title=title,
+        out_dir=SIMPLE_PLOT_DIR,
+        dpi=SIMPLE_PLOT_DPI,
+        unit_col=seed_col,
+        kpi_groups_override=kpi_groups_override,
+    )
+
     if MAKE_ABSORPTION_PLOTS:
         plot_cumulative_delay_absorption(df, config_col, configs, title_prefix=title)
 
@@ -1855,7 +2471,13 @@ def qualitative_summary_to_latex(
 
 
 # Helper: only run an experiment if ALL requested configs exist in the loaded data
-def run_experiment_if_available(title: str, configs: list[str], pairs=None):
+def run_experiment_if_available(
+    title: str,
+    configs: list[str],
+    pairs=None,
+    measures_override=None,
+    kpi_groups_override=None,
+):
     available = set(pd.Series(df[COND_COL].unique()).dropna().astype(str))
     missing = [c for c in configs if c not in available]
     if missing:
@@ -1864,7 +2486,13 @@ def run_experiment_if_available(title: str, configs: list[str], pairs=None):
         print("Missing configs:", missing)
         print("Available configs (first 50):", sorted(list(available))[:50])
         return
-    run_experiment(title, configs, pairs=pairs)
+    return run_experiment(
+        title,
+        configs,
+        pairs=pairs,
+        measures_override=measures_override,
+        kpi_groups_override=kpi_groups_override,
+    )
 
 
 
@@ -1896,113 +2524,144 @@ def run_experiment_subset(title, configs_include=None, configs_exclude=None):
 
 
 
-EXPERIMENT_SPECS = [
-    ("EXP 1 — effect of horizon extension", ["FCFS14", "FCFS20", "FCFS25"]),
-    ("EXP 2 — effect of uncertainty", ["nouncertainty20", "nopopup20", "NOTP20", "NO_ENROUTE20", "FCFS20"]),
-    ("EXP 3 — effect of scheduler", ["FCFS20", "BOL20", "DELAY20"]),
-    ("EXP 3B — schedulers with extra-extended horizon", ["FCFS25", "BOL25", "DELAY25"]),
-    ("Baseline AMAN in comparison to Back-of-the-line E-AMAN", ["FCFS14", "BOL20", "DELAY20"]),
-    ("EXP 4A FCFS EFD and EBBR", ["FCFS20", "EFDFCFS20", "no_ebbr_FCFS20", "no_ebbr_EFDFCFS20"]),
-    ("EXP 4B BOL EFD and EBBR", ["BOL20", "EFDBOL20", "no_ebbr_BOL20", "no_ebbr_EFDBOL20"]),
-    ("EXP 5 BOL vs no ebbr en efd", ["FCFS20", "BOL20", "no_ebbr_EFDFCFS20"]),
-    ("EXP6 BOL vs no ebbr en efd", ["FCFS14", "EFDFCFS14", "no_ebbr_EFDFCFS20"]),
+# %% =========================
+# SELECTED PAPER COMPARISONS
+# ===========================
+
+STABILITY_MEASURES = [
+    "total_EAT_updates",
+    "amount_of_swaps",
 ]
 
-all_experiment_results = []
+FREEZE_HORIZON_MEASURES = [
+    "total_EAT_updates",
+    "amount_of_swaps",
+    "mean_LLDA",
+    "total_count",
+]
 
-for experiment_title, configs in EXPERIMENT_SPECS:
-    result = run_experiment(experiment_title, configs)
-    all_experiment_results.append(result)
+UNCERTAINTY_MEASURES = [
+    "total_EAT_updates",
+    "amount_of_swaps",
+    "mean_LLDA",
+    "total_count",
+]
 
-summary_df = build_experiment_summary_table(
-    all_experiment_results,
-    zero_threshold_rel=0.02,
+MITIGATION_MEASURES = [
+    "total_EAT_updates",
+    "amount_of_swaps",
+    "mean_totaldelay",
+    "mean_LLDA",
+    "total_count",
+
+]
+
+# Use all globally selected KPIs for the mega comparison.
+# This keeps the mega comparison in one figure because EXP 3 uses single_figure_group(...).
+MEGA_COMPARISON_MEASURES = MEASURES
+
+EXPERIMENT_RESULTS = []
+
+
+def single_figure_group(measures: list[str]) -> dict[str, list[str]]:
+    """Put all selected KPIs for an experiment in one figure."""
+    return {"Selected KPIs": measures}
+# 1) Freeze horizon extension:
+# FCFS14 vs FCFS20 vs FCFS25
+# KPIs: EAT revisions, sequence swaps, mean vectoring delay
+res = run_experiment_if_available(
+    "EXP 1 — freeze horizon extension",
+    ["FCFS14", "FCFS20", "FCFS25"],
+    measures_override=FREEZE_HORIZON_MEASURES,
+    kpi_groups_override=single_figure_group(FREEZE_HORIZON_MEASURES),
 )
+if res:
+    EXPERIMENT_RESULTS.append(res)
 
-print("\n===== OVERALL QUALITATIVE SUMMARY =====")
-print(summary_df)
-
-if EXPORT_LATEX_TABLES:
-    export_experiment_summary_table_to_latex(
-        summary_df,
-        caption="Qualitative summary of all experiments relative to the reference configuration within each experiment.",
-        label="tab:overall_experiment_summary",
-        out_path=LATEX_TABLE_DIR / "overall_experiment_summary.tex",
-    )
-#conclusie: EFD op FCFS 14 biedt al flinke voordelen eigenlijk
-
-# # EXP 3A — different schedulers (same horizon, compare)
-# # =====================================================
-#
-# configs = ["delay20", "eaman_fcfs", "eaman_BOL"]
-# run_experiment("EXP 3 — different schedulers", configs)
+# 2) Uncertainty contribution:
+# None vs TP vs Pop-ups vs combined/all
+# KPIs: stability measures + instruction count
+res = run_experiment_if_available(
+    "EXP 2 — uncertainty contribution",
+    ["nouncertainty20", "nopopup20", "NOTP20", "FCFS20"],
+    measures_override=UNCERTAINTY_MEASURES,
+    kpi_groups_override=single_figure_group(UNCERTAINTY_MEASURES),
+)
+if res:
+    EXPERIMENT_RESULTS.append(res)
 
 
-
-## EXP 3B — schedulers with extra-extended horizon
-# # ====================================================================
-#
-# configs = ["delay25", "eaman_fcfs_25", "eaman_BOL_25"]
-#
-# run_experiment("EXP 3A — schedulers with extra-extended horizon", configs)
-
-#
-# # EXP 4A — different schedulers (same horizon, compare)
-# # =====================================================
-#
-# configs = ["delay20", "eaman_fcfs", "eaman_BOL"]
-# run_experiment("EXP 3 — different schedulers", configs)
-#
-#
-# # EXP 5 — comparing current to proposed
-# # ====================================================================
-#
-# configs = ["standard_aman", "delay20", "eaman_BOL"]
-#
-# run_experiment("EXP 5 — comparing current to proposed", configs)
-#
-#
-# configs = ["standard_aman", "delay20", "eaman_BOL", "EFDBOL20"]
-#
-# run_experiment("EXP 5A — comparing current to proposed", configs)
-#
-#
-#
-# configs = ["standard_aman", "delay25", "eaman_BOL_25", "EFDBOL25"]
-# run_experiment("EXP 5B — comparing current to proposed long range", configs)
-#
-# # EXP 6 — NO-EBBR comparison set (keep EXP1–EXP5B unchanged)
-# # Compares baseline vs no_ebbr variants side-by-side.
-# configs = ["standard_aman", "eaman_BOL",'no_ebbr_BOL20','no_ebbr_BOL25', 'no_ebbr_FCFS25',"eaman_fcfs", "eaman_BOL_25"]#, "eaman_BOL_25_no_ebbr"]
-#
-#
-# run_experiment_if_available("EXP 6 — NO-EBBR impact", configs)
-#
-#
-# configs = ["standard_aman", "eaman_BOL",'no_ebbr_BOL20', 'EFDBOL20', "no_ebbr_EFDBOL20", 'EFDBOL25', "no_ebbr_EFDBOL25"]
-#
-#
-# run_experiment_if_available("EXP 7 — NO-EBBR impact", configs)
-#
-#
-#
-#
-# configs = ["standard_aman", 'EFDFCFS14', 'EFDFCFS20', 'eaman_fcfs', 'eaman_BOL']
-#
-#
-# run_experiment_if_available("EXP 8 — FCFS EFD", configs)
+# 3) Mega comparison:
+# FCFS14 vs FCFS20 vs BOL20 vs earlier-planning / no-Brussels variants
+# KPIs: all globally selected KPIs in MEASURES
+res = run_experiment_if_available(
+    "EXP 3 — mega comparison",
+    [
+        "FCFS14",
+        "FCFS20",
+        "BOL20",
+        "no_ebbr_EFDFCFS20",
+        "Delay20",
+        "EFDBOL20",
+        "EFDFCFS14",
+    ],
+    measures_override=MEGA_COMPARISON_MEASURES,
+    kpi_groups_override=single_figure_group(MEGA_COMPARISON_MEASURES),
+)
+if res:
+    EXPERIMENT_RESULTS.append(res)
 
 
 
+# 4) Scheduler comparison:
+# FCFS14 vs FCFS20 vs BOL20 vs Delay20
+# KPIs: EAT revisions, sequence position changes, mean total delay,
+#       mean vectoring delay, and instruction count
+res = run_experiment_if_available(
+    "EXP 4 — scheduler comparison",
+    [
+        "FCFS14",
+        "FCFS20",
+        "BOL20",
+        "DELAY20",
+    ],
+    measures_override=MEGA_COMPARISON_MEASURES,
+    kpi_groups_override=single_figure_group(MITIGATION_MEASURES),
+)
+if res:
+    EXPERIMENT_RESULTS.append(res)
 
 
+# 5) Alternative mitigation options:
+# FCFS14 vs BOL20 vs BOL20 early planning vs FCFS20 excl. Brussels with early planning
+# KPIs: EAT revisions, sequence position changes, mean total delay,
+#       mean vectoring delay, and instruction count
+res = run_experiment_if_available(
+    "EXP 5 — alternatives comparison",
+    [
+        "FCFS14",
+        "BOL20",
+        "EFDBOL20",
+        "no_ebbr_EFDFCFS20",
+    ],
+    measures_override=MEGA_COMPARISON_MEASURES,
+    kpi_groups_override=single_figure_group(MITIGATION_MEASURES),
+)
+if res:
+    EXPERIMENT_RESULTS.append(res)
 
 
-
-
-
-
-
-
-
-
+# 6) Current horizon with earlier planning:
+# FCFS14 vs FCFS14 with early planning
+# KPIs: stability measures only
+res = run_experiment_if_available(
+    "EXP 6 — current horizon earlier planning",
+    [
+        "FCFS14",
+        "EFDFCFS14",
+    ],
+    measures_override=STABILITY_MEASURES,
+    kpi_groups_override=single_figure_group(STABILITY_MEASURES),
+)
+if res:
+    EXPERIMENT_RESULTS.append(res)
