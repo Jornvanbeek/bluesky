@@ -1,4 +1,0 @@
-00:00:01.00>popup_planner DELAY
-00:00:01.00>freezehorizon 20
-#00:00:01.00>set uncertainty takeoff, dep route, en-route, fir multiplicators
-00:00:01.00>set_uncertainty 0 0 1 1

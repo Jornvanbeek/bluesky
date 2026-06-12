@@ -5,7 +5,9 @@ import pandas as pd
 from datetime import datetime
 import webbrowser
 import os
-from plugins.amanhelpers import aman_settings
+import numpy as np
+from bluesky.tools.aero import nm
+
 
 
 
@@ -36,8 +38,12 @@ class monte_carlo(core.Entity):
         self.parent = b''
         self.active_nodes = set()
         self._seq = 0
-        self.batch = pd.DataFrame(columns=['scenario', 'run', 'seed', 'usecache', 'node', 'status', 'maxtime', 'starttime','endtime','elapsed'])
-        self.amansettings = aman_settings
+        self.batch = pd.DataFrame(columns=[
+            'configuration', 'scenario', 'cmd', 'run', 'seed', 'node',
+            'status', 'maxtime', 'fastforward',
+            'starttime', 'endtime', 'elapsed'
+        ])
+        # self.amansettings = aman_settings
         self.opened = False
         self.remove_when_done = True
         self.multiple_mc = []
@@ -51,10 +57,12 @@ class monte_carlo(core.Entity):
         self.parent = b''
         self.active_nodes = set()
         self._seq = 0
-        self.batch = pd.DataFrame(
-            columns=['scenario', 'run', 'seed', 'usecache', 'node', 'status', 'maxtime', 'starttime', 'endtime',
-                     'elapsed'])
-        self.amansettings = aman_settings
+        self.batch = pd.DataFrame(columns=[
+            'configuration', 'scenario', 'cmd', 'run', 'seed', 'node',
+            'status', 'maxtime', 'fastforward',
+            'starttime', 'endtime', 'elapsed'
+        ])
+        # self.amansettings = aman_settings
         self.opened = False
         self.remove_when_done = True
         self.nextmc()
@@ -76,54 +84,102 @@ class monte_carlo(core.Entity):
 
 
     @stack.command
-    def montecarlo(self, scenario: str, runs:int, maxnodes:int, usecache:bool=False, cachename:str='predictions_cache', startseed:int=0, maxtime='5:00:00', title=None):
+    def montecarlo(
+            self,
+            scenario: str,
+            runs: int,
+            maxnodes: int,
+            startseed: int = 0,
+            maxtime='5:00:00',
+            title=None,
+            configuration: str = '',
+            fastforward: bool = True,
+    ):
+        """Run one scenario repeatedly, optionally with a separate configuration file."""
         rows = []
         for i in range(int(runs)):
             rows.append({
+                'configuration': configuration,
                 'scenario': scenario,
+                'cmd': '',
                 'run': i,
                 'seed': startseed + i,
-                'usecache': usecache,
-                'cachename': cachename,
                 'node': None,
                 'status': 'backlog',
-                'maxtime': maxtime
+                'maxtime': maxtime,
+                'fastforward': fastforward,
             })
-        if title:
-            self.title = title
-        else:
-            self.title = f'{scenario}_{self.amansettings.popup_planner}_FH{int(self.amansettings.freezehorizon/60)}_S{startseed}_R{runs}'
 
-        self.batch = pd.concat([self.batch, pd.DataFrame(rows)])
-        self.maxnodes = maxnodes
+        self.title = title or f'{scenario}_S{startseed}_R{runs}'
+        self.batch = pd.concat([self.batch, pd.DataFrame(rows)], ignore_index=True)
+        self.maxnodes = int(maxnodes)
+        self.start()
+
+    @stack.command
+    def montecarlo_cmd(
+            self,
+            cmd: str,
+            runs: int,
+            maxnodes: int,
+            startseed: int = 0,
+            maxtime='5:00:00',
+            title=None,
+            configuration: str = '',
+            fastforward: bool = True,
+    ):
+        """Run a BlueSky command repeatedly on separate simulation nodes.
+
+        Put commands containing spaces between quotes, for example:
+        MONTECARLO_CMD "GENAIRCRAFT 10" 20 4
+        """
+        rows = []
+
+        for i in range(int(runs)):
+            rows.append({
+                'configuration': configuration,
+                'scenario': '',
+                'cmd': cmd,
+                'run': i,
+                'seed': startseed + i,
+                'node': None,
+                'status': 'backlog',
+                'maxtime': maxtime,
+                'fastforward': fastforward,
+            })
+
+        safe_cmd = cmd.replace(' ', '_')
+        self.title = title or f'{safe_cmd}_S{startseed}_R{runs}'
+        self.batch = pd.concat(
+            [self.batch, pd.DataFrame(rows)],
+            ignore_index=True,
+        )
+        self.maxnodes = int(maxnodes)
         self.start()
 
 
+
     @stack.command
-    def mc_scenarios(self, configuration: str, scenarios: str, amount: int, runs:int, maxnodes:int, usecache:bool=False, startseed:int=0, maxtime='5:00:00', title=None):
+    def mc_scenarios(self, configuration: str, scenarios: str, amount: int, runs: int, maxnodes: int, startseed: int = 0, maxtime='5:00:00', title=None, fastforward: bool = True):
         rows = []
-        gap = 1000 #seed difference between scenarios
+        gap = 1000  # seed difference between scenarios
         for n in range(int(amount)):
-            scenario = scenarios+str(n+1)
+            scenario = scenarios + str(n + 1)
             for i in range(int(runs)):
                 rows.append({
-                    'configuration':  configuration,
+                    'configuration': configuration,
                     'scenario': scenario,
+                    'cmd': '',
                     'run': i,
                     'seed': startseed + i + n * gap,
-                    'usecache': usecache,
-                    'cachename': scenario,
                     'node': None,
                     'status': 'backlog',
-                    'maxtime': maxtime
+                    'maxtime': maxtime,
+                    'fastforward': fastforward,
                 })
-            if title:
-                self.title = title
-            else:
-                self.title = f'{configuration}_{scenario}_{self.amansettings.popup_planner}_FH{int(self.amansettings.freezehorizon/60)}_S{startseed}_R{runs}'
+            self.title = title
 
-        self.batch = pd.concat([self.batch, pd.DataFrame(rows)])
-        self.maxnodes = maxnodes
+        self.batch = pd.concat([self.batch, pd.DataFrame(rows)], ignore_index=True)
+        self.maxnodes = int(maxnodes)
         self.start()
 
 
@@ -158,7 +214,7 @@ class monte_carlo(core.Entity):
             # self.active_nodes.add(node_id)
         # else: send quit command?
 
-    def sendscen(self,node_id):
+    def sendscen(self, node_id):
         selected_scen = self.batch.index[self.batch['status'].eq('backlog')]
         if len(selected_scen) == 0:
             # This can happen when maxnodes > remaining jobs (e.g. 12 scenarios but 16 nodes).
@@ -172,11 +228,10 @@ class monte_carlo(core.Entity):
 
         job_id = selected_scen[0]
         row = self.batch.loc[job_id]
-        scenario = row['scenario']
+        scenario = row.get('scenario', '')
+        cmd = row.get('cmd', '')
         run = row['run']
         seed = row['seed']
-        usecache = row['usecache']
-        cachename = row['cachename']
         maxtime = row['maxtime']
 
         self.batch.at[job_id, 'status'] = 'running'
@@ -185,20 +240,29 @@ class monte_carlo(core.Entity):
         self.batch.at[job_id, 'endtime'] = pd.NaT
         self.batch.at[job_id, 'elapsed'] = 0.0
 
+        configuration = row.get('configuration', '')
+        fastforward = bool(row.get('fastforward', True))
+
         stack.forward('RESET', target_id=node_id)
         stack.forward('MC CLAIM', target_id=node_id)
-        stack.forward(f'SCEN {seed}_{scenario}', target_id=node_id)
         stack.forward(f'SEED {seed}', target_id=node_id)
-        if 'configuration' in row:
-            configuration = row['configuration']
+
+        if pd.notna(configuration) and str(configuration).strip():
             stack.forward(f'PCALL {configuration}', target_id=node_id)
-        if usecache:
-            stack.forward(f'USECACHE {scenario} {cachename}', target_id=node_id)
+
+        if pd.notna(cmd) and str(cmd).strip():
+            # Command mode, for example: GENAIRCRAFT 10
+            stack.forward(str(cmd).strip(), target_id=node_id)
         else:
+            # Normal scenario mode
+            stack.forward(f'SCEN {scenario}', target_id=node_id)
             stack.forward(f'PCALL {scenario}', target_id=node_id)
+
         stack.forward(f'SCHEDULE {maxtime} MC FINISHED', target_id=node_id)
-        stack.forward('DT 1', target_id=node_id)
-        stack.forward(f'SEED {seed}', target_id=node_id)
+        stack.forward('DT 2', target_id=node_id)
+
+        if fastforward:
+            stack.forward('FF', target_id=node_id)
 
 
     @stack.commandgroup
@@ -224,16 +288,7 @@ class monte_carlo(core.Entity):
             node = stack.sender()
             if not self.parent and node in self.nodes:
                 stack.forward('SENDRESULT', target_id=node)
-                # self.sendscen(node)
-                # self.removenode(node)
-                # if self.remove_when_done:
-                #     self.removenode(node)
-                #     self.start()
-                # else:
-                #     stack.forward('COMPLETEHOLD', target_id=node)
-                #     stack.forward('DT 1', target_id=node)
-                #     self.active_nodes.remove(node)
-                #     self.start()
+
 
 
     @network.subscriber(topic='MONTECARLORESULTS')
@@ -273,15 +328,7 @@ class monte_carlo(core.Entity):
     def getresults(self, targetnode:int=0):
         stack.forward('SENDRESULT', target_id=self.nodes[targetnode])
 
-    # def _make_node_ids(self, n: int):
-    #     """Return n full IDs under this server, last byte in 0xF0..0xFF."""
-    #     base = net.server_id[:-1]  # 4-byte group/server prefix
-    #     ids = []
-    #     for i in range(n):
-    #         last = 0xF0 + ((self._seq + i) % 16)  # 240..255
-    #         ids.append(base + bytes([last]))
-    #     self._seq = (self._seq + n) % 16
-    #     return ids
+
 
     def _make_node_ids(self, n: int):
         """
@@ -370,24 +417,28 @@ class monte_carlo(core.Entity):
         net.send('MONTECARLORESULTS',result, sender)
         #example of function that can be placed in other plugin to emit results, automatically get added to dataframe
 
+    # @stack.command
+    # def sendresult (self):
+    #     result = {'LoS': 5}
+    #     sender = stack.sender()
+    #     # print('sendresult')
+    #     net.send('MONTECARLORESULTS',result, sender)
+
+
     def storedf(self, path: str = "Montecarlo/"):
         """Store the batch DataFrame as a pickle, including the current title in the filename."""
         # Ensure output directory exists
         os.makedirs(path, exist_ok=True)
-        filename = f"{self.title}.pkl"
+        filename = f"{self.title or 'montecarlo_results'}.pkl"
         self.batch.to_pickle(os.path.join(path, filename))
 
-    # @core.timed_function(dt= 5)
-    # def autohtml(self):
-    #     if self.predictor.parent_id:
-    #         return
-    #     self.df_to_html()
 
     @stack.command
     def df_to_html(self, path: str = "Montecarlo/"):
         """Exporteer de batch-DataFrame naar een nette HTML-tabel."""
         if self.parent:
             return
+        os.makedirs(path, exist_ok=True)
         df = self.summary().copy()
 
         # Datetimes naar string
@@ -457,13 +508,13 @@ class monte_carlo(core.Entity):
            </head>
            <body>
              <div class="container">
-               <h3>{self.title} — simtime: {sim_hhmmss}</h3>
+               <h3>{self.title or 'Monte Carlo results'} — simtime: {sim_hhmmss}</h3>
                {table_html}
              </div>
            </body>
            </html>
            """
-        output_path = path + self.title +'.html'
+        output_path = os.path.join(path, f"{self.title or 'montecarlo_results'}.html")
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html)
             if not self.opened:
@@ -476,7 +527,7 @@ class monte_carlo(core.Entity):
         # node_id = self.active_nodes.pop()
         # print(f"Removing node {node_id}")
         # net.send(b'QUIT', to_group=node_id)
-        stack.forward('PREDICTOR STOPNODE', target_id=node_id)
+        # stack.forward('PREDICTOR STOPNODE', target_id=node_id)
         stack.forward('MC STOPNODE', target_id=node_id)
         net.nodes.discard(node_id)
         net.node_removed.emit(node_id)
@@ -495,7 +546,7 @@ class monte_carlo(core.Entity):
         for node_id in all_nodes:
             try:
                 # print(f"[MC] killing node {node_id}")
-                stack.forward('PREDICTOR STOPNODE', target_id=node_id)
+                # stack.forward('PREDICTOR STOPNODE', target_id=node_id)
                 stack.forward('MC STOPNODE', target_id=node_id)
             except Exception:
                 pass
@@ -511,3 +562,19 @@ class monte_carlo(core.Entity):
         # Local bookkeeping
         self.nodes.clear()
         self.active_nodes.clear()
+
+
+
+    @stack.command
+    def printconfs(self):
+        confpairs, lospairs, inconf, tcpamax, qdr, dist, dcpa, tcpa, tLOS = \
+            traf.cd.detect(traf, traf, np.ones(traf.ntraf) * 20 * nm, traf.cd.hpz, np.ones(traf.ntraf) * 3600)
+        print(confpairs)
+        print(lospairs)
+        print(inconf)
+        print(tcpamax)
+        print(qdr)
+        print(dist)
+        print(dcpa)
+        print(tcpa)
+        print(tLOS)
