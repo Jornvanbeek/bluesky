@@ -564,17 +564,3 @@ class monte_carlo(core.Entity):
         self.active_nodes.clear()
 
 
-
-    @stack.command
-    def printconfs(self):
-        confpairs, lospairs, inconf, tcpamax, qdr, dist, dcpa, tcpa, tLOS = \
-            traf.cd.detect(traf, traf, np.ones(traf.ntraf) * 20 * nm, traf.cd.hpz, np.ones(traf.ntraf) * 3600)
-        print(confpairs)
-        print(lospairs)
-        print(inconf)
-        print(tcpamax)
-        print(qdr)
-        print(dist)
-        print(dcpa)
-        print(tcpa)
-        print(tLOS)
