@@ -42,7 +42,7 @@ class LoSCounter(core.Entity):
         self.finished_los = []
         self.finished_collisions = []
 
-    @timed_function(dt=2.0)
+    @timed_function(dt=1.0)
     def detect(self):
         """Check every second which aircraft pairs are in LoS or collision."""
 
@@ -130,11 +130,23 @@ class LoSCounter(core.Entity):
             len(self.finished_collisions) + len(self.active_collisions)
         )
 
+        los_events_nm = []
+        for event in self.finished_los:
+            event_nm = event.copy()
+            event_nm['min_distance_nm'] = round(event_nm.pop('min_distance_m') / nm, 2)
+            los_events_nm.append(event_nm)
+
+        collision_events_nm = []
+        for event in self.finished_collisions:
+            event_nm = event.copy()
+            event_nm['min_distance_nm'] = round(event_nm.pop('min_distance_m') / nm, 2)
+            collision_events_nm.append(event_nm)
+
         return True, (
             f'LoS count: {los_count}\n'
             f'Collision count: {collision_count}\n'
-            f'Finished LoS events: {self.finished_los}\n'
-            f'Finished collision events: {self.finished_collisions}'
+            f'Finished LoS events: {los_events_nm}\n'
+            f'Finished collision events: {collision_events_nm}'
         )
 
     @stack.command

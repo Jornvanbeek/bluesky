@@ -1,6 +1,6 @@
 import numpy as np
 
-from bluesky import core, stack
+from bluesky import core, sim, stack
 from bluesky.tools import geo
 
 
@@ -110,7 +110,15 @@ class AircraftGenerator(core.Entity):
     @stack.command
     def replaceaircraft(self, acid: str):
         stack.stack(f"DEL {acid}")
-        stack.stack("GENAIRCRAFT 1")
+
+        # Round the current simulation time to the nearest 5-second step,
+        # then generate the replacement 5 seconds later.
+        rounded_time = round(float(sim.simt) / 5.0) * 5.0
+        t_create = rounded_time + 5.0
+
+        stack.stack(
+            f"SCHEDULE {t_create:.1f} GENAIRCRAFT 1"
+        )
 
     @staticmethod
     def random_position(center_lat, center_lon, size_nm):

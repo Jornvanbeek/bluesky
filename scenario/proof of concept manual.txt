@@ -1,0 +1,53 @@
+This is a short manual to use the proof of concept for a drone safety assesment monte-carlo simulation.
+
+Currently, the sim consists of a few parts:
+BlueSky: the main simulator.
+
+The Montecarlo plugin manages repeated simulations. It:
+
+* creates a dataframe containing all requested runs;
+* starts multiple BlueSky child nodes;
+* assigns runs to the available nodes;
+* sets a different random seed for each run;
+* collects the simulation results;
+* exports the results to pickle and HTML files.
+
+- montecarlo
+	main feature. you are able to control the bunch of simulations by calling this command. runs is amount of repeats. maxnodes is maximum amount of bluesky nodes that can run simultaneously. Generally this is the amount of threads supported by your cpu (often amount of cores times 2)
+
+scenario       Scenario or procedure name
+runs           Number of repeated simulations
+maxnodes       Maximum number of parallel BlueSky nodes
+startseed      Random seed used for the first run
+maxtime        Maximum simulation time
+title          Name of the output files
+configuration  Optional configuration file
+fastforward    TRUE or FALSE
+
+example:
+MONTECARLO mctest1 20 4 0 1:00:00 mctest_results mc_config TRUE
+
+- montecarlo_cmd
+	same principle, but instead of a scenario a command can be used. 
+example:
+MONTECARLO_CMD "GENAIRCRAFT 10" 250 8 0 1:00:00 traffic_10
+
+
+- addmultiplemc
+	when running multiple different scenarios and configs to be managed and run simultaneously. likely too complicated for current state. Future usecase is comparing many configs.
+
+
+NEXTMC
+
+- mc_scenarios
+	used in multiple scenario case to manage dataframe with backlog
+
+Aircraft generator:
+generates n aircraft within a 100nm x 100nm square continuously. random start and finish point, random speed etc. if an aircraft reaches end point, it is deleted and a new aircraft is spawned
+example:
+GENAIRCRAFT 10
+
+LoS_count:
+counts los of separation and collisions. simply detects when distance between flights is less than separation. returns this value when montecarlo asks for it, or when "losresults" is called
+
+

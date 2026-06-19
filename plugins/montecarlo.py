@@ -259,6 +259,8 @@ class monte_carlo(core.Entity):
             stack.forward(f'PCALL {scenario}', target_id=node_id)
 
         stack.forward(f'SCHEDULE {maxtime} MC FINISHED', target_id=node_id)
+
+        #todo overwegen om de dt en ff naar de aircraft generator te gooien. dan zijn er ws een stuk minder problemen met opstarten...
         stack.forward('DT 2', target_id=node_id)
 
         if fastforward:
