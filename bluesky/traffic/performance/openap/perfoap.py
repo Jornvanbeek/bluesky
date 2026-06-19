@@ -73,7 +73,7 @@ class OpenAP(PerfBase):
 
         else:
             # convert to known aircraft type
-            if actype not in self.coeff.actypes_fixwing:
+            if actype.lower() not in self.coeff.actypes_fixwing:
                 # warn = f"Warning: {actype} replaced by B744"
                 # print(warn)
                 # stack.echo(warn)
@@ -284,11 +284,12 @@ class OpenAP(PerfBase):
         )  # maximum cannot exceed MMO
 
         vs_max_with_acc = (1 - ax / self.axmax) * self.vsmax
+        vs_min_with_acc = (1 - ax / self.axmax) * self.vsmin
         allow_vs = np.where(
             (intent_vs > 0) & (intent_vs > self.vsmax), vs_max_with_acc, intent_vs
         )  # for climb with vs larger than vsmax
         allow_vs = np.where(
-            (intent_vs < 0) & (intent_vs < self.vsmin), vs_max_with_acc, allow_vs
+            (intent_vs < 0) & (intent_vs < self.vsmin), vs_min_with_acc, allow_vs
         )  # for descent with vs smaller than vsmin (negative)
         allow_vs = np.where(
             (self.phase == ph.GD) & (bs.traf.tas < self.vminto), 0, allow_vs
@@ -410,10 +411,10 @@ class OpenAP(PerfBase):
         return (
             True,
             f"Flight phase: {ph.readable_phase(self.phase[acid])}\n"
-            f"Thrust: {self.thrust[acid] / 1000:d} kN\n"
-            f"Drag: {self.drag[acid] / 1000:d} kN\n"
+            f"Thrust: {self.thrust[acid] / 1000:.0f} kN\n"
+            f"Drag: {self.drag[acid] / 1000:.0f} kN\n"
             f"Fuel flow: {self.fuelflow[acid]:.2f} kg/s\n"
-            f"Speed envelope: [{self.vmin[acid] / kts:d}, {self.vmax[acid] / kts:d}] kts\n"
-            f"Vertical speed envelope: [{self.vsmin[acid] / fpm:d}, {self.vsmax[acid] / fpm:d}] fpm\n"
-            f"Ceiling: {self.hmax[acid] / ft:d} ft",
+            f"Speed envelope: [{self.vmin[acid] / kts:.0f}, {self.vmax[acid] / kts:.0f}] kts\n"
+            f"Vertical speed envelope: [{self.vsmin[acid] / fpm:.0f}, {self.vsmax[acid] / fpm:.0f}] fpm\n"
+            f"Ceiling: {self.hmax[acid] / ft:.0f} ft",
         )

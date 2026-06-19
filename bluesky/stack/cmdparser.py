@@ -41,8 +41,8 @@ class Command:
             # TODO: @commandgroup repeated calls in subclasses should not create
             # alt commands
             altcmd = Command(func, name, parent=cmdobj, **kwargs)
-            cmdobj.altcmds[func.__name__.upper()] = altcmd
-            cmdobj = altcmd
+            cmdobj.altcmds[func.__module__] = altcmd
+
         else:
             # for subclasses reimplementing stack functions we keep only one
             # Command object
@@ -100,9 +100,8 @@ class Command:
         return ret, ''
 
     def __repr__(self):
-        if self.valid:
-            return f'<Stack Command {self.name}, callback={self.callback}>'
-        return f'<Stack Command {self.name} (invalid), callback=unbound method {self.callback}'
+        return f'<Stack Command {self.name}, callback={self.callback}>'
+        # return f'<Stack Command {self.name} (invalid), callback=unbound method {self.callback}'
 
     @property
     def callback(self):
@@ -115,11 +114,12 @@ class Command:
     def callback(self, function):
         self._callback = FuncObject(function)
         spec = inspect.signature(function)
+        paramspecs = list(filter(Parameter.canwrap, spec.parameters.values()))
+        paramspecnames = [p.name for p in paramspecs]
         self.brief = self.brief or (
-            self.name + ' ' + ','.join(spec.parameters))
+            self.name + ' ' + ','.join(paramspecnames))
         self.help = self.help or inspect.cleandoc(
             inspect.getdoc(function) or '')
-        paramspecs = list(filter(Parameter.canwrap, spec.parameters.values()))
         if self.annotations:
             self.params = list()
             pos = 0

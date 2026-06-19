@@ -240,7 +240,7 @@ class MainWindow(QMainWindow, Base):
         ''' Switch on/off elements and background of map/radar view 
         
             Usage:
-                SWRAD GEO/GRID/APT/VOR/WPT/LABEL/ADSBCOVERAGE/TRAIL/POLY [dt]/[value]
+                SWRAD SAT/GEO/GRID/APT/VOR/WPT/LABEL/ADSBCOVERAGE/TRAIL/POLY [dt]/[value]
         '''
         match switch:
             case 'GEO':
@@ -288,7 +288,7 @@ class MainWindow(QMainWindow, Base):
         self.panzoom_event.emit(store)
         return True
 
-    @stack.commandgroup(annotations='float/txt', brief='ZOOM IN/OUT/factor')
+    @stack.commandgroup(brief='ZOOM IN/OUT/factor')
     def zoom(self, factor: float):
         ''' ZOOM: Zoom in and out in the radar view. 
         
