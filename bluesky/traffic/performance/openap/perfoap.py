@@ -6,7 +6,7 @@ from bluesky.traffic.performance.perfbase import PerfBase
 from bluesky.traffic.performance.openap import coeff, thrust
 from bluesky.traffic.performance.openap import phase as ph
 
-from openap import Drag, FuelFlow
+# from openap import Drag, FuelFlow
 
 class OpenAP(PerfBase):
     """

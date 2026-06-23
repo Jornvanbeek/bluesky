@@ -22,11 +22,14 @@ class LoSCounter(core.Entity):
         super().__init__()
 
         # Separation limits
-        self.los_radius = 5.0 * nm
+        self.los_radius = 300 #0.5 * nm
+
         self.los_dh = 1000.0 * ft
 
-        self.collision_radius = 0.1 * nm
+        self.collision_radius = 15 # 0.1 * nm
+
         self.collision_dh = 100.0 * ft
+
 
         # Active events: pair -> event information
         self.active_los = {}

@@ -1,140 +1,82 @@
 import numpy as np
 
 from bluesky import core, sim, stack
-from bluesky.tools import geo
+from plugins.define_area import define_area
 
 
 def init_plugin():
-    global aircraft_generator
-    aircraft_generator = AircraftGenerator()
+    global drone_generator
+    drone_generator = DroneGenerator()
 
     return {
-        "plugin_name": "AIRCRAFT_GENERATOR",
+        "plugin_name": "DRONE_GENERATOR",
         "plugin_type": "sim",
     }
 
 
-class AircraftGenerator(core.Entity):
+class DroneGenerator(core.Entity):
 
     def __init__(self):
         super().__init__()
-        self.aircraft_number = 0
-        self.area_drawn = False
+        self.drone_number = 0
+        self.define_area = define_area
+
+        self.drone_type = "Phan4"
+        self.speedmin = 10.0
+        self.speedmax = 20.0
+        self.altitude = 500.0
 
     def reset(self):
-        self.aircraft_number = 0
-        self.area_drawn = False
+        self.drone_number = 0
+        self.define_area.drawn = False
 
     @stack.command
-    def genaircraft(
+    def gendrones(
             self,
             n: int,
-            size: float = 100.0,       # Total width and height in NM
-            speedmin: float = 200.0,   # KTS
-            speedmax: float = 300.0,   # KTS
-            altitude: float = 10000.0, # FT
-            lat: float = 52.3086,      # Schiphol
-            lon: float = 4.7639,       # Schiphol
+            speedmin: float = 10.0,    # KTS
+            speedmax: float = 20.0,   # KTS
+            altitude: float = 500.0,  # FT
+            drone_type: str = "Phan4",
     ):
-        """
-        Generate random flights inside a square around Schiphol.
+        """Generate random drone flights inside the shared area."""
+        self.speedmin = speedmin
+        self.speedmax = speedmax
+        self.altitude = altitude
+        self.drone_type = drone_type
 
-        The global NumPy random seed is used.
-        """
-        if not self.area_drawn:
-            self.draw_square(lat, lon, size)
+        if not self.define_area.drawn:
+            self.define_area.draw()
 
         for _ in range(int(n)):
-            self.aircraft_number += 1
-
-            acid = f"GEN{self.aircraft_number:04d}"
-            waypoint = f"END{self.aircraft_number:04d}"
-
-            # Generate two independent points inside the square
-            start_lat, start_lon = self.random_position(lat, lon, size)
-            end_lat, end_lon = self.random_position(lat, lon, size)
-
-            heading, _ = geo.qdrdist(
-                start_lat,
-                start_lon,
-                end_lat,
-                end_lon,
-            )
-
-            speed = np.random.uniform(speedmin, speedmax)
-
-            stack.stack(
-                f"CRE {acid},B789,"
-                f"{start_lat:.6f},{start_lon:.6f},"
-                f"{heading:.1f},{altitude:.0f},{speed:.1f}"
-            )
-
-            stack.stack(
-                f"DEFWPT {waypoint},{end_lat:.6f},{end_lon:.6f}"
-            )
-
-            stack.stack(
-                f"ADDWPT {acid},{waypoint}"
-            )
-
-            stack.stack(
-                f"AT {acid},{waypoint} DO REPLACEAIRCRAFT {acid}"
-            )
+            self.generate_one_drone()
 
         return True
 
+    def generate_one_drone(self):
+        """Generate one drone with a random start and end point."""
+        self.drone_number += 1
 
-    def draw_square(self, center_lat, center_lon, size_nm):
-        """Draw the square area with BlueSky's POLY command."""
+        acid = f"DRN{self.drone_number:04d}"
 
-        half_size = size_nm / 2.0
+        start_lat, start_lon = self.define_area.random_position()
+        end_lat, end_lon = self.define_area.random_position()
+        speed = np.random.uniform(self.speedmin, self.speedmax)
 
-        lat_offset = half_size / 60.0
-        lon_offset = half_size / (
-            60.0 * np.cos(np.radians(center_lat))
-        )
+        waypoint = self.define_area.generate_aircraft( acid=acid, type=self.drone_type, start_lat=start_lat,
+                       start_lon=start_lon, end_lat=end_lat, end_lon=end_lon, alt=self.altitude, speed=speed )
 
-        north = center_lat + lat_offset
-        south = center_lat - lat_offset
-        east = center_lon + lon_offset
-        west = center_lon - lon_offset
-
-        stack.stack(
-            f"POLY TESTAREA,"
-            f"{north:.6f},{west:.6f},"
-            f"{north:.6f},{east:.6f},"
-            f"{south:.6f},{east:.6f},"
-            f"{south:.6f},{west:.6f}"
-        )
+        stack.stack(f"AT {acid},{waypoint} DO REPLACEDRONE {acid}")
 
     @stack.command
-    def replaceaircraft(self, acid: str):
+    def replacedrone(self, acid: str):
         stack.stack(f"DEL {acid}")
 
-        # Round the current simulation time to the nearest 5-second step,
-        # then generate the replacement 5 seconds later.
         rounded_time = round(float(sim.simt) / 5.0) * 5.0
         t_create = rounded_time + 5.0
 
         stack.stack(
-            f"SCHEDULE {t_create:.1f} GENAIRCRAFT 1"
+            f"SCHEDULE {t_create:.1f} GENDRONES 1 "
+            f"{self.speedmin:.1f} {self.speedmax:.1f} "
+            f"{self.altitude:.1f} {self.drone_type}"
         )
-
-    @staticmethod
-    def random_position(center_lat, center_lon, size_nm):
-        """Return one uniformly distributed random position inside a square."""
-
-        half_size = size_nm / 2.0
-
-        # Uniform offsets in NM
-        north_offset = np.random.uniform(-half_size, half_size)
-        east_offset = np.random.uniform(-half_size, half_size)
-
-        # Approximate conversion from NM to degrees
-        random_lat = center_lat + north_offset / 60.0
-
-        random_lon = center_lon + east_offset / (
-            60.0 * np.cos(np.radians(center_lat))
-        )
-
-        return float(random_lat), float(random_lon)
