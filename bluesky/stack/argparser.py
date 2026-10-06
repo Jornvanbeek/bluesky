@@ -163,6 +163,7 @@ class WpinrouteArg(Parser):
         wpname = arg.upper()
         if bs.ref.acidx >= 0 and wpname in bs.traf.ap.route[bs.ref.acidx].wpname or wpname == '*':
             return wpname, argstring
+        bs.sim.hold()
         raise ArgumentError(f'{wpname} not found in the route of {bs.traf.id[bs.ref.acidx]}')
 
 class WptArg(Parser):

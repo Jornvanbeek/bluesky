@@ -35,11 +35,13 @@ class MyVisual(RenderObject, layer=100):
         super().__init__(parent=parent)
         self.shape = VertexArrayObject(gl.GL_TRIANGLE_FAN)
 
-    def create(self):
+    @stack.command
+    def createvertex(self):
         vertices = np.array([52, 5, 52, 4, 54, 4, 54, 5], dtype = np.float32)
         self.shape.create(vertex=vertices, color=(255, 0, 0))
 
-    def draw(self):
+    @stack.command
+    def drawvertex(self):
         self.shaderset.set_vertex_scale_type(self.shaderset.VERTEX_IS_LATLON)
         self.shape.draw()
 

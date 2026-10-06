@@ -49,7 +49,6 @@ class monte_carlo(core.Entity):
         self.multiple_mc = []
         self.multiple_mc_called = []
 
-
     def reset(self):
         super().reset()
         self._kill_all_nodes()
@@ -123,7 +122,7 @@ class monte_carlo(core.Entity):
             runs: int,
             maxnodes: int,
             startseed: int = 0,
-            maxtime='15:00:00',
+            maxtime='5:00:00',
             title=None,
             configuration: str = '',
             fastforward: bool = True,
@@ -247,7 +246,7 @@ class monte_carlo(core.Entity):
         stack.forward('RESET', target_id=node_id)
         stack.forward('MC CLAIM', target_id=node_id)
         stack.forward(f'SEED {seed}', target_id=node_id)
-        stack.forward(f'PRINTSEED', target_id=node_id)
+
         if pd.notna(configuration) and str(configuration).strip():
             stack.forward(f'PCALL {configuration}', target_id=node_id)
 
@@ -420,7 +419,12 @@ class monte_carlo(core.Entity):
         net.send('MONTECARLORESULTS',result, sender)
         #example of function that can be placed in other plugin to emit results, automatically get added to dataframe
 
-
+    # @stack.command
+    # def sendresult (self):
+    #     result = {'LoS': 5}
+    #     sender = stack.sender()
+    #     # print('sendresult')
+    #     net.send('MONTECARLORESULTS',result, sender)
 
 
     def storedf(self, path: str = "Montecarlo/"):
@@ -431,128 +435,94 @@ class monte_carlo(core.Entity):
         self.batch.to_pickle(os.path.join(path, filename))
 
 
-
-
     @stack.command
     def df_to_html(self, path: str = "Montecarlo/"):
         """Exporteer de batch-DataFrame naar een nette HTML-tabel."""
         if self.parent:
             return
-
         os.makedirs(path, exist_ok=True)
-
         df = self.summary().copy()
 
-        # -------------------------------
-        # 1. DROP kolommen die je niet wil
-        # -------------------------------
-        DROP_COLUMNS = ["run", "node", "elapsed", "RNG"]
-
-        df = df.drop(columns=[c for c in DROP_COLUMNS if c in df.columns])
-
-        # --------------------------------------------------
-        # 2. DROP configuration/scenario/cmd als alles leeg is
-        # --------------------------------------------------
-        for col in ["configuration", "scenario", "cmd"]:
-            if col in df.columns:
-                if df[col].replace("", pd.NA).isna().all():
-                    df = df.drop(columns=col)
-
-        # --------------------------------------------------
-        # 3. STANDAARD ITEMS NAAR BOVEN VERPLAATSEN
-        # --------------------------------------------------
-        HEADER_KEYS = ["configuration", "scenario", "cmd", "scheduled_time", "maxtime", "fastforward", "demand"]
-
-        header_items = {}
-
-        for col in HEADER_KEYS:
-            if col in df.columns:
-                values = df[col].dropna().unique()
-
-                # 1 unieke waarde + niet leeg
-                if len(values) == 1 and str(values[0]).strip() != "":
-                    header_items[col] = values[0]
-                    df = df.drop(columns=col)
-
-        header_items["sim.dt"] = getattr(sim, "dt", "unknown")
-
-        header_html = ""
-        if header_items:
-            header_html = "<ul>"
-            for k, v in header_items.items():
-                header_html += f"<li><b>{k}</b>: {v}</li>"
-            header_html += "</ul>"
-
-        # -------------------------------
-        # 4. DATETIME -> alleen tijd
-        # -------------------------------
+        # Datetimes naar string
         for col in ("starttime", "endtime"):
             if col in df.columns:
-                dt = pd.to_datetime(df[col], errors="coerce")
-                df[col] = dt.dt.strftime("%H:%M:%S")
+                df[col] = (
+                    pd.to_datetime(df[col], errors="coerce")
+                    .dt.strftime("%Y-%m-%d %H:%M:%S")
+                )
 
-        # -------------------------------
-        # 5. node formatting (fallback)
-        # -------------------------------
+        # Elapsed naar HH:MM:SS
+        if "elapsed" in df.columns:
+            # Probeer als Timedelta, anders als seconden
+            td = pd.to_timedelta(df["elapsed"], errors="coerce")
+            # voor NaT: probeer numeriek als seconden
+            mask = td.isna()
+            if mask.any():
+                sec = pd.to_numeric(df.loc[mask, "elapsed"], errors="coerce")
+                td.loc[mask] = pd.to_timedelta(sec, unit="s")
+            # als nog NaT, zet naar 0
+            td = td.fillna(pd.Timedelta(0))
+            df["elapsed"] = td.apply(lambda x: str(x).split(".")[0])  # zonder microsec
+
+        # Bytes in 'node' leesbaar maken
         if "node" in df.columns:
-            df["node"] = df["node"].astype(str)
+            def _fmt_node(x):
+                if pd.isna(x):
+                    return ""
+                if isinstance(x, (bytes, bytearray)):
+                    return repr(x)
+                return str(x)
 
-        # -------------------------------
-        # 6. HTML tabel
-        # -------------------------------
+            df["node"] = df["node"].apply(_fmt_node)
+
+        # HTML-tabel
         table_html = df.to_html(classes="table table-bordered", index=True)
 
-        # -------------------------------
-        # 7. Sim tijd
-        # -------------------------------
+        # Simulatietijd bovenaan
         sim_sec = int(sim.simt) if hasattr(sim, "simt") else 0
         sim_hhmmss = f"{sim_sec // 3600:02d}:{(sim_sec % 3600) // 60:02d}:{sim_sec % 60:02d}"
 
-        # -------------------------------
-        # 8. HTML pagina
-        # -------------------------------
+        # Stijl + pagina
         html = f"""
-        <html>
-        <head>
-        <meta charset="utf-8" />
-        <style>
-            .container {{
-                padding: 12px;
-            }}
-            .table {{
-                border-collapse: collapse;
-                font-size: 12px;
-                white-space: nowrap;
-            }}
-            .table th {{
-                position: sticky;
-                top: 0;
-                background: #f1f1f1;
-            }}
-            .table th, .table td {{
-                border: 1px solid #000;
-                padding: 4px 6px;
-                text-align: left;
-            }}
-        </style>
-        </head>
-        <body>
-            <div class="container">
-                <h3>{self.title or 'Monte Carlo results'} — simtime: {sim_hhmmss}</h3>
-                {header_html}
-                {table_html}
-            </div>
-        </body>
-        </html>
-        """
-
+           <html>
+           <head>
+           <meta charset="utf-8" />
+           <style>
+               .container {{
+                   padding: 12px;
+               }}
+               .table {{
+                   border-collapse: collapse;
+                   font-size: 12px;
+                   white-space: nowrap;
+               }}
+               .table th {{
+                   position: sticky;
+                   top: 0;
+                   background: #f1f1f1;
+               }}
+               .table th, .table td {{
+                   border: 1px solid #000;
+                   padding: 4px 6px;
+                   text-align: left;
+               }}
+           </style>
+           </head>
+           <body>
+             <div class="container">
+               <h3>{self.title or 'Monte Carlo results'} — simtime: {sim_hhmmss}</h3>
+               {table_html}
+             </div>
+           </body>
+           </html>
+           """
         output_path = os.path.join(path, f"{self.title or 'montecarlo_results'}.html")
-
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html)
             if not self.opened:
                 webbrowser.open(f"file://{os.path.abspath(output_path)}")
                 self.opened = True
+
 
     @stack.command
     def removenode(self, node_id):

@@ -97,6 +97,7 @@ class Navdatabase:
 
     def defwpt(self,name=None,lat=None,lon=None,wptype=None):
         # Prevent polluting the database: check arguments
+
         if name is None or name == "":
             return False, "Insufficient arguments"
         elif name.isdigit():
@@ -138,7 +139,7 @@ class Navdatabase:
 
          # Update screen info
         bs.scr.addnavwpt(name.upper(),lat,lon)
-
+       
         return True #,name.upper()+" added to navdb."
 
     def delwpt(self,name=''):

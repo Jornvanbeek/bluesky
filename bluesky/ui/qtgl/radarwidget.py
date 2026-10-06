@@ -15,8 +15,6 @@ from .gltraffic import Traffic
 from .glmap import Map
 from .glnavdata import Navdata
 from .glpoly import Poly
-from .gltiledmap import TiledMap
-
 
 # Register settings defaults
 bs.settings.set_variable_defaults(gfx_path='graphics')
